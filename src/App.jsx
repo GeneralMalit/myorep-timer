@@ -15,7 +15,7 @@ const Footer = () => {
   return (
     <footer className="app-footer">
       <p>&copy; {new Date().getFullYear()} MyoREP Timer by General Malit.</p>
-      <p>A tool for efficient hypertrophy training.</p>
+      <p>A free tool for efficient hypertrophy training.</p>
     </footer>
   );
 };
