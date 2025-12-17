@@ -1,0 +1,45 @@
+.timer-wrapper {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin: 20px auto;
+    width: 300px;
+    height: 300px;
+}
+
+.timer-svg {
+    transform: rotate(-90deg);
+    /* Start from top */
+}
+
+.progress-ring-circle {
+    stroke-linecap: round;
+}
+
+.timer-text-overlay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    pointer-events: none;
+}
+
+.main-time {
+    font-size: 6rem;
+    /* Increased from default */
+    font-weight: 700;
+    font-feature-settings: "tnum";
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    text-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+}
+
+.sub-text {
+    font-size: 1.5rem;
+    color: #888;
+    margin-top: 10px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
