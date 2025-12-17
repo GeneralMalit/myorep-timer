@@ -355,7 +355,6 @@ function App() {
               </div>
 
               <ConcentricTimer
-                key={`${appPhase}-${currentSet}-${currentRep}-${isWorking}`}
                 outerValue={outerValue}
                 outerMax={outerMax}
                 isResting={!isWorking}

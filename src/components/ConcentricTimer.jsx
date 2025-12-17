@@ -9,6 +9,7 @@ const ConcentricTimer = ({
     innerMax,
     settings,
     smoothAnimation,
+    currentRep, // Need this for key
     textMain,
     textSub
 }) => {
@@ -99,6 +100,7 @@ const ConcentricTimer = ({
                 {/* Inner Circle (Hidden during rest) */}
                 {!isResting && (
                     <circle
+                        key={currentRep} /* Forces instant remount on new rep */
                         cx={center}
                         cy={center}
                         r={innerRadius}
