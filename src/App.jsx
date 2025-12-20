@@ -11,6 +11,7 @@ const DEFAULT_SETTINGS = {
   criticalRepColor: '#cf6679',
   lastSecondThreshold: 1, // Change color when 1s remains
   smoothAnimation: true,
+  prepTime: 5, // Default prep time
 };
 
 // --- Theme Presets (Mapping IDs to colors for immediate use if needed) ---
@@ -117,12 +118,12 @@ function App() {
       setIsWorking(true);
 
       // Init Timers
-      setTimeLeft(sec); // Initial rep time
-      setSetTotalDuration(r * sec); // Total set time
+      setSetTotalDuration(r * sec);
       setSetElapsedTime(0);
 
       setAppPhase('timer');
-      setTimerStatus("Main Set");
+      setTimerStatus("Preparing");
+      setTimeLeft(settings.prepTime);
       setIsTimerRunning(true);
     } else {
       alert("Please enter valid numbers > 0 for all fields.");
@@ -150,7 +151,19 @@ function App() {
       setIsTimerRunning(false);
       setTimerStatus("Finished");
       setTimeLeft(0);
+      setSetElapsedTime(setTotalDuration); // Ensure outer circle fills
     };
+
+    if (timerStatus === "Preparing") {
+      setTimerStatus("Main Set");
+      setTimeLeft(mainSecs);
+      setIsWorking(true);
+      setIsMainRep(true);
+      setCurrentRep(1);
+      setSetTotalDuration(mainRepsCount * mainSecs);
+      setSetElapsedTime(0);
+      return;
+    }
 
     if (isWorking) {
       // Just finished a rep
@@ -228,7 +241,7 @@ function App() {
       setSetElapsedTime(0);
       setTimerStatus("Myo Reps");
     }
-  }, [sets, reps, myoReps, seconds, myoWorkSecs, rest, isWorking, isMainRep, currentRep, currentSet]);
+  }, [sets, reps, myoReps, seconds, myoWorkSecs, rest, isWorking, isMainRep, currentRep, currentSet, timerStatus, setTotalDuration]);
 
 
   // === Timer Interval ===
@@ -269,11 +282,13 @@ function App() {
   // User: "The outer concentric circle should measure the amount of REPS REMAINING IN THE SET"
   // If we are at Rep 1 of 15. Outer should be Full? Or 14/15?
   // Let's keep it stepping. Visual: 15 segments.
-  const outerValue = isWorking ? (totalRepsCurrentPhase - currentRep + 1) : timeLeft;
   const outerMax = isWorking ? totalRepsCurrentPhase : parseInt(rest || 1, 10);
+  const outerValue = timerStatus === 'Finished'
+    ? outerMax
+    : (isWorking ? (totalRepsCurrentPhase - currentRep + 1) : timeLeft);
 
   const innerValue = timeLeft; // Current rep time (Float or Int)
-  const innerMax = currentRepTotalTime;
+  const innerMax = timerStatus === 'Preparing' ? settings.prepTime : currentRepTotalTime;
 
   // Format Display: Ceil for standard Countdown look (3.9 -> 4, 0.1 -> 1, 0.0 -> 0)
   const displaySeconds = Math.ceil(timeLeft);
@@ -365,7 +380,7 @@ function App() {
                 currentRep={currentRep}
                 totalReps={totalRepsCurrentPhase}
                 textMain={formatTime(Math.ceil(timeLeft))}
-                textSub={!isWorking ? "Resting" : `Rep ${currentRep} / ${totalRepsCurrentPhase}`}
+                textSub={timerStatus === 'Preparing' ? "Get Ready" : (!isWorking ? "Resting" : `Rep ${currentRep} / ${totalRepsCurrentPhase}`)}
               />
 
               <div className="controls">
