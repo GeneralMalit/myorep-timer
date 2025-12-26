@@ -1,16 +1,18 @@
-.timer-wrapper {
+.concentric-timer-wrapper {
     position: relative;
     display: flex;
     justify-content: center;
     align-items: center;
     margin: 20px auto;
-    width: 300px;
-    height: 300px;
+    width: 450px;
+    /* Matched to JSX size */
+    height: 450px;
+    z-index: 2;
 }
 
-.timer-svg {
-    transform: rotate(-90deg);
-    /* Start from top */
+.concentric-timer-svg {
+    transform: rotate(0deg);
+    /* Counter-act the rotate(-90) in SVG if needed, but JSX has it on individual circles */
 }
 
 .progress-ring-circle {

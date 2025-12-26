@@ -71,6 +71,58 @@ const SettingsPanel = ({ settings, setSettings, isOpen, onClose }) => {
                         onChange={(e) => handleChange('smoothAnimation', e.target.checked)}
                     />
                 </div>
+
+                <div className="setting-group">
+                    <label>Startup Duration (s)</label>
+                    <input
+                        type="number"
+                        value={settings.prepTime}
+                        onChange={(e) => handleChange('prepTime', parseInt(e.target.value) || 0)}
+                        min="1"
+                        max="60"
+                    />
+                </div>
+
+                <div className="setting-group checkbox-group">
+                    <label>Full Screen Mode</label>
+                    <input
+                        type="checkbox"
+                        checked={settings.fullScreenMode}
+                        onChange={(e) => handleChange('fullScreenMode', e.target.checked)}
+                    />
+                </div>
+
+                <div className="setting-group checkbox-group">
+                    <label>Enable Metronome</label>
+                    <input
+                        type="checkbox"
+                        checked={settings.metronomeEnabled}
+                        onChange={(e) => handleChange('metronomeEnabled', e.target.checked)}
+                    />
+                </div>
+
+                {settings.metronomeEnabled && (
+                    <div className="setting-group">
+                        <label>Metronome Sound</label>
+                        <select
+                            value={settings.metronomeSound}
+                            onChange={(e) => handleChange('metronomeSound', e.target.value)}
+                            style={{
+                                width: '100%',
+                                padding: '10px',
+                                borderRadius: '8px',
+                                background: '#2c2c2c',
+                                color: '#fff',
+                                border: '1px solid #444'
+                            }}
+                        >
+                            <option value="woodblock">Woodblock</option>
+                            <option value="mechanical">Mechanical</option>
+                            <option value="electronic">Electronic</option>
+                            <option value="low-thud">Low Thud</option>
+                        </select>
+                    </div>
+                )}
             </div>
         </div>
     );

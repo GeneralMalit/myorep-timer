@@ -176,6 +176,21 @@ body {
   align-items: center;
   justify-content: center;
   width: 100%;
+  position: relative;
+  overflow: hidden;
+  padding: 40px;
+  border-radius: 24px;
+  z-index: 1;
+}
+
+.full-screen-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: -1;
+  transition: background-color 0.3s ease;
 }
 
 .timer-header {
@@ -202,6 +217,27 @@ body {
   font-size: 0.85rem;
   color: var(--text-muted);
   border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* Full Screen High Contrast */
+.full-screen-active .badge {
+  background: rgba(255, 255, 255, 0.25);
+  color: #fff;
+  border: 1px solid #fff;
+  font-weight: 700;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+.full-screen-active .timer-header h2 {
+  color: #fff;
+  font-weight: 900;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+}
+
+.full-screen-active .sub-text {
+  color: #fff !important;
+  font-weight: 700;
+  text-shadow: 0 1px 5px rgba(0, 0, 0, 0.5);
 }
 
 .controls {
