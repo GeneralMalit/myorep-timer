@@ -57,6 +57,12 @@ myorep-2/
 - Concentric timer with inner and outer circles to track reps and set progress.
 - Smooth animations and critical rep indicators.
 
+### 3.4. Fixed Timer Desync
+- Resolved an issue where the timer would desynchronize when the browser tab was not in focus.
+
+### 3.5. Floating Window Option
+- Introduced a floating window feature, allowing users to multitask while keeping the timer visible during workouts.
+
 ---
 
 ## 4. How to Run
