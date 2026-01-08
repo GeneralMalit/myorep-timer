@@ -101,6 +101,15 @@ const SettingsPanel = ({ settings, setSettings, isOpen, onClose }) => {
                     />
                 </div>
 
+                <div className="setting-group checkbox-group">
+                    <label>Floating Window Mode (PiP)</label>
+                    <input
+                        type="checkbox"
+                        checked={settings.floatingWindow}
+                        onChange={(e) => handleChange('floatingWindow', e.target.checked)}
+                    />
+                </div>
+
                 {settings.metronomeEnabled && (
                     <div className="setting-group">
                         <label>Metronome Sound</label>

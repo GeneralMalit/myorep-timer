@@ -3,6 +3,7 @@ import Sidebar from './components/Sidebar';
 import SettingsPanel from './components/SettingsPanel';
 import ConcentricTimer from './components/ConcentricTimer';
 import { audioEngine } from './utils/audioEngine';
+import timerWorkerUrl from './utils/timerWorker.js?url';
 import './App.css';
 
 // --- Default Settings ---
@@ -16,6 +17,7 @@ const DEFAULT_SETTINGS = {
   fullScreenMode: false,
   metronomeEnabled: false,
   metronomeSound: 'woodblock',
+  floatingWindow: false,
 };
 
 // --- Theme Presets (Mapping IDs to colors for immediate use if needed) ---
@@ -61,6 +63,67 @@ function App() {
 
   // Time Tracking (Standard)
   const [timeLeft, setTimeLeft] = useState(0); // Current phase time (Rep duration or Rest duration)
+  const [worker, setWorker] = useState(null);
+
+  // Floating Window Refs
+  const canvasRef = useCallback(node => {
+    if (node !== null) {
+      window.pipCanvas = node;
+    }
+  }, []);
+  const videoRef = useCallback(node => {
+    if (node !== null) {
+      window.pipVideo = node;
+    }
+  }, []);
+
+  // Sync Color to Canvas/PiP
+  useEffect(() => {
+    const canvas = window.pipCanvas;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    const color = (timerStatus === 'Preparing' || !isWorking)
+      ? settings.restColor
+      : (timeLeft <= settings.lastSecondThreshold && timeLeft > 0
+        ? settings.criticalRepColor
+        : settings.activeColor
+      );
+
+    ctx.fillStyle = color;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }, [timeLeft, isWorking, timerStatus, settings]);
+
+  // Request PiP
+  const requestPiP = async () => {
+    try {
+      const video = window.pipVideo;
+      if (video && !document.pictureInPictureElement) {
+        if (!video.srcObject) {
+          const stream = window.pipCanvas.captureStream();
+          video.srcObject = stream;
+        }
+        await video.play();
+        await video.requestPictureInPicture();
+      }
+    } catch (err) {
+      console.error("PiP error:", err);
+    }
+  };
+
+  // Close PiP if setting disabled
+  useEffect(() => {
+    if (!settings.floatingWindow && document.pictureInPictureElement) {
+      document.exitPictureInPicture().catch(() => { });
+    }
+  }, [settings.floatingWindow]);
+
+  // Init Worker
+  useEffect(() => {
+    const w = new Worker(timerWorkerUrl, { type: 'module' });
+    setWorker(w);
+    return () => w.terminate();
+  }, []);
 
   // === 4. Derived Logic ===
   // Outer Circle now tracks REPS REMAINING.
@@ -248,31 +311,44 @@ function App() {
   }, [sets, reps, myoReps, seconds, myoWorkSecs, rest, isWorking, isMainRep, currentRep, currentSet, timerStatus, setTotalDuration]);
 
 
-  // === Timer Interval ===
+  // === Timer Interval (Web Worker based) ===
   useEffect(() => {
-    let interval = null;
-    if (isTimerRunning && timeLeft > 0.001) { // Float safety
-      const isSmooth = settings.smoothAnimation;
-      const tickRate = isSmooth ? 50 : 1000; // 50ms implies 20fps for super smooth
-      const decrement = isSmooth ? 0.05 : 1;
+    if (!worker) return;
 
-      interval = setInterval(() => {
+    worker.onmessage = (e) => {
+      if (e.data.action === 'tick') {
+        const isSmooth = settings.smoothAnimation;
+        const decrementInternal = isSmooth ? 0.05 : 1;
+
         setTimeLeft(prev => {
-          const next = prev - decrement;
-          return next < 0 ? 0 : next;
+          const next = prev - decrementInternal;
+          return next <= 0.001 ? 0 : next;
         });
+        setSetElapsedTime(prev => prev + decrementInternal);
+      }
+    };
+  }, [worker, settings.smoothAnimation]);
 
-        setSetElapsedTime(prev => prev + decrement);
-      }, tickRate);
-    } else if (timeLeft <= 0.001 && isTimerRunning && timerStatus !== 'Finished') {
-      // Allow a brief render at 0 before advancing? 
-      // With high-res, we hit 0.0 quickly. 
-      // If we advance immediately, we might still miss the 0 frame if React batches.
-      // But usually it's fine.
-      handleCycleAdvance();
+  useEffect(() => {
+    if (!worker) return;
+
+    if (isTimerRunning && timeLeft > 0.001) {
+      const isSmooth = settings.smoothAnimation;
+      const tickRate = isSmooth ? 50 : 1000;
+      worker.postMessage({ action: 'start', interval: tickRate });
+    } else {
+      worker.postMessage({ action: 'stop' });
+      if (timeLeft <= 0.001 && isTimerRunning && timerStatus !== 'Finished') {
+        handleCycleAdvance();
+      }
     }
-    return () => clearInterval(interval);
-  }, [isTimerRunning, timeLeft, timerStatus, handleCycleAdvance, settings.smoothAnimation]);
+
+    const currentWorker = worker;
+    return () => {
+      currentWorker.postMessage({ action: 'stop' });
+    };
+  }, [isTimerRunning, timerStatus, handleCycleAdvance, worker, settings.smoothAnimation, (timeLeft <= 0.001)]);
+  // Note: We only re-trigger if timeLeft crosses the 0 threshold
 
   // We need to track the "last played second" to avoid multi-triggering in smooth mode
   const [lastTickSecond, setLastTickSecond] = useState(-1);
@@ -433,13 +509,23 @@ function App() {
                   End Session
                 </button>
               </div>
+
+              {settings.floatingWindow && (
+                <div className="pip-request-container">
+                  <button className="pip-btn" onClick={requestPiP}>
+                    Open Floating Window
+                  </button>
+                  <canvas ref={canvasRef} width="300" height="300" style={{ display: 'none' }} />
+                  <video ref={videoRef} autoPlay muted style={{ display: 'none' }} />
+                </div>
+              )}
             </div>
           )}
         </div>
 
         <footer className="main-footer">
           <div className="footer-content">
-            <span>MyoRep Timer v2.1.0</span>
+            <span>MyoRep Timer v2.1.1</span>
             <span className="separator">•</span>
             <span>by General Malit</span>
           </div>
