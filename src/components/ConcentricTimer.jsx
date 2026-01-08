@@ -39,11 +39,17 @@ const ConcentricTimer = ({
     const innerDashoffset = innerCircumference - (clampedInnerProgress * innerCircumference);
 
     // Colors
-    const outerColor = isResting ? settings.restColor : settings.activeColor;
+    const isFullScreen = settings.fullScreenMode;
+    const outerColor = isFullScreen ? '#ffffff' : (isResting ? settings.restColor : settings.activeColor);
 
     // Critical Rep Logic (Last Second)
     const isCritical = !isResting && innerValue <= settings.lastSecondThreshold && innerValue > 0;
-    const innerColor = isCritical ? settings.criticalRepColor : settings.activeColor;
+    let innerColor;
+    if (isFullScreen) {
+        innerColor = '#ffffff';
+    } else {
+        innerColor = isCritical ? settings.criticalRepColor : settings.activeColor;
+    }
 
     // Transition Logic
     // Since the component is remounted on Rep Change (via key), we don't need "reset" logic.
@@ -117,7 +123,7 @@ const ConcentricTimer = ({
             </svg>
 
             <div className="timer-text-overlay">
-                <div className="main-time" style={{ color: settings.activeColor }}>
+                <div className="main-time" style={{ color: isFullScreen ? '#ffffff' : settings.activeColor }}>
                     {textMain}
                 </div>
                 <div className="sub-text">

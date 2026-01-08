@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Sidebar from './components/Sidebar';
 import SettingsPanel from './components/SettingsPanel';
 import ConcentricTimer from './components/ConcentricTimer';
+import { audioEngine } from './utils/audioEngine';
 import './App.css';
 
 // --- Default Settings ---
@@ -12,6 +13,9 @@ const DEFAULT_SETTINGS = {
   lastSecondThreshold: 1, // Change color when 1s remains
   smoothAnimation: true,
   prepTime: 5, // Default prep time
+  fullScreenMode: false,
+  metronomeEnabled: false,
+  metronomeSound: 'woodblock',
 };
 
 // --- Theme Presets (Mapping IDs to colors for immediate use if needed) ---
@@ -270,6 +274,22 @@ function App() {
     return () => clearInterval(interval);
   }, [isTimerRunning, timeLeft, timerStatus, handleCycleAdvance, settings.smoothAnimation]);
 
+  // We need to track the "last played second" to avoid multi-triggering in smooth mode
+  const [lastTickSecond, setLastTickSecond] = useState(-1);
+
+  useEffect(() => {
+    if (isTimerRunning && settings.metronomeEnabled && isWorking && timerStatus !== 'Preparing') {
+      const currentSecond = Math.ceil(timeLeft);
+      if (currentSecond !== lastTickSecond && currentSecond >= 0) {
+        audioEngine.playTick(settings.metronomeSound);
+        setLastTickSecond(currentSecond);
+      }
+    } else {
+      // Reset tick tracking when paused or not working
+      setLastTickSecond(-1);
+    }
+  }, [timeLeft, isTimerRunning, settings.metronomeEnabled, isWorking, timerStatus, settings.metronomeSound, lastTickSecond]);
+
   // === Calculation for Timer Props ===
   const outerTimeLeft = isWorking ? (setTotalDuration - setSetElapsedTime) : timeLeft;
   const outerTotal = isWorking ? setTotalDuration : parseInt(rest || 1, 10);
@@ -357,7 +377,7 @@ function App() {
           )}
 
           {appPhase === 'timer' && (
-            <div className="timer-container fade-in">
+            <div className={`timer-container fade-in ${settings.fullScreenMode ? 'full-screen-active' : ''}`}>
               <div className="timer-header">
                 <h2>{timerStatus}</h2>
                 <div className="badges">
@@ -368,6 +388,21 @@ function App() {
                   <span className="badge">Rep {currentRep}</span>
                 </div>
               </div>
+
+              {/* Dynamic Background for Full Screen Mode */}
+              {settings.fullScreenMode && (
+                <div
+                  className="full-screen-bg"
+                  style={{
+                    backgroundColor: (timerStatus === 'Preparing' || !isWorking)
+                      ? settings.restColor
+                      : (timeLeft <= settings.lastSecondThreshold && timeLeft > 0
+                        ? settings.criticalRepColor
+                        : settings.activeColor
+                      )
+                  }}
+                />
+              )}
 
               <ConcentricTimer
                 outerValue={outerValue}
@@ -404,7 +439,7 @@ function App() {
 
         <footer className="main-footer">
           <div className="footer-content">
-            <span>MyoRep Timer v2.0.0</span>
+            <span>MyoRep Timer v2.1.0</span>
             <span className="separator">•</span>
             <span>by General Malit</span>
           </div>
