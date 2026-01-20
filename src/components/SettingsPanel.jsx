@@ -114,6 +114,37 @@ const SettingsPanel = ({ settings, setSettings, isOpen, onClose }) => {
                     </select>
                 </div>
 
+                <div className="setting-group checkbox-group">
+                    <label>Enable Sound Cues</label>
+                    <input
+                        type="checkbox"
+                        checked={settings.metronomeEnabled}
+                        onChange={(e) => handleChange('metronomeEnabled', e.target.checked)}
+                    />
+                </div>
+
+                <div className="setting-group checkbox-group">
+                    <label>Floating Window (PiP)</label>
+                    <input
+                        type="checkbox"
+                        checked={settings.floatingWindow}
+                        onChange={(e) => handleChange('floatingWindow', e.target.checked)}
+                    />
+                </div>
+
+                <div className="setting-group">
+                    <label>Pulsating Word Effect</label>
+                    <select
+                        value={settings.pulseEffect}
+                        onChange={(e) => handleChange('pulseEffect', e.target.value)}
+                        className="settings-select"
+                    >
+                        <option value="always">Always Pulse</option>
+                        <option value="resting">Pulse on Rest Only</option>
+                        <option value="never">Never Pulse</option>
+                    </select>
+                </div>
+
                 <div className="setting-group">
                     <label>Sound Cue Mode</label>
                     <select

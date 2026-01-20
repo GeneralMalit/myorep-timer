@@ -18,7 +18,7 @@ const Sidebar = ({ currentTheme, setTheme, setShowSettings, showSettings, isColl
             {isCollapsed ? '☰' : '«'}
           </button>
         </div>
-        {!isCollapsed && <span className="version">v2.1.1</span>}
+        {!isCollapsed && <span className="version">v2.2.2</span>}
       </div>
 
       <div className="sidebar-section">

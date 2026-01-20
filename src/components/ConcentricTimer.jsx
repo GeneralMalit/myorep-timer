@@ -11,9 +11,10 @@ const ConcentricTimer = ({
     smoothAnimation,
     currentRep, // Need this for key
     textMain,
-    textSub
+    textSub,
+    isFinished,
+    isPreparing
 }) => {
-
     // Size Conf
     const size = 450;
     const center = size / 2;
@@ -43,7 +44,7 @@ const ConcentricTimer = ({
     const outerColor = isFullScreen ? '#ffffff' : (isResting ? settings.restColor : settings.activeColor);
 
     // Concentric Phase Logic (Last X Seconds)
-    const isConcentricPhase = !isResting && innerValue <= settings.concentricSecond && innerValue > 0;
+    const isConcentricPhase = !isResting && innerValue <= settings.concentricSecond && innerValue > 0 && !isPreparing && !isFinished;
 
     let innerColor;
     if (isFullScreen) {
@@ -69,7 +70,11 @@ const ConcentricTimer = ({
     let upDownText = '';
     let upDownTextColor = isFullScreen ? '#ffffff' : (isResting ? settings.restColor : settings.activeColor);
 
-    if (isResting) {
+    if (isFinished) {
+        upDownText = 'DONE';
+    } else if (isPreparing) {
+        upDownText = 'READY';
+    } else if (isResting) {
         upDownText = 'REST';
     } else {
         if (isConcentricPhase) {
@@ -79,6 +84,15 @@ const ConcentricTimer = ({
             upDownText = 'ECCENTRIC';
             upDownTextColor = isFullScreen ? '#ffffff' : settings.activeColor;
         }
+    }
+
+    // Pulsating Logic
+    const pulseSetting = settings.pulseEffect || 'always';
+    let shouldPulse = false;
+    if (pulseSetting === 'always') {
+        shouldPulse = true;
+    } else if (pulseSetting === 'resting') {
+        shouldPulse = isResting || isPreparing || isFinished;
     }
 
     return (
@@ -94,7 +108,7 @@ const ConcentricTimer = ({
                         strokeWidth={strokeWidth}
                         fill="none"
                     />
-                    {!isResting && (
+                    {!isResting && !isFinished && (
                         <circle
                             cx={center}
                             cy={center}
@@ -121,8 +135,8 @@ const ConcentricTimer = ({
                         transform={`rotate(-90 ${center} ${center})`}
                     />
 
-                    {/* Inner Circle (Hidden during rest) */}
-                    {!isResting && (
+                    {/* Inner Circle (Hidden during rest or when finished) */}
+                    {!isResting && !isFinished && (
                         <circle
                             key={currentRep} /* Forces instant remount on new rep */
                             cx={center}
@@ -144,7 +158,7 @@ const ConcentricTimer = ({
             <div className="timer-text-overlay">
                 {upDownMode && (
                     <div
-                        className="up-down-text"
+                        className={`up-down-text ${shouldPulse ? 'pulsating' : ''}`}
                         style={{ color: upDownTextColor }}
                     >
                         {upDownText}

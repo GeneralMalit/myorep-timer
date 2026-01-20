@@ -7,10 +7,11 @@
     background-color: #252525;
     box-shadow: -5px 0 15px rgba(0, 0, 0, 0.5);
     z-index: 1100;
-    padding: 20px;
+    padding: 15px;
     display: flex;
     flex-direction: column;
     animation: slideIn 0.3s ease-out;
+    overflow-y: auto;
 }
 
 @keyframes slideIn {
@@ -28,8 +29,8 @@
     justify-content: space-between;
     align-items: center;
     border-bottom: 1px solid #444;
-    padding-bottom: 15px;
-    margin-bottom: 20px;
+    padding-bottom: 10px;
+    margin-bottom: 15px;
 }
 
 .settings-header h2 {
@@ -53,14 +54,14 @@
 }
 
 .setting-group {
-    margin-bottom: 25px;
+    margin-bottom: 18px;
 }
 
 .setting-group label {
     display: block;
-    margin-bottom: 8px;
+    margin-bottom: 5px;
     color: #ccc;
-    font-size: 0.9rem;
+    font-size: 0.85rem;
 }
 
 .color-picker-wrapper {
@@ -70,8 +71,8 @@
 }
 
 .color-picker-wrapper input[type="color"] {
-    width: 50px;
-    height: 40px;
+    width: 45px;
+    height: 35px;
     border: none;
     border-radius: 4px;
     background: none;
@@ -87,12 +88,12 @@
 .setting-group input[type="number"],
 .settings-select {
     width: 100%;
-    padding: 10px;
+    padding: 8px;
     background-color: #333;
     color: #fff;
     border: 1px solid #444;
     border-radius: 4px;
-    font-size: 0.9rem;
+    font-size: 0.85rem;
 }
 
 .settings-select {

@@ -21,6 +21,7 @@ const DEFAULT_SETTINGS = {
   upDownMode: false,
   infoVisibility: 'always', // 'always' | 'resting' | 'never'
   soundMode: 'metronome', // 'metronome' | 'tts'
+  pulseEffect: 'always', // 'always' | 'resting' | 'never'
 };
 
 // --- Theme Presets (Mapping IDs to colors for immediate use if needed) ---
@@ -500,7 +501,9 @@ function App() {
                 currentRep={currentRep}
                 totalReps={totalRepsCurrentPhase}
                 textMain={formatTime(Math.ceil(timeLeft))}
-                textSub={timerStatus === 'Preparing' ? "Get Ready" : (!isWorking ? "Resting" : `Rep ${currentRep} / ${totalRepsCurrentPhase}`)}
+                textSub={timerStatus === 'Preparing' ? "Get Ready" : (!isWorking ? "Resting" : (timerStatus === 'Finished' ? "Session Clear" : `Rep ${currentRep} / ${totalRepsCurrentPhase}`))}
+                isFinished={timerStatus === 'Finished'}
+                isPreparing={timerStatus === 'Preparing'}
               />
 
               <div className="controls">
@@ -534,7 +537,7 @@ function App() {
 
         <footer className="main-footer">
           <div className="footer-content">
-            <span>MyoRep Timer 2.2.1</span>
+            <span>MyoRep Timer 2.2.2</span>
             <span className="separator">•</span>
             <span>by General Malit</span>
           </div>
