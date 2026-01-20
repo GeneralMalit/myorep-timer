@@ -42,20 +42,17 @@ const ConcentricTimer = ({
     const isFullScreen = settings.fullScreenMode;
     const outerColor = isFullScreen ? '#ffffff' : (isResting ? settings.restColor : settings.activeColor);
 
-    // Critical Rep Logic (Last Second)
-    const isCritical = !isResting && innerValue <= settings.lastSecondThreshold && innerValue > 0;
+    // Concentric Phase Logic (Last X Seconds)
+    const isConcentricPhase = !isResting && innerValue <= settings.concentricSecond && innerValue > 0;
+
     let innerColor;
     if (isFullScreen) {
         innerColor = '#ffffff';
     } else {
-        innerColor = isCritical ? settings.criticalRepColor : settings.activeColor;
+        innerColor = isConcentricPhase ? settings.concentricColor : settings.activeColor;
     }
 
     // Transition Logic
-    // Since the component is remounted on Rep Change (via key), we don't need "reset" logic.
-    // The new component starts Fresh (Full) with no transition history.
-    // We just need smooth transition for the countdown.
-
     const outerTransition = smoothAnimation
         ? 'stroke-dashoffset 0.5s ease-out'
         : 'none';
@@ -64,71 +61,106 @@ const ConcentricTimer = ({
         ? 'stroke-dashoffset 0.05s linear, stroke 0.3s ease'
         : 'none';
 
+    const upDownMode = settings.upDownMode;
+    const infoVisibility = settings.infoVisibility;
+    const isInfoVisible = infoVisibility === 'always' || (infoVisibility === 'resting' && isResting);
+
+    // Up Down Text Logic
+    let upDownText = '';
+    let upDownTextColor = isFullScreen ? '#ffffff' : (isResting ? settings.restColor : settings.activeColor);
+
+    if (isResting) {
+        upDownText = 'REST';
+    } else {
+        if (isConcentricPhase) {
+            upDownText = 'CONCENTRIC';
+            upDownTextColor = isFullScreen ? '#ffffff' : settings.concentricColor;
+        } else {
+            upDownText = 'ECCENTRIC';
+            upDownTextColor = isFullScreen ? '#ffffff' : settings.activeColor;
+        }
+    }
+
     return (
-        <div className="concentric-timer-wrapper">
-            <svg width={size} height={size} className="concentric-timer-svg">
-                {/* Background Tracks */}
-                <circle
-                    cx={center}
-                    cy={center}
-                    r={outerRadius}
-                    stroke="#333"
-                    strokeWidth={strokeWidth}
-                    fill="none"
-                />
-                {!isResting && (
+        <div className={`concentric-timer-wrapper ${upDownMode ? 'up-down-active' : ''}`}>
+            {!upDownMode && (
+                <svg width={size} height={size} className="concentric-timer-svg">
+                    {/* Background Tracks */}
                     <circle
                         cx={center}
                         cy={center}
-                        r={innerRadius}
+                        r={outerRadius}
                         stroke="#333"
                         strokeWidth={strokeWidth}
                         fill="none"
                     />
-                )}
+                    {!isResting && (
+                        <circle
+                            cx={center}
+                            cy={center}
+                            r={innerRadius}
+                            stroke="#333"
+                            strokeWidth={strokeWidth}
+                            fill="none"
+                        />
+                    )}
 
-                {/* Progress Circles */}
-                {/* Outer Circle */}
-                <circle
-                    cx={center}
-                    cy={center}
-                    r={outerRadius}
-                    stroke={outerColor}
-                    strokeWidth={strokeWidth}
-                    fill="none"
-                    strokeDasharray={outerCircumference}
-                    strokeDashoffset={outerDashoffset}
-                    strokeLinecap="round"
-                    style={{ transition: outerTransition }}
-                    transform={`rotate(-90 ${center} ${center})`}
-                />
-
-                {/* Inner Circle (Hidden during rest) */}
-                {!isResting && (
+                    {/* Progress Circles */}
+                    {/* Outer Circle */}
                     <circle
-                        key={currentRep} /* Forces instant remount on new rep */
                         cx={center}
                         cy={center}
-                        r={innerRadius}
-                        stroke={innerColor}
+                        r={outerRadius}
+                        stroke={outerColor}
                         strokeWidth={strokeWidth}
                         fill="none"
-                        strokeDasharray={innerCircumference}
-                        strokeDashoffset={innerDashoffset}
+                        strokeDasharray={outerCircumference}
+                        strokeDashoffset={outerDashoffset}
                         strokeLinecap="round"
-                        style={{ transition: innerTransition }}
+                        style={{ transition: outerTransition }}
                         transform={`rotate(-90 ${center} ${center})`}
                     />
-                )}
-            </svg>
+
+                    {/* Inner Circle (Hidden during rest) */}
+                    {!isResting && (
+                        <circle
+                            key={currentRep} /* Forces instant remount on new rep */
+                            cx={center}
+                            cy={center}
+                            r={innerRadius}
+                            stroke={innerColor}
+                            strokeWidth={strokeWidth}
+                            fill="none"
+                            strokeDasharray={innerCircumference}
+                            strokeDashoffset={innerDashoffset}
+                            strokeLinecap="round"
+                            style={{ transition: innerTransition }}
+                            transform={`rotate(-90 ${center} ${center})`}
+                        />
+                    )}
+                </svg>
+            )}
 
             <div className="timer-text-overlay">
-                <div className="main-time" style={{ color: isFullScreen ? '#ffffff' : settings.activeColor }}>
-                    {textMain}
-                </div>
-                <div className="sub-text">
-                    {textSub}
-                </div>
+                {upDownMode && (
+                    <div
+                        className="up-down-text"
+                        style={{ color: upDownTextColor }}
+                    >
+                        {upDownText}
+                    </div>
+                )}
+
+                {isInfoVisible && (
+                    <>
+                        <div className="main-time" style={{ color: isFullScreen ? '#ffffff' : (isConcentricPhase ? settings.concentricColor : settings.activeColor) }}>
+                            {textMain}
+                        </div>
+                        <div className="sub-text">
+                            {textSub}
+                        </div>
+                    </>
+                )}
             </div>
         </div>
     );

@@ -71,6 +71,42 @@ class AudioEngine {
                 osc.stop(now + 0.1);
         }
     }
+
+    speak(text) {
+        if (!window.speechSynthesis) return;
+
+        // Cancel previous speech to avoid queue buildup
+        window.speechSynthesis.cancel();
+
+        const utterance = new SpeechSynthesisUtterance(text.toString());
+
+        // Find a natural-sounding voice (e.g., Google or Microsoft if available)
+        const voices = window.speechSynthesis.getVoices();
+
+        // Preferred voice patterns for "naturalness"
+        const preferred = [
+            'Google',
+            'Microsoft Online',
+            'Natural',
+            'Samantha'
+        ];
+
+        let selectedVoice = null;
+        for (const p of preferred) {
+            selectedVoice = voices.find(v => v.name.includes(p) && v.lang.startsWith('en'));
+            if (selectedVoice) break;
+        }
+
+        if (selectedVoice) {
+            utterance.voice = selectedVoice;
+        }
+
+        utterance.rate = 1.2; // Slightly faster for responsiveness
+        utterance.pitch = 1.0;
+        utterance.volume = 1.0;
+
+        window.speechSynthesis.speak(utterance);
+    }
 }
 
 export const audioEngine = new AudioEngine();

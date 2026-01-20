@@ -10,14 +10,17 @@ import './App.css';
 const DEFAULT_SETTINGS = {
   activeColor: '#bb86fc',
   restColor: '#03dac6',
-  criticalRepColor: '#cf6679',
-  lastSecondThreshold: 1, // Change color when 1s remains
+  concentricColor: '#cf6679',
+  concentricSecond: 1,
   smoothAnimation: true,
   prepTime: 5, // Default prep time
   fullScreenMode: false,
   metronomeEnabled: false,
   metronomeSound: 'woodblock',
   floatingWindow: false,
+  upDownMode: false,
+  infoVisibility: 'always', // 'always' | 'resting' | 'never'
+  soundMode: 'metronome', // 'metronome' | 'tts'
 };
 
 // --- Theme Presets (Mapping IDs to colors for immediate use if needed) ---
@@ -85,8 +88,8 @@ function App() {
     const ctx = canvas.getContext('2d');
     const color = (timerStatus === 'Preparing' || !isWorking)
       ? settings.restColor
-      : (timeLeft <= settings.lastSecondThreshold && timeLeft > 0
-        ? settings.criticalRepColor
+      : (timeLeft <= settings.concentricSecond && timeLeft > 0
+        ? settings.concentricColor
         : settings.activeColor
       );
 
@@ -357,7 +360,11 @@ function App() {
     if (isTimerRunning && settings.metronomeEnabled && isWorking && timerStatus !== 'Preparing') {
       const currentSecond = Math.ceil(timeLeft);
       if (currentSecond !== lastTickSecond && currentSecond >= 0) {
-        audioEngine.playTick(settings.metronomeSound);
+        if (settings.soundMode === 'tts') {
+          audioEngine.speak(currentSecond);
+        } else {
+          audioEngine.playTick(settings.metronomeSound);
+        }
         setLastTickSecond(currentSecond);
       }
     } else {
@@ -454,16 +461,18 @@ function App() {
 
           {appPhase === 'timer' && (
             <div className={`timer-container fade-in ${settings.fullScreenMode ? 'full-screen-active' : ''}`}>
-              <div className="timer-header">
-                <h2>{timerStatus}</h2>
-                <div className="badges">
-                  <span className="badge">Set {currentSet}/{sets}</span>
-                  {!isWorking && (
-                    <span className="badge">{isMainRep ? 'Activation' : 'Myo Phase'}</span>
-                  )}
-                  <span className="badge">Rep {currentRep}</span>
+              {(settings.infoVisibility === 'always' || (settings.infoVisibility === 'resting' && !isWorking)) && (
+                <div className="timer-header">
+                  <h2>{timerStatus}</h2>
+                  <div className="badges">
+                    <span className="badge">Set {currentSet}/{sets}</span>
+                    {!isWorking && (
+                      <span className="badge">{isMainRep ? 'Activation' : 'Myo Phase'}</span>
+                    )}
+                    <span className="badge">Rep {currentRep}</span>
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Dynamic Background for Full Screen Mode */}
               {settings.fullScreenMode && (
@@ -472,8 +481,8 @@ function App() {
                   style={{
                     backgroundColor: (timerStatus === 'Preparing' || !isWorking)
                       ? settings.restColor
-                      : (timeLeft <= settings.lastSecondThreshold && timeLeft > 0
-                        ? settings.criticalRepColor
+                      : (timeLeft <= settings.concentricSecond && timeLeft > 0
+                        ? settings.concentricColor
                         : settings.activeColor
                       )
                   }}
@@ -525,7 +534,7 @@ function App() {
 
         <footer className="main-footer">
           <div className="footer-content">
-            <span>MyoRep Timer v2.1.1</span>
+            <span>MyoRep Timer 2.2.1</span>
             <span className="separator">•</span>
             <span>by General Malit</span>
           </div>

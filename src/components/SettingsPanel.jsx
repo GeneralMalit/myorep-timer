@@ -41,23 +41,23 @@ const SettingsPanel = ({ settings, setSettings, isOpen, onClose }) => {
                 </div>
 
                 <div className="setting-group">
-                    <label>Critical Last Second Color</label>
+                    <label>Concentric Color</label>
                     <div className="color-picker-wrapper">
                         <input
                             type="color"
-                            value={settings.criticalRepColor}
-                            onChange={(e) => handleChange('criticalRepColor', e.target.value)}
+                            value={settings.concentricColor}
+                            onChange={(e) => handleChange('concentricColor', e.target.value)}
                         />
-                        <span>{settings.criticalRepColor}</span>
+                        <span>{settings.concentricColor}</span>
                     </div>
                 </div>
 
                 <div className="setting-group">
-                    <label>Critical Rep Threshold (s)</label>
+                    <label>Concentric Second (s)</label>
                     <input
                         type="number"
-                        value={settings.lastSecondThreshold}
-                        onChange={(e) => handleChange('lastSecondThreshold', parseInt(e.target.value))}
+                        value={settings.concentricSecond}
+                        onChange={(e) => handleChange('concentricSecond', parseInt(e.target.value))}
                         min="1"
                         max="10"
                     />
@@ -93,37 +93,46 @@ const SettingsPanel = ({ settings, setSettings, isOpen, onClose }) => {
                 </div>
 
                 <div className="setting-group checkbox-group">
-                    <label>Enable Metronome</label>
+                    <label>Up Down Mode (Visuals Only)</label>
                     <input
                         type="checkbox"
-                        checked={settings.metronomeEnabled}
-                        onChange={(e) => handleChange('metronomeEnabled', e.target.checked)}
+                        checked={settings.upDownMode}
+                        onChange={(e) => handleChange('upDownMode', e.target.checked)}
                     />
                 </div>
 
-                <div className="setting-group checkbox-group">
-                    <label>Floating Window Mode (PiP)</label>
-                    <input
-                        type="checkbox"
-                        checked={settings.floatingWindow}
-                        onChange={(e) => handleChange('floatingWindow', e.target.checked)}
-                    />
+                <div className="setting-group">
+                    <label>Workout Info Visibility</label>
+                    <select
+                        value={settings.infoVisibility}
+                        onChange={(e) => handleChange('infoVisibility', e.target.value)}
+                        className="settings-select"
+                    >
+                        <option value="always">Always Show</option>
+                        <option value="resting">Show During Rest Only</option>
+                        <option value="never">Never Show</option>
+                    </select>
                 </div>
 
-                {settings.metronomeEnabled && (
+                <div className="setting-group">
+                    <label>Sound Cue Mode</label>
+                    <select
+                        value={settings.soundMode}
+                        onChange={(e) => handleChange('soundMode', e.target.value)}
+                        className="settings-select"
+                    >
+                        <option value="metronome">Metronome (Beeps)</option>
+                        <option value="tts">Natural Voice (TTS)</option>
+                    </select>
+                </div>
+
+                {settings.metronomeEnabled && settings.soundMode === 'metronome' && (
                     <div className="setting-group">
                         <label>Metronome Sound</label>
                         <select
                             value={settings.metronomeSound}
                             onChange={(e) => handleChange('metronomeSound', e.target.value)}
-                            style={{
-                                width: '100%',
-                                padding: '10px',
-                                borderRadius: '8px',
-                                background: '#2c2c2c',
-                                color: '#fff',
-                                border: '1px solid #444'
-                            }}
+                            className="settings-select"
                         >
                             <option value="woodblock">Woodblock</option>
                             <option value="mechanical">Mechanical</option>

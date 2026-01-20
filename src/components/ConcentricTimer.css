@@ -45,3 +45,28 @@
     text-transform: uppercase;
     letter-spacing: 2px;
 }
+
+.up-down-text {
+    font-size: 10rem;
+    font-weight: 900;
+    line-height: 1;
+    text-shadow: 0 0 30px rgba(0, 0, 0, 0.4);
+    animation: pulse 1s infinite alternate ease-in-out;
+}
+
+.up-down-active .main-time {
+    font-size: 3rem;
+    margin-top: 20px;
+}
+
+@keyframes pulse {
+    from {
+        transform: scale(1);
+        filter: brightness(1);
+    }
+
+    to {
+        transform: scale(1.05);
+        filter: brightness(1.2);
+    }
+}
