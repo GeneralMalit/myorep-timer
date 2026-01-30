@@ -71,7 +71,7 @@ stateDiagram-v2
 This is critical for Brave/Chromium compatibility where TTS voices may be blocked.
 ```mermaid
 flowchart TD
-    Start[audioEngine.speak(text)] --> CheckVoices{Voices Available?}
+    Start[audioEngine speak(text)] --> CheckVoices{Voices Available?}
     CheckVoices -- Yes --> UseTTS[SpeechSynthesisUtterance]
     CheckVoices -- No --> BraveFallback[Brave Fallback: speakWithTones]
     
