@@ -559,7 +559,7 @@ function App() {
 
         <footer className="main-footer">
           <div className="footer-content">
-            <span>MyoRep Timer 2.2.2</span>
+            <span>MyoRep Timer 2.3.0</span>
             <span className="separator">•</span>
             <span>by General Malit</span>
           </div>
