@@ -15,13 +15,15 @@ const DEFAULT_SETTINGS = {
   smoothAnimation: true,
   prepTime: 5, // Default prep time
   fullScreenMode: false,
-  metronomeEnabled: false,
+  metronomeEnabled: true,
   metronomeSound: 'woodblock',
   floatingWindow: false,
   upDownMode: false,
   infoVisibility: 'always', // 'always' | 'resting' | 'never'
   soundMode: 'metronome', // 'metronome' | 'tts'
   pulseEffect: 'always', // 'always' | 'resting' | 'never'
+  finishedColor: '#4caf50', // New: Green for finished status
+  pipShowInfo: true, // New: Toggle info on PiP
 };
 
 // --- Theme Presets (Mapping IDs to colors for immediate use if needed) ---
@@ -69,6 +71,18 @@ function App() {
   const [timeLeft, setTimeLeft] = useState(0); // Current phase time (Rep duration or Rest duration)
   const [worker, setWorker] = useState(null);
 
+  // === 3. Derived Logic (Calculated per render) ===
+  const totalRepsCurrentPhase = isMainRep ? parseInt(reps || 0, 10) : parseInt(myoReps || 0, 10);
+  const currentRepTotalTime = isMainRep ? parseInt(seconds || 0, 10) : parseInt(myoWorkSecs || 0, 10);
+
+  const outerMax = isWorking ? totalRepsCurrentPhase : parseInt(rest || 1, 10);
+  const outerValue = timerStatus === 'Finished'
+    ? outerMax
+    : (isWorking ? (totalRepsCurrentPhase - currentRep + 1) : timeLeft);
+
+  const innerValue = timeLeft; // Current rep time (Float or Int)
+  const innerMax = timerStatus === 'Preparing' ? settings.prepTime : currentRepTotalTime;
+
   // Floating Window Refs
   const canvasRef = useCallback(node => {
     if (node !== null) {
@@ -87,16 +101,43 @@ function App() {
     if (!canvas) return;
 
     const ctx = canvas.getContext('2d');
-    const color = (timerStatus === 'Preparing' || !isWorking)
-      ? settings.restColor
-      : (timeLeft <= settings.concentricSecond && timeLeft > 0
-        ? settings.concentricColor
-        : settings.activeColor
-      );
+    const color = timerStatus === 'Finished'
+      ? settings.finishedColor
+      : (timerStatus === 'Preparing' || !isWorking)
+        ? settings.restColor
+        : (timeLeft <= settings.concentricSecond && timeLeft > 0
+          ? settings.concentricColor
+          : settings.activeColor
+        );
 
+    // Background
     ctx.fillStyle = color;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-  }, [timeLeft, isWorking, timerStatus, settings]);
+
+    // Text Overlay
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 24px Inter, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    // Draw Status
+    ctx.fillText(timerStatus, canvas.width / 2, 60);
+
+    // Draw Main Time
+    ctx.font = 'bold 80px Inter, sans-serif';
+    ctx.fillText(Math.ceil(timeLeft), canvas.width / 2, canvas.height / 2);
+
+    // Draw Set/Rep Info
+    if (settings.pipShowInfo) {
+      ctx.font = '18px Inter, sans-serif';
+      if (appPhase === 'timer' && timerStatus !== 'Finished' && timerStatus !== 'Preparing') {
+        ctx.fillText(`Set ${currentSet}/${sets}`, canvas.width / 2, canvas.height - 70);
+        ctx.fillText(`Rep ${currentRep}/${totalRepsCurrentPhase}`, canvas.width / 2, canvas.height - 40);
+      } else if (timerStatus === 'Finished') {
+        ctx.fillText('Workout Complete!', canvas.width / 2, canvas.height - 50);
+      }
+    }
+  }, [timeLeft, isWorking, timerStatus, settings, currentSet, sets, currentRep, totalRepsCurrentPhase, appPhase]);
 
   // Request PiP
   const requestPiP = async () => {
@@ -129,12 +170,7 @@ function App() {
     return () => w.terminate();
   }, []);
 
-  // === 4. Derived Logic ===
-  // Outer Circle now tracks REPS REMAINING.
-  const totalRepsCurrentPhase = isMainRep ? parseInt(reps || 0, 10) : parseInt(myoReps || 0, 10);
-
-  // Inner Circle tracks Rep Time
-  const currentRepTotalTime = isMainRep ? parseInt(seconds || 0, 10) : parseInt(myoWorkSecs || 0, 10);
+  // === Effects: Theme Changes ===
 
   // === 4. Derived Time Tracking for Concentric Circles ===
   // We need to track the "Total Time" for the outer circle (Whole Set)
@@ -183,6 +219,7 @@ function App() {
     const msec = parseInt(myoWorkSecs, 10);
 
     if (s > 0 && r > 0 && sec > 0 && rst > 0 && mr > 0 && msec > 0) {
+      audioEngine.init();
       setCurrentSet(1);
       setCurrentRep(1);
       setIsMainRep(true);
@@ -196,6 +233,7 @@ function App() {
       setTimerStatus("Preparing");
       setTimeLeft(settings.prepTime);
       setIsTimerRunning(true);
+      if (settings.soundMode === 'tts') audioEngine.speak('Ready');
     } else {
       alert("Please enter valid numbers > 0 for all fields.");
     }
@@ -203,6 +241,7 @@ function App() {
 
   // Stop/Reset
   const resetWorkout = () => {
+    audioEngine.init();
     setIsTimerRunning(false);
     setAppPhase('setup');
     setTimerStatus("Ready");
@@ -223,6 +262,7 @@ function App() {
       setTimerStatus("Finished");
       setTimeLeft(0);
       setSetElapsedTime(setTotalDuration); // Ensure outer circle fills
+      if (settings.soundMode === 'tts') audioEngine.speak('Complete');
     };
 
     if (timerStatus === "Preparing") {
@@ -233,6 +273,7 @@ function App() {
       setCurrentRep(1);
       setSetTotalDuration(mainRepsCount * mainSecs);
       setSetElapsedTime(0);
+      if (settings.soundMode === 'tts') audioEngine.speak('Go');
       return;
     }
 
@@ -250,6 +291,7 @@ function App() {
             setIsWorking(false);
             setTimeLeft(restSecs);
             setTimerStatus("Resting");
+            if (settings.soundMode === 'tts') audioEngine.speak('Rest');
             // For Rest, let's say "Outer Circle" tracks rest time?
             // User: "Outer Concentric Circle: ... changes colors when we are at rest to signify that we are resting"
             // So during rest, Outer Circle = Timer of Rest.
@@ -284,6 +326,7 @@ function App() {
             setIsWorking(false);
             setTimeLeft(restSecs);
             setTimerStatus("Resting");
+            if (settings.soundMode === 'tts') audioEngine.speak('Rest');
             setSetTotalDuration(restSecs);
             setSetElapsedTime(0);
           } else {
@@ -311,6 +354,7 @@ function App() {
       setSetTotalDuration(myoRepsCount * myoSecs);
       setSetElapsedTime(0);
       setTimerStatus("Myo Reps");
+      if (settings.soundMode === 'tts') audioEngine.speak('Start');
     }
   }, [sets, reps, myoReps, seconds, myoWorkSecs, rest, isWorking, isMainRep, currentRep, currentSet, timerStatus, setTotalDuration]);
 
@@ -372,30 +416,7 @@ function App() {
       // Reset tick tracking when paused or not working
       setLastTickSecond(-1);
     }
-  }, [timeLeft, isTimerRunning, settings.metronomeEnabled, isWorking, timerStatus, settings.metronomeSound, lastTickSecond]);
-
-  // === Calculation for Timer Props ===
-  const outerTimeLeft = isWorking ? (setTotalDuration - setSetElapsedTime) : timeLeft;
-  const outerTotal = isWorking ? setTotalDuration : parseInt(rest || 1, 10);
-
-  // Outer Value (Reps Logic)
-  // Logic: "Reps Remaining". 
-  // We want to show partial reps? 
-  // The outer circle ticks DOWN per rep.
-  // Ideally it stays FULL for the current rep, then ticks down when rep finishes?
-  // User: "The outer concentric circle should measure the amount of REPS REMAINING IN THE SET"
-  // If we are at Rep 1 of 15. Outer should be Full? Or 14/15?
-  // Let's keep it stepping. Visual: 15 segments.
-  const outerMax = isWorking ? totalRepsCurrentPhase : parseInt(rest || 1, 10);
-  const outerValue = timerStatus === 'Finished'
-    ? outerMax
-    : (isWorking ? (totalRepsCurrentPhase - currentRep + 1) : timeLeft);
-
-  const innerValue = timeLeft; // Current rep time (Float or Int)
-  const innerMax = timerStatus === 'Preparing' ? settings.prepTime : currentRepTotalTime;
-
-  // Format Display: Ceil for standard Countdown look (3.9 -> 4, 0.1 -> 1, 0.0 -> 0)
-  const displaySeconds = Math.ceil(timeLeft);
+  }, [timeLeft, isTimerRunning, settings.metronomeEnabled, isWorking, timerStatus, settings.metronomeSound, lastTickSecond, settings.soundMode]);
 
   return (
     <div className={`app-root theme-${currentTheme}`}>
@@ -480,12 +501,14 @@ function App() {
                 <div
                   className="full-screen-bg"
                   style={{
-                    backgroundColor: (timerStatus === 'Preparing' || !isWorking)
-                      ? settings.restColor
-                      : (timeLeft <= settings.concentricSecond && timeLeft > 0
-                        ? settings.concentricColor
-                        : settings.activeColor
-                      )
+                    backgroundColor: timerStatus === 'Finished'
+                      ? settings.finishedColor
+                      : (timerStatus === 'Preparing' || !isWorking)
+                        ? settings.restColor
+                        : (timeLeft <= settings.concentricSecond && timeLeft > 0
+                          ? settings.concentricColor
+                          : settings.activeColor
+                        )
                   }}
                 />
               )}
@@ -510,6 +533,7 @@ function App() {
                 <button
                   className={`control-btn ${isTimerRunning ? 'pause' : 'resume'}`}
                   onClick={() => {
+                    audioEngine.init();
                     if (timerStatus === 'Finished') resetWorkout();
                     else setIsTimerRunning(!isTimerRunning);
                   }}
@@ -525,10 +549,8 @@ function App() {
               {settings.floatingWindow && (
                 <div className="pip-request-container">
                   <button className="pip-btn" onClick={requestPiP}>
-                    Open Floating Window
+                    {document.pictureInPictureElement ? 'Floating Window Active' : 'Open Floating Window'}
                   </button>
-                  <canvas ref={canvasRef} width="300" height="300" style={{ display: 'none' }} />
-                  <video ref={videoRef} autoPlay muted style={{ display: 'none' }} />
                 </div>
               )}
             </div>
@@ -542,6 +564,12 @@ function App() {
             <span>by General Malit</span>
           </div>
         </footer>
+
+        {/* Persistent PiP Elements (outside active workout container to persist) */}
+        <div style={{ display: 'none' }}>
+          <canvas ref={canvasRef} width="300" height="300" />
+          <video ref={videoRef} autoPlay muted />
+        </div>
       </div>
     </div>
   );

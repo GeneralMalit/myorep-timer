@@ -1,106 +1,128 @@
-# Documentation: Myo-Rep Timer React Application
+# Myo-Rep Timer - Version 2.3.0
 
 ## 1. Project Overview
 
-### 1.1. Purpose
+The Myo-Rep Timer is a high-performance, single-page React application designed for the **Myo-rep training protocol**. It features a robust state machine, a persistent Picture-in-Picture (PiP) implementation, and a specialized audio engine with cross-browser fail-safes.
 
-The Myo-Rep Timer is a specialized, single-page web application designed to guide users through a **Myo-rep training protocol**. This training method consists of:
-1.  An initial **Activation Set** with a higher number of repetitions to recruit maximum muscle fibers.
-2.  A series of shorter **Myo-rep Sets** with very brief rest periods in between to accumulate a high volume of "effective reps" for muscle growth.
-
-This application automates the timing of work intervals, rest periods, and the transition between the main set and subsequent Myo-rep sets, allowing the user to focus solely on their workout.
-
-### 1.2. Technology Stack
-
-*   **Frontend Library:** [React](https://reactjs.org/) (using Vite for the build environment)
-*   **Build Tool:** [Vite](https://vitejs.dev/)
-*   **Language:** JavaScript (ES6+)
-*   **Styling:** CSS with custom properties (variables) for a modern, dark-mode theme.
-*   **Code Protection:** [javascript-obfuscator](https://github.com/javascript-obfuscator/javascript-obfuscator) via the `vite-plugin-javascript-obfuscator` plugin.
-*   **Audio Engine:** Custom-built audio engine for metronome functionality.
+### 1.1. Core Features (v2.3.0)
+- **Advanced State Machine**: Handles Prep -> Main Set -> Rest -> Myo Sets -> Finish.
+- **Robust Audio Engine**: Hybrid TTS system with Web Speech API and Web Audio API tone fallbacks (optimized for Brave).
+- **Persistent PiP**: Drawing engine on `<canvas>` captured to a `<video>` stream, surviving workout resets.
+- **Dynamic UI**: Concentric circular timer with real-time scaling and smooth animations.
+- **Redesigned Settings**: 2-column grid layout for high density and clear categorization.
 
 ---
 
-## 2. Project Structure
+## 2. Program Structure & Architecture
 
-The project follows a standard Vite + React structure. The most important files are within the `src` directory.
-
-```
-myorep-2/
-├── dist/                 # The production-ready, obfuscated build folder (after running `npm run build`)
-├── node_modules/         # Project dependencies
-├── public/               # Static assets
-├── src/
-│   ├── App.css           # Styling for the application
-│   ├── App.jsx           # Main React component, containing logic and UI
-│   ├── components/       # Reusable components (e.g., Sidebar, Timer, SettingsPanel)
-│   ├── utils/            # Utility functions (e.g., audioEngine.js for metronome)
-├── .env                  # (Optional) Environment variables
-├── index.html            # The entry point for the application
-├── package.json          # Project metadata and scripts
-└── vite.config.js        # Vite build and plugin configuration (including obfuscation)
+### 2.1. File Map
+```text
+src/
+├── App.jsx                # ROOT: State Management, Workout Logic, PiP Streamer
+├── components/
+│   ├── Sidebar.jsx        # Navigation & Versioning
+│   ├── ConcentricTimer.jsx# VISUAL: SVG Drawing & Progress Logic
+│   ├── SettingsPanel.jsx  # CONFIG: UI for DEFAULT_SETTINGS overrides
+├── utils/
+│   ├── audioEngine.js     # AUDIO: Web Speech API & Tone Fallback Logic
+│   ├── timerWorker.js     # CORE: Background thread for sub-millisecond accuracy
 ```
 
----
+### 2.2. Component Hierarchy
+```mermaid
+graph TD
+    App[App.jsx - State Owner]
+    Sidebar[Sidebar.jsx]
+    ConcentricTimer[ConcentricTimer.jsx]
+    SettingsPanel[SettingsPanel.jsx]
+    SetupForm[Setup Form - Inline in App]
+    AudioEngine[audioEngine.js - Singleton]
 
-## 3. New Features
-
-### 3.1. Full-Screen Mode
-- Added a full-screen mode for an immersive workout experience.
-- Dynamic background color changes based on the workout phase.
-
-### 3.2. Metronome Functionality
-- Integrated a metronome with customizable sounds (e.g., woodblock, mechanical, electronic).
-- Helps users maintain a consistent rhythm during workouts.
-
-### 3.3. Enhanced Timer UI
-- Concentric timer with inner and outer circles to track reps and set progress.
-- Smooth animations and critical rep indicators.
-
-### 3.4. Fixed Timer Desync
-- Resolved an issue where the timer would desynchronize when the browser tab was not in focus.
-
-### 3.5. Floating Window Option
-- Introduced a floating window feature, allowing users to multitask while keeping the timer visible during workouts.
+    App --> Sidebar
+    App --> ConcentricTimer
+    App --> SettingsPanel
+    App --> SetupForm
+    App -.-> AudioEngine
+```
 
 ---
 
-## 4. How to Run
+## 3. Detailed Logic Diagrams
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/GeneralMalit/myorep-timer.git
-   ```
+### 3.1. Workout Lifecycle (State Machine)
+```mermaid
+stateDiagram-v2
+    [*] --> Setup: App Launch
+    Setup --> Preparing: Start Clicked
+    Preparing --> MainSet: prepTime counts down
+    MainSet --> Resting: reps == maxReps OR timeLeft == 0
+    Resting --> MyoReps: restTime counts down
+    MyoReps --> Resting: currentSet < totalSets
+    MyoReps --> Finished: currentSet == totalSets
+    Finished --> Setup: Reset Clicked
+    
+    state MainSet {
+        [*] --> Working
+        Working --> Working: Rep Finished
+    }
+```
 
-2. Navigate to the project directory:
-   ```bash
-   cd myorep-timer
-   ```
-
-3. Install dependencies:
-   ```bash
-   npm install
-   ```
-
-4. Start the development server:
-   ```bash
-   npm run dev
-   ```
-
-5. Open the application in your browser at `http://localhost:3000`.
+### 3.2. Audio Engine Fallback (Natural Voice)
+This is critical for Brave/Chromium compatibility where TTS voices may be blocked.
+```mermaid
+flowchart TD
+    Start[audioEngine.speak(text)] --> CheckVoices{Voices Available?}
+    CheckVoices -- Yes --> UseTTS[SpeechSynthesisUtterance]
+    CheckVoices -- No --> BraveFallback[Brave Fallback: speakWithTones]
+    
+    UseTTS --> TTS_Success[Natural Voice Output]
+    UseTTS -- Error --> BraveFallback
+    
+    BraveFallback --> Map[Map Text to Frequency/Pattern]
+    Map --> WebAudio[Web Audio API - Sine Wave]
+    WebAudio --> ToneOutput[Melodic Tone Output]
+```
 
 ---
 
-## 5. Build for Production
+## 4. Key Implementation Details (For Future Agents)
 
-To create a production-ready build, run:
+### 4.1. The PiP "Survival" Trick
+To keep PiP active across workout resets, the `canvas` and `video` elements are placed in a **Persistent Container** at the bottom of `App.jsx`. 
+- **Drawing**: A `useEffect` in `App.jsx` draws every frame to the canvas based on centralized state.
+- **Streaming**: `video.srcObject = canvas.captureStream()` is called once on mount.
+
+### 4.2. Sub-millisecond Accuracy
+The app uses a **Web Worker** (`timerWorker.js`) to handle intervals. Standard `setInterval` is throttled by browsers in background tabs, but Workers maintain priority, preventing timer desync during long rests.
+
+### 4.3. Brave TTS Fix
+Brave often returns `window.speechSynthesis.getVoices() = []`.
+- `audioEngine.js` detects this and automatically triggers `speakWithTones()`.
+- Tone patterns are melodic (ascending for "Start", descending for "Rest").
+
+---
+
+## 5. Maintenance & Versioning
+
+### Current Version: 2.3.0
+- **Changes in 2.3.0**:
+    - Redesigned Settings Panel.
+    - Added PiP Info Toggle (Sets/Reps visibility).
+    - Implemented Brave Tone Fallback.
+    - Added "Finished Color" configuration.
+    - Updated Sidebar Versioning.
+
+---
+
+## 6. Development
+
+Run locally:
+```bash
+npm install
+npm run dev
+```
+
+Build:
 ```bash
 npm run build
 ```
-The output will be in the `dist/` directory.
-
----
-
-## 6. License
-
-This project is licensed under the MIT License. See the `LICENSE` file for details.
