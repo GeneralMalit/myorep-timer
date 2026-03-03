@@ -1,24 +1,37 @@
 import React from 'react';
-import './ConcentricTimer.css';
+import { useWorkoutStore } from '@/store/useWorkoutStore';
+import { cn } from '@/lib/utils';
 
-const ConcentricTimer = ({
+interface ConcentricTimerProps {
+    outerValue: number;
+    outerMax: number;
+    isResting: boolean;
+    innerValue: number;
+    innerMax: number;
+    textMain: string;
+    textSub: string;
+    isFinished: boolean;
+    isPreparing: boolean;
+}
+
+const ConcentricTimer: React.FC<ConcentricTimerProps> = ({
     outerValue,
     outerMax,
     isResting,
     innerValue,
     innerMax,
-    settings,
-    smoothAnimation,
-    currentRep, // Need this for key
     textMain,
     textSub,
     isFinished,
     isPreparing
 }) => {
+    const settings = useWorkoutStore((state: any) => state.settings);
+    const currentRep = useWorkoutStore((state: any) => state.currentRep);
+
     // Size Conf
     const size = 450;
     const center = size / 2;
-    const strokeWidth = 12; // Thicker lines
+    const strokeWidth = 12;
 
     // Radii
     const outerRadius = (size / 2) - 30;
@@ -27,13 +40,13 @@ const ConcentricTimer = ({
     const outerCircumference = 2 * Math.PI * outerRadius;
     const innerCircumference = 2 * Math.PI * innerRadius;
 
-    // Outer Progress (Reps Remaining or Rest Time)
+    // Outer Progress
     const safeOuterMax = outerMax > 0 ? outerMax : 1;
     const outerProgress = outerValue / safeOuterMax;
     const clampedOuterProgress = Math.max(0, Math.min(1, outerProgress));
     const outerDashoffset = outerCircumference - (clampedOuterProgress * outerCircumference);
 
-    // Inner Progress (Rep Timer)
+    // Inner Progress
     const safeInnerMax = innerMax > 0 ? innerMax : 1;
     const innerProgress = innerValue / safeInnerMax;
     const clampedInnerProgress = Math.max(0, Math.min(1, innerProgress));
@@ -43,7 +56,6 @@ const ConcentricTimer = ({
     const isFullScreen = settings.fullScreenMode;
     const outerColor = isFullScreen ? '#ffffff' : (isResting ? settings.restColor : settings.activeColor);
 
-    // Concentric Phase Logic (Last X Seconds)
     const isConcentricPhase = !isResting && innerValue <= settings.concentricSecond && innerValue > 0 && !isPreparing && !isFinished;
 
     let innerColor;
@@ -53,20 +65,14 @@ const ConcentricTimer = ({
         innerColor = isConcentricPhase ? settings.concentricColor : settings.activeColor;
     }
 
-    // Transition Logic
-    const outerTransition = smoothAnimation
-        ? 'stroke-dashoffset 0.5s ease-out'
-        : 'none';
-
-    const innerTransition = smoothAnimation
-        ? 'stroke-dashoffset 0.05s linear, stroke 0.3s ease'
-        : 'none';
+    // Transitions
+    const outerTransition = settings.smoothAnimation ? 'stroke-dashoffset 0.5s ease-out' : 'none';
+    const innerTransition = settings.smoothAnimation ? 'stroke-dashoffset 0.05s linear, stroke 0.3s ease' : 'none';
 
     const upDownMode = settings.upDownMode;
-    const infoVisibility = settings.infoVisibility;
-    const isInfoVisible = infoVisibility === 'always' || (infoVisibility === 'resting' && isResting);
+    const isInfoVisible = settings.infoVisibility === 'always' || (settings.infoVisibility === 'resting' && isResting);
 
-    // Up Down Text Logic
+    // Up/Down Text
     let upDownText = '';
     let upDownTextColor = isFullScreen ? '#ffffff' : (isResting ? settings.restColor : settings.activeColor);
 
@@ -86,25 +92,18 @@ const ConcentricTimer = ({
         }
     }
 
-    // Pulsating Logic
-    const pulseSetting = settings.pulseEffect || 'always';
-    let shouldPulse = false;
-    if (pulseSetting === 'always') {
-        shouldPulse = true;
-    } else if (pulseSetting === 'resting') {
-        shouldPulse = isResting || isPreparing || isFinished;
-    }
+    const shouldPulse = settings.pulseEffect === 'always' || (settings.pulseEffect === 'resting' && (isResting || isPreparing || isFinished));
 
     return (
-        <div className={`concentric-timer-wrapper ${upDownMode ? 'up-down-active' : ''}`}>
+        <div className={cn("relative flex items-center justify-center select-none", upDownMode && "h-64")}>
             {!upDownMode && (
-                <svg width={size} height={size} className="concentric-timer-svg">
-                    {/* Background Tracks */}
+                <svg width={size} height={size} className="transform -rotate-90">
+                    {/* Tracks */}
                     <circle
                         cx={center}
                         cy={center}
                         r={outerRadius}
-                        stroke="#333"
+                        className="stroke-muted/20"
                         strokeWidth={strokeWidth}
                         fill="none"
                     />
@@ -113,14 +112,13 @@ const ConcentricTimer = ({
                             cx={center}
                             cy={center}
                             r={innerRadius}
-                            stroke="#333"
+                            className="stroke-muted/20"
                             strokeWidth={strokeWidth}
                             fill="none"
                         />
                     )}
 
-                    {/* Progress Circles */}
-                    {/* Outer Circle */}
+                    {/* Progress */}
                     <circle
                         cx={center}
                         cy={center}
@@ -132,13 +130,10 @@ const ConcentricTimer = ({
                         strokeDashoffset={outerDashoffset}
                         strokeLinecap="round"
                         style={{ transition: outerTransition }}
-                        transform={`rotate(-90 ${center} ${center})`}
                     />
-
-                    {/* Inner Circle (Hidden during rest or when finished) */}
                     {!isResting && !isFinished && (
                         <circle
-                            key={currentRep} /* Forces instant remount on new rep */
+                            key={currentRep}
                             cx={center}
                             cy={center}
                             r={innerRadius}
@@ -149,16 +144,18 @@ const ConcentricTimer = ({
                             strokeDashoffset={innerDashoffset}
                             strokeLinecap="round"
                             style={{ transition: innerTransition }}
-                            transform={`rotate(-90 ${center} ${center})`}
                         />
                     )}
                 </svg>
             )}
 
-            <div className="timer-text-overlay">
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none">
                 {upDownMode && (
                     <div
-                        className={`up-down-text ${shouldPulse ? 'pulsating' : ''}`}
+                        className={cn(
+                            "text-6xl font-black tracking-tighter transition-all duration-300",
+                            shouldPulse && "animate-pulse"
+                        )}
                         style={{ color: upDownTextColor }}
                     >
                         {upDownText}
@@ -166,14 +163,17 @@ const ConcentricTimer = ({
                 )}
 
                 {isInfoVisible && (
-                    <>
-                        <div className="main-time" style={{ color: isFullScreen ? '#ffffff' : (isConcentricPhase ? settings.concentricColor : settings.activeColor) }}>
+                    <div className="flex flex-col items-center">
+                        <div
+                            className="text-8xl font-black tabular-nums transition-colors duration-300"
+                            style={{ color: isFullScreen ? '#ffffff' : (isConcentricPhase ? settings.concentricColor : settings.activeColor) }}
+                        >
                             {textMain}
                         </div>
-                        <div className="sub-text">
+                        <div className="text-xl font-medium tracking-wide text-muted-foreground uppercase mt-2">
                             {textSub}
                         </div>
-                    </>
+                    </div>
                 )}
             </div>
         </div>

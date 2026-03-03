@@ -1,8 +1,6 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-
-// 1. Import the default export from the plugin.
-// The variable 'obfuscator' will be the function we need.
+import path from 'path';
 import obfuscator from 'vite-plugin-javascript-obfuscator';
 
 // https://vite.dev/config/
@@ -15,11 +13,8 @@ export default defineConfig(({ mode }) => {
         },
       }),
 
-      // 2. Call the imported 'obfuscator' function directly.
-      // This is the correct usage.
       mode === 'production' ? obfuscator({
         options: {
-          // A strong preset that offers good protection
           controlFlowFlattening: true,
           controlFlowFlatteningThreshold: 0.75,
           deadCodeInjection: true,
@@ -35,9 +30,14 @@ export default defineConfig(({ mode }) => {
           stringArrayThreshold: 0.75,
         }
       }) : null,
-    ],
+    ].filter(Boolean),
 
-    // 3. Disable source maps for production
+    resolve: {
+      alias: {
+        '@': path.resolve(__dirname, './src'),
+      },
+    },
+
     build: {
       sourcemap: false,
     },

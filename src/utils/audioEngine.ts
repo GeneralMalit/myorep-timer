@@ -1,11 +1,11 @@
-class AudioEngine {
-    constructor() {
-        this.audioCtx = null;
-        this.voices = [];
-        this.selectedVoice = null;
-        this.unlocked = false;
-        this.preferredPatterns = ['Google US English', 'Microsoft Aria Online', 'Natural', 'Samantha', 'Google', 'Microsoft'];
+export class AudioEngine {
+    private audioCtx: AudioContext | null = null;
+    private voices: SpeechSynthesisVoice[] = [];
+    private selectedVoice: SpeechSynthesisVoice | null = null;
+    private unlocked = false;
+    private preferredPatterns = ['Google US English', 'Microsoft Aria Online', 'Natural', 'Samantha', 'Google', 'Microsoft'];
 
+    constructor() {
         if (typeof window !== 'undefined' && window.speechSynthesis) {
             const loadVoices = () => {
                 this.voices = window.speechSynthesis.getVoices();
@@ -20,7 +20,7 @@ class AudioEngine {
         }
     }
 
-    findPreferredVoice() {
+    private findPreferredVoice() {
         if (this.voices.length === 0) return;
 
         for (const pattern of this.preferredPatterns) {
@@ -38,7 +38,7 @@ class AudioEngine {
 
     init() {
         if (!this.audioCtx) {
-            this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            this.audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
             console.log("[AudioEngine] AudioContext initialized");
         }
         if (this.audioCtx.state === 'suspended') {
@@ -56,7 +56,7 @@ class AudioEngine {
         }
     }
 
-    playTick(type = 'woodblock') {
+    playTick(type: string = 'woodblock') {
         this.init();
         if (!this.audioCtx) return;
 
@@ -113,28 +113,27 @@ class AudioEngine {
         }
     }
 
-    speak(text) {
+    speak(text: string | number) {
         const msg = text.toString();
 
-        // Check if we have voices available
-        if (this.voices.length === 0) {
-            this.voices = window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
+        if (this.voices.length === 0 && window.speechSynthesis) {
+            this.voices = window.speechSynthesis.getVoices();
         }
 
-        // If no voices (Brave issue), use tone fallback immediately
         if (this.voices.length === 0) {
-            console.warn("[AudioEngine] No TTS voices, using tone fallback for:", msg);
-            this.speakWithTones(text);
+            console.warn("[AudioEngine] No TTS voices available.");
             return;
         }
 
         if (!window.speechSynthesis) {
-            this.speakWithTones(text);
             return;
         }
 
         console.log(`[AudioEngine] Speaking: "${msg}"`);
-        window.speechSynthesis.cancel();
+
+        if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
+            window.speechSynthesis.cancel();
+        }
 
         const utterance = new SpeechSynthesisUtterance(msg);
 
@@ -146,73 +145,18 @@ class AudioEngine {
         utterance.pitch = 1.0;
         utterance.volume = 1.0;
 
-        // If speech fails, fall back to tones
         utterance.onerror = (e) => {
-            console.error("[AudioEngine] Speech error, using tone fallback:", e);
-            this.speakWithTones(text);
+            console.error("[AudioEngine] Speech error:", e);
         };
 
         window.speechSynthesis.speak(utterance);
     }
 
-    // Fallback: Generate distinct tones when TTS unavailable
-    speakWithTones(text) {
-        this.init();
-        if (!this.audioCtx) return;
-
-        const num = parseInt(text, 10);
-
-        // Word patterns - different melodies for different words
-        const wordPatterns = {
-            'Ready': [400, 500, 600],
-            'Go': [800, 1000],
-            'Rest': [300, 400],
-            'Start': [500, 700, 900],
-            'Complete': [600, 800, 1000, 1200]
-        };
-
-        if (wordPatterns[text]) {
-            this.playToneSequence(wordPatterns[text]);
-            return;
-        }
-
-        // Numbers: different pitch for each
-        if (!isNaN(num) && num >= 0 && num <= 60) {
-            const baseFreq = 300;
-            const freq = baseFreq + (num * 15);
-            this.playTone(freq, 0.15);
-
-            // Extra beep for last 3 seconds
-            if (num <= 3 && num > 0) {
-                setTimeout(() => this.playTone(freq + 200, 0.1), 100);
-            }
-        }
+    speakWithTones(_text: string) {
+        // Disabled synthesizer sounds as per user request
+        return;
     }
 
-    playTone(frequency, duration) {
-        if (!this.audioCtx) return;
-
-        const osc = this.audioCtx.createOscillator();
-        const gain = this.audioCtx.createGain();
-
-        osc.connect(gain);
-        gain.connect(this.audioCtx.destination);
-
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(frequency, this.audioCtx.currentTime);
-
-        gain.gain.setValueAtTime(0.5, this.audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, this.audioCtx.currentTime + duration);
-
-        osc.start(this.audioCtx.currentTime);
-        osc.stop(this.audioCtx.currentTime + duration);
-    }
-
-    playToneSequence(frequencies) {
-        frequencies.forEach((freq, i) => {
-            setTimeout(() => this.playTone(freq, 0.12), i * 120);
-        });
-    }
 }
 
 export const audioEngine = new AudioEngine();
