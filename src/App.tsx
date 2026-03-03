@@ -103,21 +103,19 @@ export default function App() {
 
     // Audio Triggers
     useEffect(() => {
-        if (isTimerRunning && timerStatus !== 'Preparing') {
+        if (isTimerRunning && settings.metronomeEnabled && isWorking && timerStatus !== 'Preparing') {
             const currentSecond = Math.ceil(timeLeft);
-            if (currentSecond !== lastTickSecond && currentSecond > 0) {
-                if (settings.ttsEnabled) {
+            if (currentSecond !== lastTickSecond && currentSecond >= 0) {
+                if (settings.soundMode === 'tts') {
                     audioEngine.speak(currentSecond);
                 }
-                if (settings.metronomeEnabled && isWorking) {
+                if (settings.metronomeEnabled) {
                     audioEngine.playTick(settings.metronomeSound);
                 }
                 setLastTickSecond(currentSecond);
             }
         } else {
-            // Only reset if it was a positive second tick or -2 (Ready)
-            // This prevents fighting with the "Initial sound" effect's -2 state
-            if (lastTickSecond !== -1 && lastTickSecond !== -2) {
+            if (lastTickSecond !== -1) {
                 setLastTickSecond(-1);
             }
         }
@@ -126,19 +124,12 @@ export default function App() {
     // Initial sound on start
     useEffect(() => {
         if (timerStatus === 'Preparing' && isTimerRunning && lastTickSecond === -1) {
-            if (settings.ttsEnabled) {
+            if (settings.soundMode === 'tts') {
                 audioEngine.speak('Ready');
-                setLastTickSecond(-2); // Mark as initially spoken. First effect will NOT overwrite this.
+                setLastTickSecond(-2); // Mark as initially spoken
             }
         }
-    }, [timerStatus, isTimerRunning, settings.ttsEnabled, lastTickSecond, setLastTickSecond]);
-
-    // Finish sound
-    useEffect(() => {
-        if (timerStatus === 'Finished' && settings.ttsEnabled) {
-            audioEngine.speak('Workout Complete');
-        }
-    }, [timerStatus, settings.ttsEnabled]);
+    }, [timerStatus, isTimerRunning, settings.soundMode, lastTickSecond, setLastTickSecond]);
 
     // PiP Rendering
     useEffect(() => {
@@ -350,10 +341,10 @@ export default function App() {
 
                 <footer className="mt-20 py-8 border-t border-border/50 w-full text-center space-y-2 opacity-30 group hover:opacity-100 transition-opacity">
                     <div className="text-[10px] font-black uppercase tracking-[0.5em] text-muted-foreground">
-                        MYOREP ENGINE v2.3.0
+                        MYOREP v3.0.0
                     </div>
                     <div className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/60">
-                        Engineered by General Malit for Metabolic Stress
+                        Engineered by General Malit
                     </div>
                 </footer>
 
