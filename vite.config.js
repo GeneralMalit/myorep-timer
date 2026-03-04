@@ -23,7 +23,7 @@ export default defineConfig(({ mode }) => {
           debugProtectionInterval: 2000,
           disableConsoleOutput: true,
           identifierNamesGenerator: 'hexadecimal',
-          renameGlobals: true,
+          renameGlobals: false,
           rotateStringArray: true,
           stringArray: true,
           stringArrayEncoding: ['base64'],
