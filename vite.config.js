@@ -28,6 +28,23 @@ export default defineConfig(({ mode }) => {
           stringArray: true,
           stringArrayEncoding: ['base64'],
           stringArrayThreshold: 0.75,
+          reservedNames: [
+            '^speechSynthesis$',
+            '^getVoices$',
+            '^speak$',
+            '^cancel$',
+            '^onvoiceschanged$',
+            '^SpeechSynthesisUtterance$',
+            '^AudioContext$',
+            '^webkitAudioContext$',
+            '^Worker$',
+            '^postMessage$',
+            '^onmessage$',
+            '^onmessageerror$',
+            '^terminate$',
+            '^close$',
+            '^importMetaUrl$'
+          ]
         }
       }) : null,
     ].filter(Boolean),

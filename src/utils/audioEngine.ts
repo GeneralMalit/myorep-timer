@@ -21,10 +21,13 @@ export class AudioEngine {
     }
 
     private findPreferredVoice() {
-        if (this.voices.length === 0) return;
+        if (this.voices.length === 0) {
+            console.log("[AudioEngine] No voices loaded yet, waiting...");
+            return;
+        }
 
         for (const pattern of this.preferredPatterns) {
-            const voice = this.voices.find(v => v.name.includes(pattern) && v.lang.startsWith('en'));
+            const voice = this.voices.find(v => v.name.includes(pattern) && (v.lang.startsWith('en') || v.lang.startsWith('EN')));
             if (voice) {
                 this.selectedVoice = voice;
                 console.log(`[AudioEngine] Preferred voice selected: ${voice.name}`);
@@ -48,7 +51,7 @@ export class AudioEngine {
         if (!this.unlocked && window.speechSynthesis) {
             console.log("[AudioEngine] Unlocking SpeechSynthesis...");
             const silent = new SpeechSynthesisUtterance(' ');
-            silent.volume = 0;
+            silent.volume = 0.001; // Tiny volume to satisfy browser user activation checks
             window.speechSynthesis.speak(silent);
             this.unlocked = true;
             this.voices = window.speechSynthesis.getVoices();
@@ -114,28 +117,27 @@ export class AudioEngine {
     }
 
     speak(text: string | number) {
+        if (!window.speechSynthesis) return;
         const msg = text.toString();
 
-        if (this.voices.length === 0 && window.speechSynthesis) {
-            this.voices = window.speechSynthesis.getVoices();
-        }
-
         if (this.voices.length === 0) {
-            console.warn("[AudioEngine] No TTS voices available.");
-            return;
+            this.voices = window.speechSynthesis.getVoices();
+            this.findPreferredVoice();
         }
 
-        if (!window.speechSynthesis) {
-            return;
-        }
-
-        console.log(`[AudioEngine] Speaking: "${msg}"`);
+        console.log(`[AudioEngine] Requesting speech: "${msg}"`);
 
         if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
             window.speechSynthesis.cancel();
         }
 
         const utterance = new SpeechSynthesisUtterance(msg);
+
+        // If still no voice, wait for onvoiceschanged or try one last time
+        if (!this.selectedVoice) {
+            this.voices = window.speechSynthesis.getVoices();
+            this.findPreferredVoice();
+        }
 
         if (this.selectedVoice) {
             utterance.voice = this.selectedVoice;
