@@ -28,6 +28,10 @@ describe('timerWorker', () => {
             self.onmessage = (e) => {
                 if (e.data.action === 'start') {
                     const interval = e.data.interval || 1000;
+                    
+                    // If already running with same interval, do nothing
+                    if (timerId && interval === e.data.currentInterval) return;
+
                     if (timerId) clearInterval(timerId);
 
                     startTime = performance.now();

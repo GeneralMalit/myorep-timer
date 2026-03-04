@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
 import { audioEngine } from '@/utils/audioEngine';
-import timerWorkerUrl from '@/utils/timerWorker?url';
+// Remove the ?url import as it causes MIME type issues in production
+// import timerWorkerUrl from '@/utils/timerWorker?url';
 
 import Sidebar from '@/components/Sidebar';
 import SettingsPanel from '@/components/SettingsPanel';
@@ -53,7 +54,8 @@ export default function App() {
 
     // Init Worker
     useEffect(() => {
-        const worker = new Worker(timerWorkerUrl, { type: 'module' });
+        // Use Vite's recommended worker pattern for proper transpilation and MIME type handling
+        const worker = new Worker(new URL('./utils/timerWorker.ts', import.meta.url), { type: 'module' });
         workerRef.current = worker;
 
         worker.onmessage = (e) => {
