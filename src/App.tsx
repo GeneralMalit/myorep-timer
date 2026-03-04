@@ -106,7 +106,7 @@ export default function App() {
         if (isTimerRunning && settings.metronomeEnabled && isWorking && timerStatus !== 'Preparing') {
             const currentSecond = Math.ceil(timeLeft);
             if (currentSecond !== lastTickSecond && currentSecond >= 0) {
-                if (settings.soundMode === 'tts') {
+                if (settings.ttsEnabled) {
                     audioEngine.speak(currentSecond);
                 }
                 if (settings.metronomeEnabled) {
@@ -115,7 +115,7 @@ export default function App() {
                 setLastTickSecond(currentSecond);
             }
         } else {
-            if (lastTickSecond !== -1) {
+            if (lastTickSecond !== -1 && timerStatus !== 'Preparing') {
                 setLastTickSecond(-1);
             }
         }
@@ -124,12 +124,12 @@ export default function App() {
     // Initial sound on start
     useEffect(() => {
         if (timerStatus === 'Preparing' && isTimerRunning && lastTickSecond === -1) {
-            if (settings.soundMode === 'tts') {
+            if (settings.ttsEnabled) {
                 audioEngine.speak('Ready');
                 setLastTickSecond(-2); // Mark as initially spoken
             }
         }
-    }, [timerStatus, isTimerRunning, settings.soundMode, lastTickSecond, setLastTickSecond]);
+    }, [timerStatus, isTimerRunning, settings.ttsEnabled, lastTickSecond, setLastTickSecond]);
 
     // PiP Rendering
     useEffect(() => {
