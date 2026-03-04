@@ -78,8 +78,7 @@ export default function App() {
                 // Only send start if not already running or interval changed
                 workerRef.current.postMessage({
                     action: 'start',
-                    interval: tickRate,
-                    currentInterval: tickRate // Helper for worker side check
+                    interval: tickRate
                 });
             } else if (timerStatus !== 'Finished') {
                 // Phase end
@@ -341,7 +340,7 @@ export default function App() {
 
                 <footer className="mt-20 py-8 border-t border-border/50 w-full text-center space-y-2 opacity-30 group hover:opacity-100 transition-opacity">
                     <div className="text-[10px] font-black uppercase tracking-[0.5em] text-muted-foreground">
-                        MYOREP v3.0.0
+                        MYOREP v{__APP_VERSION__}
                     </div>
                     <div className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/60">
                         Engineered by General Malit

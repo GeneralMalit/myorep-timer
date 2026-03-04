@@ -58,6 +58,7 @@ High-intensity training protocols like Myo-reps require sub-second precision. Co
 2. **TTS Timing**: The voice counts down 3, 2, 1. We skip "0" to avoid the delay of starting the next phase's "Rest" or "Go" announcement.
 3. **Ref Stability**: The `workerRef` and `pipCanvasRef` in `App.tsx` are critical for maintaining state across renders.
 4. **React 19**: The project uses the React Compiler. Avoid manual `useMemo` or `useCallback` unless specifically instructed, as the compiler handles this automatically.
+5. **App Version Updates**: Update `package.json` only; UI version strings are injected from `__APP_VERSION__` via `vite.config.js`.
 
 ---
 

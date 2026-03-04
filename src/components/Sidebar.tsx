@@ -95,7 +95,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                 </Button>
                 {!isCollapsed && (
                     <div className="mt-4 text-[10px] text-center font-bold text-muted-foreground/40 uppercase tracking-[0.2em]">
-                        v3.0.0
+                        v{__APP_VERSION__}
                     </div>
                 )}
             </div>

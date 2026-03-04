@@ -2,6 +2,7 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import obfuscator from 'vite-plugin-javascript-obfuscator';
+import pkg from './package.json';
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
@@ -57,6 +58,10 @@ export default defineConfig(({ mode }) => {
 
     build: {
       sourcemap: false,
+    },
+
+    define: {
+      __APP_VERSION__: JSON.stringify(pkg.version),
     },
   };
 });

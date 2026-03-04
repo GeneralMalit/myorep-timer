@@ -1,4 +1,5 @@
 let timerId: ReturnType<typeof setInterval> | null = null;
+let currentInterval: number | null = null;
 let startTime = 0;
 
 interface WorkerMessage {
@@ -10,11 +11,9 @@ self.onmessage = (e: MessageEvent<WorkerMessage>) => {
     if (e.data.action === 'start') {
         const interval = e.data.interval || 1000;
 
-        // If already running with same interval, do nothing
-        if (timerId && interval === (e.data as any).currentInterval) return;
-
         if (timerId) clearInterval(timerId);
 
+        currentInterval = interval;
         startTime = performance.now();
         timerId = setInterval(() => {
             const elapsed = performance.now() - startTime;
@@ -24,6 +23,7 @@ self.onmessage = (e: MessageEvent<WorkerMessage>) => {
         if (timerId) {
             clearInterval(timerId);
             timerId = null;
+            currentInterval = null;
         }
     }
 };

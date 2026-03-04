@@ -23,26 +23,27 @@ describe('timerWorker', () => {
         // The worker code uses 'self' which we need to mock
         const workerModule = `
             let timerId = null;
+            let currentInterval = null;
             let startTime = 0;
 
             self.onmessage = (e) => {
                 if (e.data.action === 'start') {
                     const interval = e.data.interval || 1000;
                     
-                    // If already running with same interval, do nothing
-                    if (timerId && interval === e.data.currentInterval) return;
-
                     if (timerId) clearInterval(timerId);
 
+                    currentInterval = interval;
                     startTime = performance.now();
                     timerId = setInterval(() => {
-                        const elapsed = performance.now() - startTime;
+                        const now = performance.now();
+                        const elapsed = now - startTime;
                         self.postMessage({ action: 'tick', elapsed });
                     }, interval);
                 } else if (e.data.action === 'stop') {
                     if (timerId) {
                         clearInterval(timerId);
                         timerId = null;
+                        currentInterval = null;
                     }
                 }
             };
@@ -171,10 +172,9 @@ describe('timerWorker', () => {
             vi.useFakeTimers();
 
             const mockPerformanceNow = vi.fn()
-                .mockReturnValueOnce(0)   // First start
-                .mockReturnValueOnce(100) // First tick
-                .mockReturnValueOnce(200) // Second start
-                .mockReturnValueOnce(250); // Second tick
+                .mockReturnValueOnce(0)   // First start: startTime = 0
+                .mockReturnValueOnce(50)  // Second start: startTime = 50
+                .mockReturnValueOnce(250); // Tick after 200ms interval: elapsed = 250 - 50 = 200
 
             global.performance = {
                 ...global.performance,
@@ -195,12 +195,15 @@ describe('timerWorker', () => {
 
             await vi.advanceTimersByTimeAsync(0);
 
-            // Reset and advance
+            // Reset and advance (new interval is 200ms)
             mockPostMessage.mockClear();
-            await vi.advanceTimersByTimeAsync(100);
+            await vi.advanceTimersByTimeAsync(200);
 
             // Should have been called with new timing
-            expect(mockPostMessage).toHaveBeenCalled();
+            expect(mockPostMessage).toHaveBeenCalledWith({
+                action: 'tick',
+                elapsed: 200
+            });
         });
     });
 
