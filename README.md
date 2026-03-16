@@ -1,4 +1,4 @@
-# Myo-Rep v3.1.0
+# Myo-Rep v3.1.1
 
 [![Tech Stack](https://img.shields.io/badge/Stack-React_19_+_TypeScript_+_Zustand-61dafb.svg)](https://react.dev/)
 [![Build Tool](https://img.shields.io/badge/Build-Rolldown_Vite-ffcf00.svg)](https://rolldown.rs/)
@@ -115,7 +115,7 @@ npm run build
 
 ## 6. Versioning
 
-**Current Version: 3.1.0**
+**Current Version: 3.1.1**
 - Refactor: `rolldown-vite` integration for improved HMR performance.
 - Feature: "Workout Complete" TTS announcement.
 - Fix: Enhanced resting phase countdown accuracy and latency reduction.

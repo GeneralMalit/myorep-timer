@@ -1,3 +1,10 @@
+## [3.1.1](https://github.com/GeneralMalit/myorep-timer/compare/v3.1.0...v3.1.1) (2026-03-16)
+
+
+### Bug Fixes
+
+* **readme:** clarify node runtime for release workflow ([411b035](https://github.com/GeneralMalit/myorep-timer/commit/411b0356352a0061ba5c782b0d147f9f57ad9e7c))
+
 # 1.0.0 (2026-03-16)
 
 
