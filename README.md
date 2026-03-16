@@ -1,4 +1,4 @@
-# Myo-Rep v3.0.0
+# Myo-Rep v3.1.0
 
 [![Tech Stack](https://img.shields.io/badge/Stack-React_19_+_TypeScript_+_Zustand-61dafb.svg)](https://react.dev/)
 [![Build Tool](https://img.shields.io/badge/Build-Rolldown_Vite-ffcf00.svg)](https://rolldown.rs/)
@@ -115,10 +115,19 @@ npm run build
 
 ## 6. Versioning
 
-**Current Version: 3.0.0**
+**Current Version: 3.1.0**
 - Refactor: `rolldown-vite` integration for improved HMR performance.
 - Feature: "Workout Complete" TTS announcement.
 - Fix: Enhanced resting phase countdown accuracy and latency reduction.
+
+### 6.1 Automated Semantic Release
+- Releases are automated on pushes to `main` via GitHub Actions + `semantic-release`.
+- Version source of truth is `package.json`.
+- `README.md` version lines are synchronized during release (`npm run sync:readme-version`).
+- To trigger version bumps, use Conventional Commits:
+  - `fix:` -> patch release
+  - `feat:` -> minor release
+  - `feat!:` or `BREAKING CHANGE:` -> major release
 
 ---
 

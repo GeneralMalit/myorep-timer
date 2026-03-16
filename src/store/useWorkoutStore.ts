@@ -4,6 +4,21 @@ import { persist } from 'zustand/middleware';
 export type AppPhase = 'setup' | 'timer';
 export type TimerStatus = 'Ready' | 'Preparing' | 'Main Set' | 'Resting' | 'Myo Reps' | 'Finished';
 
+const parsePositiveInt = (value: string | number): number | null => {
+    const parsed = typeof value === 'number' ? value : parseInt(value, 10);
+    return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : null;
+};
+
+const getConcentricLimitFromPaces = (seconds: string, myoWorkSecs: string): number | null => {
+    const candidates = [parsePositiveInt(seconds), parsePositiveInt(myoWorkSecs)].filter((value): value is number => value !== null);
+    return candidates.length > 0 ? Math.min(...candidates) : null;
+};
+
+const clampConcentricSecond = (requested: number, limit: number | null): number => {
+    const normalized = Number.isFinite(requested) ? Math.max(1, Math.floor(requested)) : 1;
+    return limit === null ? normalized : Math.min(normalized, limit);
+};
+
 export interface WorkoutSettings {
     activeColor: string;
     restColor: string;
@@ -115,8 +130,32 @@ export const useWorkoutStore = create<WorkoutState>()(
             setShowSettings: (show: boolean) => set({ showSettings: show }),
             setIsSidebarCollapsed: (collapsed: boolean) => set({ isSidebarCollapsed: collapsed }),
             setTheme: (theme: string) => set({ theme }),
-            setSettings: (newSettings) => set((state) => ({ settings: { ...state.settings, ...newSettings } })),
-            setWorkoutConfig: (config) => set((state) => ({ ...state, ...config })),
+            setSettings: (newSettings) => set((state) => {
+                const limit = getConcentricLimitFromPaces(state.seconds, state.myoWorkSecs);
+                const mergedSettings = { ...state.settings, ...newSettings };
+
+                if (newSettings.concentricSecond !== undefined) {
+                    mergedSettings.concentricSecond = clampConcentricSecond(newSettings.concentricSecond, limit);
+                } else {
+                    mergedSettings.concentricSecond = clampConcentricSecond(mergedSettings.concentricSecond, limit);
+                }
+
+                return { settings: mergedSettings };
+            }),
+            setWorkoutConfig: (config) => set((state) => {
+                const nextSeconds = config.seconds ?? state.seconds;
+                const nextMyoWorkSecs = config.myoWorkSecs ?? state.myoWorkSecs;
+                const limit = getConcentricLimitFromPaces(nextSeconds, nextMyoWorkSecs);
+
+                return {
+                    ...state,
+                    ...config,
+                    settings: {
+                        ...state.settings,
+                        concentricSecond: clampConcentricSecond(state.settings.concentricSecond, limit),
+                    },
+                };
+            }),
 
             startWorkout: () => {
                 const { sets, reps, seconds, rest, myoReps, myoWorkSecs, settings } = get();
@@ -126,8 +165,12 @@ export const useWorkoutStore = create<WorkoutState>()(
                 const rst = parseInt(rest, 10);
                 const mr = parseInt(myoReps, 10);
                 const msec = parseInt(myoWorkSecs, 10);
+                const isSingleSet = s === 1;
 
-                if (s > 0 && r > 0 && sec > 0 && rst > 0 && mr > 0 && msec > 0) {
+                const hasBaseConfig = s > 0 && r > 0 && sec > 0;
+                const hasClusterConfig = rst > 0 && mr > 0 && msec > 0;
+
+                if (hasBaseConfig && (isSingleSet || hasClusterConfig)) {
                     set({
                         currentSet: 1,
                         currentRep: 1,

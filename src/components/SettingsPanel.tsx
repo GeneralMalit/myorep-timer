@@ -23,13 +23,16 @@ interface SettingsPanelProps {
 }
 
 const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
-    const { settings, setSettings } = useWorkoutStore();
+    const { settings, setSettings, seconds, myoWorkSecs } = useWorkoutStore();
 
     if (!isOpen) return null;
 
     const handleChange = <K extends keyof WorkoutSettings>(key: K, value: WorkoutSettings[K]) => {
         setSettings({ [key]: value });
     };
+
+    const paceValues = [parseInt(seconds, 10), parseInt(myoWorkSecs, 10)].filter((value) => Number.isFinite(value) && value > 0);
+    const concentricMax = paceValues.length > 0 ? Math.min(...paceValues) : undefined;
 
     const testTTS = () => {
         audioEngine.init();
@@ -95,10 +98,18 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                                 <Input
                                     type="number"
                                     value={settings.concentricSecond}
-                                    onChange={(e) => handleChange('concentricSecond', parseInt(e.target.value) || 1)}
+                                    onChange={(e) => {
+                                        const parsed = parseInt(e.target.value, 10);
+                                        const requested = Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+                                        handleChange('concentricSecond', concentricMax ? Math.min(requested, concentricMax) : requested);
+                                    }}
                                     className="bg-accent/40 font-bold border-border/50"
                                     min={1}
+                                    max={concentricMax}
                                 />
+                                <p className="text-[10px] text-muted-foreground px-1 uppercase tracking-tight">
+                                    Max = fastest rep pace ({concentricMax ?? 1}s)
+                                </p>
                             </div>
                             <div className="space-y-2">
                                 <Label className="text-[10px] font-black uppercase tracking-wider text-muted-foreground px-1">Prep Buffer (s)</Label>

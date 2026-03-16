@@ -10,7 +10,10 @@
     "preview": "vite preview",
     "test": "vitest",
     "test:ui": "vitest --ui",
-    "test:coverage": "vitest --coverage"
+    "test:coverage": "vitest --coverage",
+    "release": "semantic-release",
+    "release:dry": "semantic-release --dry-run",
+    "sync:readme-version": "node scripts/sync-readme-version.mjs"
   },
   "dependencies": {
     "@radix-ui/react-label": "^2.1.8",
@@ -21,6 +24,12 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",
+    "@semantic-release/changelog": "^6.0.3",
+    "@semantic-release/commit-analyzer": "^13.0.1",
+    "@semantic-release/exec": "^7.1.0",
+    "@semantic-release/git": "^10.0.1",
+    "@semantic-release/github": "^12.0.6",
+    "@semantic-release/release-notes-generator": "^14.1.0",
     "@tailwindcss/postcss": "^4.2.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
@@ -43,6 +52,7 @@
     "lodash": "^4.17.23",
     "lucide-react": "^0.576.0",
     "postcss": "^8.5.8",
+    "semantic-release": "^25.0.3",
     "tailwind-merge": "^3.5.0",
     "tailwindcss": "^4.2.1",
     "ts-node": "^10.9.2",

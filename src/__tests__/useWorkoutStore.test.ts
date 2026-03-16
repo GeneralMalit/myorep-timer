@@ -96,6 +96,20 @@ describe('useWorkoutStore', () => {
             expect(state.sets).toBe('3');
             expect(state.reps).toBe(''); // Unchanged
         });
+
+        it('should clamp concentric window when pace values are reduced', () => {
+            const store = useWorkoutStore.getState();
+
+            act(() => {
+                store.setSettings({ concentricSecond: 10 });
+                store.setWorkoutConfig({
+                    seconds: '4',
+                    myoWorkSecs: '3',
+                });
+            });
+
+            expect(useWorkoutStore.getState().settings.concentricSecond).toBe(3);
+        });
     });
 
     describe('startWorkout', () => {
@@ -165,6 +179,30 @@ describe('useWorkoutStore', () => {
             const state = useWorkoutStore.getState();
             expect(state.appPhase).toBe('setup');
             expect(state.isTimerRunning).toBe(false);
+        });
+
+        it('should start workout with one set even if rest and myo values are empty', () => {
+            const store = useWorkoutStore.getState();
+
+            act(() => {
+                store.setWorkoutConfig({
+                    sets: '1',
+                    reps: '30',
+                    seconds: '2',
+                    rest: '',
+                    myoReps: '',
+                    myoWorkSecs: '',
+                });
+                store.startWorkout();
+            });
+
+            const state = useWorkoutStore.getState();
+            expect(state.appPhase).toBe('timer');
+            expect(state.timerStatus).toBe('Preparing');
+            expect(state.isTimerRunning).toBe(true);
+            expect(state.currentSet).toBe(1);
+            expect(state.isMainRep).toBe(true);
+            expect(state.isWorking).toBe(true);
         });
     });
 
@@ -550,6 +588,20 @@ describe('useWorkoutStore', () => {
             const state = useWorkoutStore.getState();
             expect(state.settings.activeColor).toBe('#ff0000');
             expect(state.settings.restColor).toBe('#03dac6'); // Unchanged
+        });
+
+        it('should clamp concentric window to the fastest configured pace', () => {
+            const store = useWorkoutStore.getState();
+
+            act(() => {
+                store.setWorkoutConfig({
+                    seconds: '6',
+                    myoWorkSecs: '3',
+                });
+                store.setSettings({ concentricSecond: 8 });
+            });
+
+            expect(useWorkoutStore.getState().settings.concentricSecond).toBe(3);
         });
     });
 

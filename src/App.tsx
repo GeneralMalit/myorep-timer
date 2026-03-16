@@ -42,6 +42,7 @@ export default function App() {
         isSidebarCollapsed, setIsSidebarCollapsed,
         theme, setTheme
     } = useWorkoutStore();
+    const isSingleCycle = parseInt(sets, 10) === 1;
 
     const workerRef = useRef<Worker | null>(null);
     const baseTimeLeft = useRef(0);
@@ -223,11 +224,14 @@ export default function App() {
                                     { label: "Total Cycles", value: sets, key: "sets", icon: RotateCcw },
                                     { label: "Activation Reps", value: reps, key: "reps", icon: Activity },
                                     { label: "Activation Pace (s)", value: seconds, key: "seconds", icon: Zap },
-                                    { label: "Rest Interval", value: rest, key: "rest", icon: Square },
-                                    { label: "Myo Reps", value: myoReps, key: "myoReps", icon: Activity },
-                                    { label: "Myo Pace (s)", value: myoWorkSecs, key: "myoWorkSecs", icon: Zap },
+                                    { label: "Rest Interval", value: rest, key: "rest", icon: Square, disableWhenSingleCycle: true },
+                                    { label: "Myo Reps", value: myoReps, key: "myoReps", icon: Activity, disableWhenSingleCycle: true },
+                                    { label: "Myo Pace (s)", value: myoWorkSecs, key: "myoWorkSecs", icon: Zap, disableWhenSingleCycle: true },
                                 ].map((input) => (
-                                    <div key={input.key} className="space-y-3 group">
+                                    <div
+                                        key={input.key}
+                                        className={cn("space-y-3 group", isSingleCycle && input.disableWhenSingleCycle && "opacity-45")}
+                                    >
                                         <div className="flex items-center gap-2 px-1">
                                             <input.icon size={14} className="text-primary" />
                                             <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground group-focus-within:text-primary transition-colors">
@@ -239,7 +243,11 @@ export default function App() {
                                             value={input.value}
                                             onChange={(e) => setWorkoutConfig({ [input.key]: e.target.value })}
                                             placeholder="0"
-                                            className="h-14 bg-accent/30 border-border/50 text-xl font-black italic rounded-2xl group-focus-within:border-primary/50 transition-all shadow-sm"
+                                            disabled={isSingleCycle && input.disableWhenSingleCycle}
+                                            className={cn(
+                                                "h-14 bg-accent/30 border-border/50 text-xl font-black italic rounded-2xl group-focus-within:border-primary/50 transition-all shadow-sm",
+                                                isSingleCycle && input.disableWhenSingleCycle && "cursor-not-allowed bg-muted/35 text-muted-foreground"
+                                            )}
                                         />
                                     </div>
                                 ))}
