@@ -122,6 +122,7 @@ npm run build
 
 ### 6.1 Automated Semantic Release
 - Releases are automated on pushes to `main` via GitHub Actions + `semantic-release`.
+- Release workflow uses Node `22.14.0` to satisfy semantic-release runtime requirements.
 - Version source of truth is `package.json`.
 - `README.md` version lines are synchronized during release (`npm run sync:readme-version`).
 - To trigger version bumps, use Conventional Commits:
