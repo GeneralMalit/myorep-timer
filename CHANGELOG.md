@@ -1,3 +1,10 @@
+# [3.2.0](https://github.com/GeneralMalit/myorep-timer/compare/v3.1.1...v3.2.0) (2026-03-27)
+
+
+### Features
+
+* add saved workouts, import/export backups, and coverage-gated CI ([2b431eb](https://github.com/GeneralMalit/myorep-timer/commit/2b431eb1ff29d9961e023ea7cd530c674ce41526))
+
 ## [3.1.1](https://github.com/GeneralMalit/myorep-timer/compare/v3.1.0...v3.1.1) (2026-03-16)
 
 
