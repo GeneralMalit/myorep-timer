@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+﻿import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // We need to test the timerWorker logic
 // Since Workers run in isolation, we'll test the logic by mocking the worker environment
@@ -278,3 +278,48 @@ describe('timerWorker', () => {
         });
     });
 });
+
+describe('timerWorker source module', () => {
+    it('registers worker onmessage handler from source file', async () => {
+        const postMessage = vi.fn();
+        const fakeSelf = {
+            onmessage: null as ((e: MessageEvent) => void) | null,
+            postMessage,
+        };
+
+        vi.useFakeTimers();
+        (global as unknown as Record<string, unknown>).self = fakeSelf;
+
+        const perfSpy = vi.spyOn(performance, 'now')
+            .mockReturnValueOnce(1000)
+            .mockReturnValueOnce(1250);
+
+        await import('../utils/timerWorker');
+
+        expect(typeof fakeSelf.onmessage).toBe('function');
+        fakeSelf.onmessage?.(new MessageEvent('message', { data: { action: 'stop' } }));
+
+        // Start without interval to cover default interval branch.
+        perfSpy.mockReturnValueOnce(1500).mockReturnValueOnce(2500);
+        fakeSelf.onmessage?.(new MessageEvent('message', { data: { action: 'start' } }));
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(postMessage).toHaveBeenCalled();
+        const firstTick = postMessage.mock.calls[0][0] as { action: string; elapsed: number };
+        expect(firstTick.action).toBe('tick');
+        expect(firstTick.elapsed).toBeGreaterThanOrEqual(0);
+
+        // Start with a new interval to cover timer replacement branch.
+        fakeSelf.onmessage?.(new MessageEvent('message', { data: { action: 'start', interval: 250 } }));
+        await vi.advanceTimersByTimeAsync(250);
+        expect(postMessage).toHaveBeenCalledWith({ action: 'tick', elapsed: 250 });
+
+        fakeSelf.onmessage?.(new MessageEvent('message', { data: { action: 'stop' } }));
+        postMessage.mockClear();
+        await vi.advanceTimersByTimeAsync(500);
+        expect(postMessage).not.toHaveBeenCalled();
+
+        perfSpy.mockRestore();
+        vi.useRealTimers();
+    });
+});
+

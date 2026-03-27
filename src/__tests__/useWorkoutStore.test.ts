@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+﻿import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useWorkoutStore } from '../store/useWorkoutStore';
 import { act } from '@testing-library/react';
 
@@ -19,6 +19,11 @@ describe('useWorkoutStore', () => {
             });
             store.updateTimerBaselines(0, 0);
             store.setIsTimerRunning(false);
+            useWorkoutStore.setState({
+                savedWorkouts: [],
+                selectedSavedWorkoutId: null,
+                lastImportSummary: null,
+            });
         });
     });
 
@@ -605,6 +610,157 @@ describe('useWorkoutStore', () => {
         });
     });
 
+    describe('saved workouts', () => {
+        const validConfig = {
+            sets: '3',
+            reps: '12',
+            seconds: '3',
+            rest: '20',
+            myoReps: '4',
+            myoWorkSecs: '2',
+        };
+
+        it('should save and load a workout template', () => {
+            const store = useWorkoutStore.getState();
+
+            act(() => {
+                store.setWorkoutConfig(validConfig);
+            });
+
+            const saveResult = store.saveCurrentWorkout('Leg Day');
+            expect(saveResult.ok).toBe(true);
+
+            const saved = useWorkoutStore.getState().savedWorkouts;
+            expect(saved).toHaveLength(1);
+            expect(saved[0].name).toBe('Leg Day');
+
+            act(() => {
+                store.setWorkoutConfig({ sets: '6' });
+            });
+            expect(useWorkoutStore.getState().sets).toBe('6');
+
+            const loadResult = store.loadWorkout(saved[0].id);
+            expect(loadResult.ok).toBe(true);
+            expect(useWorkoutStore.getState().sets).toBe('3');
+            expect(useWorkoutStore.getState().selectedSavedWorkoutId).toBe(saved[0].id);
+        });
+
+        it('should reject duplicate workout names and invalid workout configs', () => {
+            const store = useWorkoutStore.getState();
+            act(() => {
+                store.setWorkoutConfig(validConfig);
+            });
+
+            expect(store.saveCurrentWorkout('Push')).toMatchObject({ ok: true });
+            expect(store.saveCurrentWorkout('push')).toMatchObject({ ok: false });
+
+            act(() => {
+                store.setWorkoutConfig({ reps: '' });
+            });
+            expect(store.saveCurrentWorkout('Invalid')).toMatchObject({ ok: false });
+        });
+
+        it('should rename and delete saved workouts', () => {
+            const store = useWorkoutStore.getState();
+            act(() => {
+                store.setWorkoutConfig(validConfig);
+            });
+
+            store.saveCurrentWorkout('A');
+            store.saveCurrentWorkout('B');
+            const [first, second] = useWorkoutStore.getState().savedWorkouts;
+
+            expect(store.renameWorkout(first.id, 'Renamed')).toMatchObject({ ok: true });
+            expect(store.renameWorkout(second.id, 'Renamed')).toMatchObject({ ok: false });
+
+            act(() => {
+                store.deleteWorkout(first.id);
+            });
+
+            const remaining = useWorkoutStore.getState().savedWorkouts;
+            expect(remaining).toHaveLength(1);
+            expect(remaining[0].name).toBe('B');
+        });
+
+        it('should record usage when starting from a loaded template', () => {
+            const store = useWorkoutStore.getState();
+            act(() => {
+                store.setWorkoutConfig(validConfig);
+            });
+            store.saveCurrentWorkout('Template');
+            const saved = useWorkoutStore.getState().savedWorkouts[0];
+            store.loadWorkout(saved.id);
+
+            act(() => {
+                store.startWorkout();
+            });
+
+            const updated = useWorkoutStore.getState().savedWorkouts[0];
+            expect(updated.timesUsed).toBe(1);
+            expect(updated.lastUsedAt).not.toBeNull();
+            expect(useWorkoutStore.getState().appPhase).toBe('timer');
+        });
+
+        it('should export and import with conflict renaming and invalid skips', () => {
+            const store = useWorkoutStore.getState();
+            act(() => {
+                store.setWorkoutConfig(validConfig);
+            });
+            store.saveCurrentWorkout('Arms');
+
+            const payload = store.exportSavedWorkouts();
+            expect(payload.schemaVersion).toBe(1);
+            expect(payload.workouts).toHaveLength(1);
+
+            const importPayload = {
+                schemaVersion: 1,
+                exportedAt: new Date().toISOString(),
+                workouts: [
+                    payload.workouts[0],
+                    { ...payload.workouts[0], id: 'new-id' },
+                    { name: 'Bad Workout', sets: '0' },
+                ],
+            };
+
+            const summary = store.importSavedWorkouts(importPayload);
+            expect(summary.imported).toBe(2);
+            expect(summary.renamed).toBe(2);
+            expect(summary.skipped).toBe(1);
+            expect(useWorkoutStore.getState().savedWorkouts).toHaveLength(3);
+            expect(useWorkoutStore.getState().savedWorkouts.some((workout) => workout.name.includes('(Imported'))).toBe(true);
+        });
+
+        it('should return import error summary for malformed payloads', () => {
+            const store = useWorkoutStore.getState();
+            const summary = store.importSavedWorkouts({ schemaVersion: 99, workouts: [] });
+            expect(summary.imported).toBe(0);
+            expect(summary.errors[0]).toContain('Unsupported schema version');
+
+            act(() => {
+                store.clearImportSummary();
+            });
+            expect(useWorkoutStore.getState().lastImportSummary).toBeNull();
+        });
+
+        it('should sanitize set input to minimum of 1 while allowing empty', () => {
+            const store = useWorkoutStore.getState();
+            act(() => {
+                store.setWorkoutConfig({ sets: '0' });
+            });
+            expect(useWorkoutStore.getState().sets).toBe('1');
+
+            act(() => {
+                store.setWorkoutConfig({ sets: '-10' });
+            });
+            expect(useWorkoutStore.getState().sets).toBe('1');
+
+            act(() => {
+                store.setWorkoutConfig({ sets: '' });
+            });
+            expect(useWorkoutStore.getState().sets).toBe('');
+        });
+    });
+
     describe('Individual Setters', () => {
         it('should update timeLeft independently', () => {
             const store = useWorkoutStore.getState();
@@ -627,4 +783,116 @@ describe('useWorkoutStore', () => {
             expect(useWorkoutStore.getState().isTimerRunning).toBe(false);
         });
     });
+
+    describe('advanceCycle transitions', () => {
+        it('moves Preparing to Main Set', () => {
+            useWorkoutStore.setState({
+                sets: '3',
+                reps: '10',
+                seconds: '2',
+                rest: '20',
+                myoReps: '4',
+                myoWorkSecs: '2',
+                timerStatus: 'Preparing',
+                isWorking: true,
+                isMainRep: true,
+                currentRep: 1,
+            });
+
+            act(() => {
+                useWorkoutStore.getState().advanceCycle();
+            });
+
+            const state = useWorkoutStore.getState();
+            expect(state.timerStatus).toBe('Main Set');
+            expect(state.timeLeft).toBe(2);
+        });
+
+        it('cycles through main reps then resting', () => {
+            useWorkoutStore.setState({
+                sets: '3',
+                reps: '2',
+                seconds: '3',
+                rest: '10',
+                myoReps: '4',
+                myoWorkSecs: '2',
+                timerStatus: 'Main Set',
+                isWorking: true,
+                isMainRep: true,
+                currentSet: 1,
+                currentRep: 1,
+            });
+
+            act(() => {
+                useWorkoutStore.getState().advanceCycle();
+            });
+            expect(useWorkoutStore.getState().currentRep).toBe(2);
+
+            act(() => {
+                useWorkoutStore.getState().advanceCycle();
+            });
+            expect(useWorkoutStore.getState().timerStatus).toBe('Resting');
+            expect(useWorkoutStore.getState().isWorking).toBe(false);
+        });
+
+        it('finishes after final main rep for single-set workout', () => {
+            useWorkoutStore.setState({
+                sets: '1',
+                reps: '1',
+                seconds: '2',
+                rest: '10',
+                myoReps: '4',
+                myoWorkSecs: '2',
+                timerStatus: 'Main Set',
+                isWorking: true,
+                isMainRep: true,
+                currentSet: 1,
+                currentRep: 1,
+                setTotalDuration: 2,
+            });
+
+            act(() => {
+                useWorkoutStore.getState().advanceCycle();
+            });
+
+            const state = useWorkoutStore.getState();
+            expect(state.timerStatus).toBe('Finished');
+            expect(state.isTimerRunning).toBe(false);
+        });
+
+        it('moves from resting to myo reps and then to finished', () => {
+            useWorkoutStore.setState({
+                sets: '2',
+                reps: '2',
+                seconds: '3',
+                rest: '5',
+                myoReps: '2',
+                myoWorkSecs: '2',
+                timerStatus: 'Resting',
+                isWorking: false,
+                isMainRep: false,
+                currentSet: 1,
+                currentRep: 1,
+            });
+
+            act(() => {
+                useWorkoutStore.getState().advanceCycle();
+            });
+            expect(useWorkoutStore.getState().timerStatus).toBe('Myo Reps');
+
+            useWorkoutStore.setState({
+                isWorking: true,
+                isMainRep: false,
+                currentSet: 2,
+                currentRep: 2,
+                setTotalDuration: 4,
+            });
+            act(() => {
+                useWorkoutStore.getState().advanceCycle();
+            });
+
+            expect(useWorkoutStore.getState().timerStatus).toBe('Finished');
+        });
+    });
 });
+

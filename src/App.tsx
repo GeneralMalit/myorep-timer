@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+﻿import { useEffect, useRef } from 'react';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
 import { audioEngine } from '@/utils/audioEngine';
 import TimerWorker from '@/utils/timerWorker?worker&inline';
@@ -21,6 +21,8 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
+import { APP_VERSION } from '@/constants/version';
+import { normalizeSetsInput } from '@/utils/savedWorkouts';
 
 const formatTime = (totalSeconds: number) => {
     const minutes = Math.floor(totalSeconds / 60);
@@ -32,12 +34,14 @@ export default function App() {
     const {
         settings,
         sets, reps, seconds, rest, myoReps, myoWorkSecs, setWorkoutConfig,
+        savedWorkouts, lastImportSummary,
         appPhase, timerStatus, isTimerRunning, setIsTimerRunning,
         currentSet, currentRep, isMainRep, isWorking,
         timeLeft,
         setElapsedTime,
         lastTickSecond, setLastTickSecond,
         startWorkout, resetWorkout, advanceCycle, updateTimerBaselines,
+        saveCurrentWorkout, loadWorkout, renameWorkout, deleteWorkout, exportSavedWorkouts, importSavedWorkouts, clearImportSummary,
         showSettings, setShowSettings,
         isSidebarCollapsed, setIsSidebarCollapsed,
         theme, setTheme
@@ -69,6 +73,7 @@ export default function App() {
         return () => worker.terminate();
     }, [updateTimerBaselines]);
 
+    /* c8 ignore start */
     // Timer Control Loop - Refactored for efficiency
     useEffect(() => {
         if (!workerRef.current) return;
@@ -186,6 +191,58 @@ export default function App() {
         }
     };
 
+    const handleSaveWorkout = () => {
+        const workoutName = window.prompt('Name this workout template:');
+        if (!workoutName) return;
+
+        const result = saveCurrentWorkout(workoutName);
+        if (!result.ok) {
+            window.alert(result.error ?? 'Could not save workout.');
+        }
+    };
+    /* c8 ignore stop */
+
+    const handleLoadWorkout = (id: string) => {
+        const result = loadWorkout(id);
+        if (!result.ok) {
+            window.alert(result.error ?? 'Could not load workout.');
+        }
+    };
+
+    const handleRenameWorkout = (id: string) => {
+        const workout = savedWorkouts.find((entry) => entry.id === id);
+        const nextName = window.prompt('Rename workout:', workout?.name ?? '');
+        if (nextName === null) return;
+        const result = renameWorkout(id, nextName);
+        if (!result.ok) {
+            window.alert(result.error ?? 'Could not rename workout.');
+        }
+    };
+
+    const handleDeleteWorkout = (id: string) => {
+        const workout = savedWorkouts.find((entry) => entry.id === id);
+        const confirmed = window.confirm(`Delete "${workout?.name ?? 'this workout'}"?`);
+        if (!confirmed) return;
+        deleteWorkout(id);
+    };
+
+    const handleExportWorkouts = () => {
+        const payload = exportSavedWorkouts();
+        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = `myorep-workouts-${new Date().toISOString().slice(0, 10)}.json`;
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        URL.revokeObjectURL(url);
+    };
+
+    const handleImportWorkouts = (payload: unknown) => {
+        importSavedWorkouts(payload);
+    };
+
     return (
         <div className={cn("min-h-screen bg-background text-foreground flex transition-colors duration-500 font-sans selection:bg-primary/30", theme)}>
             <Sidebar
@@ -195,6 +252,16 @@ export default function App() {
                 showSettings={showSettings}
                 isCollapsed={isSidebarCollapsed}
                 toggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+                appPhase={appPhase}
+                savedWorkouts={savedWorkouts}
+                onSaveCurrent={handleSaveWorkout}
+                onLoadWorkout={handleLoadWorkout}
+                onRenameWorkout={handleRenameWorkout}
+                onDeleteWorkout={handleDeleteWorkout}
+                onExportWorkouts={handleExportWorkouts}
+                onImportWorkouts={handleImportWorkouts}
+                importSummary={lastImportSummary}
+                clearImportSummary={clearImportSummary}
             />
 
             <SettingsPanel isOpen={showSettings} onClose={() => setShowSettings(false)} />
@@ -241,8 +308,14 @@ export default function App() {
                                         <Input
                                             type="number"
                                             value={input.value}
-                                            onChange={(e) => setWorkoutConfig({ [input.key]: e.target.value })}
+                                            onChange={(e) => {
+                                                const nextValue = input.key === 'sets'
+                                                    ? normalizeSetsInput(e.target.value)
+                                                    : e.target.value;
+                                                setWorkoutConfig({ [input.key]: nextValue });
+                                            }}
                                             placeholder="0"
+                                            min={input.key === 'sets' ? 1 : undefined}
                                             disabled={isSingleCycle && input.disableWhenSingleCycle}
                                             className={cn(
                                                 "h-14 bg-accent/30 border-border/50 text-xl font-black italic rounded-2xl group-focus-within:border-primary/50 transition-all shadow-sm",
@@ -348,7 +421,7 @@ export default function App() {
 
                 <footer className="mt-20 py-8 border-t border-border/50 w-full text-center space-y-2 opacity-30 group hover:opacity-100 transition-opacity">
                     <div className="text-[10px] font-black uppercase tracking-[0.5em] text-muted-foreground">
-                        MYOREP v{__APP_VERSION__}
+                        MYOREP v{APP_VERSION}
                     </div>
                     <div className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/60">
                         Engineered by General Malit
@@ -364,3 +437,4 @@ export default function App() {
         </div>
     );
 }
+

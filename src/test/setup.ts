@@ -1,4 +1,4 @@
-import '@testing-library/jest-dom';
+﻿import '@testing-library/jest-dom';
 import { cleanup } from '@testing-library/react';
 
 // Cleanup after each test - using vitest's global afterEach
@@ -30,6 +30,11 @@ class MockWorker {
             // Simulate async behavior
             setTimeout(() => {
                 if (this.onmessage) {
+                    const incoming = data as { action?: string };
+                    if (incoming?.action === 'start') {
+                        this.onmessage(new MessageEvent('message', { data: { action: 'tick', elapsed: 100 } }));
+                        return;
+                    }
                     this.onmessage(new MessageEvent('message', { data }));
                 }
             }, 0);
@@ -131,3 +136,15 @@ global.requestAnimationFrame = (callback: FrameRequestCallback) => {
 global.cancelAnimationFrame = (id: number) => {
     clearTimeout(id);
 };
+
+(global as unknown as Record<string, unknown>).__APP_VERSION__ = '9.9.9-test';
+
+HTMLCanvasElement.prototype.getContext = (() => ({
+    fillStyle: '',
+    font: '',
+    textAlign: 'center',
+    textBaseline: 'middle',
+    fillRect: () => { },
+    fillText: () => { },
+})) as unknown as typeof HTMLCanvasElement.prototype.getContext;
+
