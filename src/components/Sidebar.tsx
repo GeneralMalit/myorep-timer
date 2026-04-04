@@ -150,47 +150,51 @@ const Sidebar: React.FC<SidebarProps> = ({
                         </section>
 
                         <section className="border border-border/50 rounded-xl p-3 space-y-3">
-                            <div className="flex items-center justify-between">
-                                <div className="text-xs font-bold uppercase tracking-widest text-muted-foreground/70">Saved Workouts</div>
-                                <div className="flex items-center gap-1">
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={onSaveCurrent}
-                                        disabled={!isSetupMode}
-                                        className="h-7 px-2 gap-1 text-[10px] font-bold"
-                                    >
-                                        <Save size={12} /> Save
-                                    </Button>
-                                    <Button
-                                        variant="secondary"
-                                        size="sm"
-                                        onClick={onSaveAsCurrent}
-                                        disabled={!isSetupMode}
-                                        className="h-7 px-2 gap-1 text-[10px] font-bold"
-                                    >
-                                        <Save size={12} /> Save As
-                                    </Button>
-                                </div>
-                            </div>
+                            <div className="text-xs font-bold uppercase tracking-widest text-muted-foreground/70">Saved Workouts</div>
 
-                            <div className="grid grid-cols-2 gap-2">
-                                <Button
-                                    variant="secondary"
-                                    size="sm"
-                                    onClick={onExportWorkouts}
-                                    className="h-7 px-2 gap-1 text-[10px] font-bold"
-                                >
-                                    <Download size={12} /> Export
-                                </Button>
+                            <div className="grid grid-cols-4 gap-2">
                                 <Button
                                     variant="secondary"
                                     size="sm"
                                     onClick={handleOpenImport}
                                     disabled={!isSetupMode}
-                                    className="h-7 px-2 gap-1 text-[10px] font-bold"
+                                    className="h-7 w-full px-0"
+                                    aria-label="Import"
+                                    title="Import"
                                 >
-                                    <Upload size={12} /> Import
+                                    <Upload size={12} />
+                                </Button>
+                                <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={onExportWorkouts}
+                                    className="h-7 w-full px-0"
+                                    aria-label="Export"
+                                    title="Export"
+                                >
+                                    <Download size={12} />
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={onSaveCurrent}
+                                    disabled={!isSetupMode}
+                                    className="h-7 w-full px-0"
+                                    aria-label="Save"
+                                    title="Save"
+                                >
+                                    <Save size={12} />
+                                </Button>
+                                <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={onSaveAsCurrent}
+                                    disabled={!isSetupMode}
+                                    className="h-7 w-full px-0"
+                                    aria-label="Save As"
+                                    title="Save As"
+                                >
+                                    <Save size={12} />
                                 </Button>
                             </div>
 
