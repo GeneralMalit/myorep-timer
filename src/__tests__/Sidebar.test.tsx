@@ -21,6 +21,7 @@ const baseWorkout: SavedWorkout = {
 describe('Sidebar', () => {
     it('renders saved workouts and triggers actions', () => {
         const onSaveCurrent = vi.fn();
+        const onSaveAsCurrent = vi.fn();
         const onLoadWorkout = vi.fn();
         const onRenameWorkout = vi.fn();
         const onDeleteWorkout = vi.fn();
@@ -37,6 +38,7 @@ describe('Sidebar', () => {
                 appPhase="setup"
                 savedWorkouts={[baseWorkout]}
                 onSaveCurrent={onSaveCurrent}
+                onSaveAsCurrent={onSaveAsCurrent}
                 onLoadWorkout={onLoadWorkout}
                 onRenameWorkout={onRenameWorkout}
                 onDeleteWorkout={onDeleteWorkout}
@@ -50,7 +52,8 @@ describe('Sidebar', () => {
         expect(screen.getByText('Saved Workouts')).toBeInTheDocument();
         expect(screen.getByText('Push Day')).toBeInTheDocument();
 
-        fireEvent.click(screen.getByRole('button', { name: /save/i }));
+        fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
+        fireEvent.click(screen.getByRole('button', { name: /^save as$/i }));
         fireEvent.click(screen.getByRole('button', { name: /export/i }));
 
         const loadButton = screen.getByTitle('Load');
@@ -62,6 +65,7 @@ describe('Sidebar', () => {
         fireEvent.click(deleteButton);
 
         expect(onSaveCurrent).toHaveBeenCalled();
+        expect(onSaveAsCurrent).toHaveBeenCalled();
         expect(onExportWorkouts).toHaveBeenCalled();
         expect(onLoadWorkout).toHaveBeenCalledWith('w-1');
         expect(onRenameWorkout).toHaveBeenCalledWith('w-1');
@@ -82,6 +86,7 @@ describe('Sidebar', () => {
                 appPhase="timer"
                 savedWorkouts={[baseWorkout]}
                 onSaveCurrent={vi.fn()}
+                onSaveAsCurrent={vi.fn()}
                 onLoadWorkout={vi.fn()}
                 onRenameWorkout={vi.fn()}
                 onDeleteWorkout={vi.fn()}
@@ -92,7 +97,7 @@ describe('Sidebar', () => {
             />,
         );
 
-        expect(screen.getByRole('button', { name: /save/i })).toBeDisabled();
+        expect(screen.getByRole('button', { name: /^save$/i })).toBeDisabled();
         expect(screen.getByRole('button', { name: /import/i })).toBeDisabled();
         expect(screen.getByTitle('Load')).toBeDisabled();
 
@@ -124,6 +129,7 @@ describe('Sidebar', () => {
                 appPhase="setup"
                 savedWorkouts={[]}
                 onSaveCurrent={vi.fn()}
+                onSaveAsCurrent={vi.fn()}
                 onLoadWorkout={vi.fn()}
                 onRenameWorkout={vi.fn()}
                 onDeleteWorkout={vi.fn()}

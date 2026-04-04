@@ -98,6 +98,7 @@ interface WorkoutState {
     setSettings: (settings: Partial<WorkoutSettings>) => void;
     setWorkoutConfig: (config: Partial<Pick<WorkoutState, 'sets' | 'reps' | 'seconds' | 'rest' | 'myoReps' | 'myoWorkSecs'>>) => void;
     saveCurrentWorkout: (name: string) => { ok: boolean; error?: string; id?: string };
+    saveCurrentWorkoutAs: (name: string) => { ok: boolean; error?: string; id?: string };
     loadWorkout: (id: string) => { ok: boolean; error?: string };
     renameWorkout: (id: string, name: string) => { ok: boolean; error?: string };
     deleteWorkout: (id: string) => void;
@@ -190,7 +191,6 @@ export const useWorkoutStore = create<WorkoutState>()(
 
                 return {
                     ...nextConfig,
-                    selectedSavedWorkoutId: null,
                     settings: {
                         ...state.settings,
                         concentricSecond: clampConcentricSecond(state.settings.concentricSecond, limit),
@@ -198,6 +198,56 @@ export const useWorkoutStore = create<WorkoutState>()(
                 };
             }),
             saveCurrentWorkout: (name) => {
+                const normalizedName = name.trim();
+                if (!normalizedName) {
+                    return { ok: false, error: 'Workout name is required.' };
+                }
+
+                const state = get();
+                const config = sanitizeSavedWorkoutConfig(toWorkoutConfig(state));
+                if (!isValidWorkoutConfig(config)) {
+                    return { ok: false, error: 'Workout config is invalid.' };
+                }
+
+                const nowIso = new Date().toISOString();
+                const selectedWorkout = state.selectedSavedWorkoutId
+                    ? state.savedWorkouts.find((workout) => workout.id === state.selectedSavedWorkoutId)
+                    : null;
+
+                if (selectedWorkout) {
+                    const duplicateName = state.savedWorkouts.some((workout) => (
+                        workout.id !== selectedWorkout.id
+                        && workout.name.toLowerCase() === normalizedName.toLowerCase()
+                    ));
+                    if (duplicateName) {
+                        return { ok: false, error: 'Workout name already exists.' };
+                    }
+
+                    set({
+                        savedWorkouts: state.savedWorkouts.map((workout) => (
+                            workout.id === selectedWorkout.id
+                                ? { ...workout, name: normalizedName, ...config, updatedAt: nowIso }
+                                : workout
+                        )),
+                        selectedSavedWorkoutId: selectedWorkout.id,
+                    });
+
+                    return { ok: true, id: selectedWorkout.id };
+                }
+
+                const duplicateName = state.savedWorkouts.some((workout) => workout.name.toLowerCase() === normalizedName.toLowerCase());
+                if (duplicateName) {
+                    return { ok: false, error: 'Workout name already exists.' };
+                }
+
+                const newWorkout = createSavedWorkout(normalizedName, config, nowIso);
+                set({
+                    savedWorkouts: [...state.savedWorkouts, newWorkout],
+                });
+
+                return { ok: true, id: newWorkout.id };
+            },
+            saveCurrentWorkoutAs: (name) => {
                 const normalizedName = name.trim();
                 if (!normalizedName) {
                     return { ok: false, error: 'Workout name is required.' };
@@ -218,7 +268,6 @@ export const useWorkoutStore = create<WorkoutState>()(
                 const newWorkout = createSavedWorkout(normalizedName, config, nowIso);
                 set({
                     savedWorkouts: [...state.savedWorkouts, newWorkout],
-                    selectedSavedWorkoutId: newWorkout.id,
                 });
 
                 return { ok: true, id: newWorkout.id };

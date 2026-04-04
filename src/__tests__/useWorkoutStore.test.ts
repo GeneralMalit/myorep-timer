@@ -634,15 +634,21 @@ describe('useWorkoutStore', () => {
             expect(saved).toHaveLength(1);
             expect(saved[0].name).toBe('Leg Day');
 
-            act(() => {
-                store.setWorkoutConfig({ sets: '6' });
-            });
-            expect(useWorkoutStore.getState().sets).toBe('6');
-
             const loadResult = store.loadWorkout(saved[0].id);
             expect(loadResult.ok).toBe(true);
             expect(useWorkoutStore.getState().sets).toBe('3');
             expect(useWorkoutStore.getState().selectedSavedWorkoutId).toBe(saved[0].id);
+
+            act(() => {
+                store.setWorkoutConfig({ sets: '6' });
+            });
+            expect(useWorkoutStore.getState().sets).toBe('6');
+            expect(useWorkoutStore.getState().selectedSavedWorkoutId).toBe(saved[0].id);
+
+            const updateResult = store.saveCurrentWorkout('Leg Day');
+            expect(updateResult.ok).toBe(true);
+            expect(useWorkoutStore.getState().savedWorkouts).toHaveLength(1);
+            expect(useWorkoutStore.getState().savedWorkouts[0].sets).toBe('6');
         });
 
         it('should reject duplicate workout names and invalid workout configs', () => {

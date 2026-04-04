@@ -34,14 +34,14 @@ export default function App() {
     const {
         settings,
         sets, reps, seconds, rest, myoReps, myoWorkSecs, setWorkoutConfig,
-        savedWorkouts, lastImportSummary,
+        savedWorkouts, selectedSavedWorkoutId, lastImportSummary,
         appPhase, timerStatus, isTimerRunning, setIsTimerRunning,
         currentSet, currentRep, isMainRep, isWorking,
         timeLeft,
         setElapsedTime,
         lastTickSecond, setLastTickSecond,
         startWorkout, resetWorkout, advanceCycle, updateTimerBaselines,
-        saveCurrentWorkout, loadWorkout, renameWorkout, deleteWorkout, exportSavedWorkouts, importSavedWorkouts, clearImportSummary,
+        saveCurrentWorkout, saveCurrentWorkoutAs, loadWorkout, renameWorkout, deleteWorkout, exportSavedWorkouts, importSavedWorkouts, clearImportSummary,
         showSettings, setShowSettings,
         isSidebarCollapsed, setIsSidebarCollapsed,
         theme, setTheme
@@ -51,6 +51,9 @@ export default function App() {
     const workerRef = useRef<Worker | null>(null);
     const baseTimeLeft = useRef(0);
     const baseSetElapsedTime = useRef(0);
+    const loadedWorkout = selectedSavedWorkoutId
+        ? savedWorkouts.find((workout) => workout.id === selectedSavedWorkoutId) ?? null
+        : null;
 
     // Floating Window Refs
     const pipCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -192,10 +195,20 @@ export default function App() {
     };
 
     const handleSaveWorkout = () => {
-        const workoutName = window.prompt('Name this workout template:');
+        const workoutName = window.prompt('Name this workout template:', loadedWorkout?.name ?? '');
         if (!workoutName) return;
 
         const result = saveCurrentWorkout(workoutName);
+        if (!result.ok) {
+            window.alert(result.error ?? 'Could not save workout.');
+        }
+    };
+
+    const handleSaveWorkoutAs = () => {
+        const workoutName = window.prompt('Save as:', loadedWorkout?.name ?? '');
+        if (!workoutName) return;
+
+        const result = saveCurrentWorkoutAs(workoutName);
         if (!result.ok) {
             window.alert(result.error ?? 'Could not save workout.');
         }
@@ -255,6 +268,7 @@ export default function App() {
                 appPhase={appPhase}
                 savedWorkouts={savedWorkouts}
                 onSaveCurrent={handleSaveWorkout}
+                onSaveAsCurrent={handleSaveWorkoutAs}
                 onLoadWorkout={handleLoadWorkout}
                 onRenameWorkout={handleRenameWorkout}
                 onDeleteWorkout={handleDeleteWorkout}

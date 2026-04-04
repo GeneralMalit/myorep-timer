@@ -52,6 +52,21 @@ const resetStore = () => {
     });
 };
 
+const baseWorkout = {
+    id: 'w-1',
+    name: 'Push Day',
+    sets: '3',
+    reps: '12',
+    seconds: '3',
+    rest: '20',
+    myoReps: '4',
+    myoWorkSecs: '2',
+    timesUsed: 2,
+    lastUsedAt: '2026-03-01T00:00:00.000Z',
+    createdAt: '2026-03-01T00:00:00.000Z',
+    updatedAt: '2026-03-01T00:00:00.000Z',
+};
+
 describe('App', () => {
     beforeEach(() => {
         resetStore();
@@ -121,8 +136,65 @@ describe('App', () => {
         // Rest input is disabled when set count is one.
         expect(inputs[3]).toBeDisabled();
 
-        fireEvent.click(screen.getByRole('button', { name: /save/i }));
+        fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
         expect(window.alert).toHaveBeenCalled();
+    });
+
+    it('preloads the loaded workout name when saving and updates its details', () => {
+        vi.spyOn(window, 'prompt').mockReturnValue('Push Day');
+        vi.spyOn(window, 'alert').mockImplementation(() => { });
+
+        useWorkoutStore.setState({
+            appPhase: 'setup',
+            timerStatus: 'Ready',
+            isTimerRunning: false,
+            sets: '4',
+            reps: '15',
+            seconds: '4',
+            rest: '25',
+            myoReps: '5',
+            myoWorkSecs: '3',
+            savedWorkouts: [baseWorkout],
+            selectedSavedWorkoutId: baseWorkout.id,
+        });
+
+        render(<App />);
+
+        fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
+
+        expect(window.prompt).toHaveBeenCalledWith('Name this workout template:', 'Push Day');
+        expect(useWorkoutStore.getState().savedWorkouts).toHaveLength(1);
+        expect(useWorkoutStore.getState().savedWorkouts[0].sets).toBe('4');
+        expect(useWorkoutStore.getState().selectedSavedWorkoutId).toBe(baseWorkout.id);
+    });
+
+    it('creates a copy when using save as on a loaded workout', () => {
+        vi.spyOn(window, 'prompt')
+            .mockReturnValueOnce('Push Day Copy');
+        vi.spyOn(window, 'alert').mockImplementation(() => { });
+
+        useWorkoutStore.setState({
+            appPhase: 'setup',
+            timerStatus: 'Ready',
+            isTimerRunning: false,
+            sets: '4',
+            reps: '15',
+            seconds: '4',
+            rest: '25',
+            myoReps: '5',
+            myoWorkSecs: '3',
+            savedWorkouts: [baseWorkout],
+            selectedSavedWorkoutId: baseWorkout.id,
+        });
+
+        render(<App />);
+
+        fireEvent.click(screen.getByRole('button', { name: /^save as$/i }));
+
+        expect(window.prompt).toHaveBeenCalledWith('Save as:', 'Push Day');
+        expect(useWorkoutStore.getState().savedWorkouts).toHaveLength(2);
+        expect(useWorkoutStore.getState().savedWorkouts.some((workout) => workout.name === 'Push Day Copy')).toBe(true);
+        expect(useWorkoutStore.getState().selectedSavedWorkoutId).toBe(baseWorkout.id);
     });
 
     it('handles timer controls across pause/resume and full-screen branches', () => {
@@ -309,7 +381,7 @@ describe('App', () => {
 
         render(<App />);
 
-        fireEvent.click(screen.getByRole('button', { name: /save/i }));
+        fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
         fireEvent.click(screen.getByTitle('Rename'));
         fireEvent.click(screen.getByTitle('Delete'));
 

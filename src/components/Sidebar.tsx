@@ -27,6 +27,7 @@ interface SidebarProps {
     appPhase: 'setup' | 'timer';
     savedWorkouts: SavedWorkout[];
     onSaveCurrent: () => void;
+    onSaveAsCurrent: () => void;
     onLoadWorkout: (id: string) => void;
     onRenameWorkout: (id: string) => void;
     onDeleteWorkout: (id: string) => void;
@@ -46,6 +47,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     appPhase,
     savedWorkouts,
     onSaveCurrent,
+    onSaveAsCurrent,
     onLoadWorkout,
     onRenameWorkout,
     onDeleteWorkout,
@@ -150,15 +152,26 @@ const Sidebar: React.FC<SidebarProps> = ({
                         <section className="border border-border/50 rounded-xl p-3 space-y-3">
                             <div className="flex items-center justify-between">
                                 <div className="text-xs font-bold uppercase tracking-widest text-muted-foreground/70">Saved Workouts</div>
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={onSaveCurrent}
-                                    disabled={!isSetupMode}
-                                    className="h-7 px-2 gap-1 text-[10px] font-bold"
-                                >
-                                    <Save size={12} /> Save
-                                </Button>
+                                <div className="flex items-center gap-1">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={onSaveCurrent}
+                                        disabled={!isSetupMode}
+                                        className="h-7 px-2 gap-1 text-[10px] font-bold"
+                                    >
+                                        <Save size={12} /> Save
+                                    </Button>
+                                    <Button
+                                        variant="secondary"
+                                        size="sm"
+                                        onClick={onSaveAsCurrent}
+                                        disabled={!isSetupMode}
+                                        className="h-7 px-2 gap-1 text-[10px] font-bold"
+                                    >
+                                        <Save size={12} /> Save As
+                                    </Button>
+                                </div>
                             </div>
 
                             <div className="grid grid-cols-2 gap-2">
