@@ -1,3 +1,10 @@
+## [3.3.1](https://github.com/GeneralMalit/myorep-timer/compare/v3.3.0...v3.3.1) (2026-04-04)
+
+
+### Bug Fixes
+
+* **ui:** compact saved-workout action buttons ([9973e3d](https://github.com/GeneralMalit/myorep-timer/commit/9973e3d1d11105c6adb7c663822884e238465e23))
+
 # [3.3.0](https://github.com/GeneralMalit/myorep-timer/compare/v3.2.0...v3.3.0) (2026-04-04)
 
 
