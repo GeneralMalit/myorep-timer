@@ -8,6 +8,7 @@ import SettingsPanel from '@/components/SettingsPanel';
 import ProtocolIntelModal from '@/components/ProtocolIntelModal';
 import ConcentricTimer from '@/components/ConcentricTimer';
 import SessionBuilder from '@/components/SessionBuilder';
+import SetupModeToggle from '@/components/SetupModeToggle';
 
 import {
     Play,
@@ -66,6 +67,7 @@ export default function App() {
         ? savedSessions.find((session) => session.id === activeSessionId) ?? null
         : null;
     const activeSessionNode = activeSession?.nodes[activeSessionNodeIndex] ?? null;
+    const sessionRestDuration = activeSessionNode?.type === 'rest' ? parseInt(activeSessionNode.seconds || '0', 10) : null;
     const isSessionSetup = appPhase === 'setup' && setupMode === 'session';
 
     // Floating Window Refs
@@ -377,21 +379,8 @@ export default function App() {
                                 <p className="text-muted-foreground font-bold uppercase tracking-[0.3em] text-xs">Configure Hypertrophy Parameters</p>
                             </div>
 
-                            <div className="flex items-center justify-center gap-3">
-                                <Button
-                                    variant="default"
-                                    onClick={() => setSetupMode('workout')}
-                                    className="rounded-full"
-                                >
-                                    Workout Setup
-                                </Button>
-                                <Button
-                                    variant="secondary"
-                                    onClick={() => setSetupMode('session')}
-                                    className="rounded-full"
-                                >
-                                    Session Builder
-                                </Button>
+                            <div className="flex justify-center">
+                                <SetupModeToggle mode={setupMode} onChange={setSetupMode} />
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -528,7 +517,9 @@ export default function App() {
                                         ? (isWorking ? parseInt(reps || '0') : parseInt(rest || '0'))
                                         : (isWorking ? ((isMainRep ? parseInt(reps || '0') : parseInt(myoReps || '0')) - currentRep + 1) : timeLeft)
                                 }
-                                outerMax={isWorking ? (isMainRep ? parseInt(reps || '0') : parseInt(myoReps || '0')) : parseInt(rest || '1')}
+                                outerMax={isRunningSession && sessionNodeRuntimeType === 'rest' && sessionRestDuration !== null
+                                    ? sessionRestDuration
+                                    : (isWorking ? (isMainRep ? parseInt(reps || '0') : parseInt(myoReps || '0')) : parseInt(rest || '1'))}
                                 isResting={!isWorking}
                                 innerValue={timeLeft}
                                 innerMax={timerStatus === 'Preparing' ? settings.prepTime : (isMainRep ? parseInt(seconds || '0') : parseInt(myoWorkSecs || '0'))}

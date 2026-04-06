@@ -135,4 +135,77 @@ describe('savedSessions utilities', () => {
         expect(imported.summary.imported).toBe(1);
         expect(imported.sessions).toHaveLength(1);
     });
+
+    it('regenerates duplicate imported session ids within the same merge', () => {
+        const nowIso = '2026-01-01T00:00:00.000Z';
+        const existing = createSavedSession(
+            'Existing',
+            [
+                createWorkoutSessionNode(
+                    'Workout Existing',
+                    {
+                        sets: '2',
+                        reps: '10',
+                        seconds: '3',
+                        rest: '20',
+                        myoReps: '4',
+                        myoWorkSecs: '2',
+                    },
+                    nowIso,
+                ),
+            ],
+            nowIso,
+        );
+
+        const duplicateId = 'duplicate-session-id';
+        const payload = {
+            schemaVersion: 1,
+            exportedAt: nowIso,
+            sessions: [
+                {
+                    id: duplicateId,
+                    name: 'Imported One',
+                    nodes: [
+                        {
+                            id: 'node-1',
+                            type: 'rest',
+                            name: 'Rest 1',
+                            seconds: '30',
+                            createdAt: nowIso,
+                            updatedAt: nowIso,
+                        },
+                    ],
+                    timesUsed: 0,
+                    lastUsedAt: null,
+                    createdAt: nowIso,
+                    updatedAt: nowIso,
+                },
+                {
+                    id: duplicateId,
+                    name: 'Imported Two',
+                    nodes: [
+                        {
+                            id: 'node-2',
+                            type: 'rest',
+                            name: 'Rest 2',
+                            seconds: '45',
+                            createdAt: nowIso,
+                            updatedAt: nowIso,
+                        },
+                    ],
+                    timesUsed: 0,
+                    lastUsedAt: null,
+                    createdAt: nowIso,
+                    updatedAt: nowIso,
+                },
+            ],
+        };
+
+        const imported = mergeSavedSessionsFromImport([existing], payload);
+        const importedIds = imported.sessions.slice(1).map((session) => session.id);
+
+        expect(imported.summary.imported).toBe(2);
+        expect(new Set(importedIds).size).toBe(importedIds.length);
+        expect(importedIds).not.toContain(existing.id);
+    });
 });

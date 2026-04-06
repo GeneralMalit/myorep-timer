@@ -873,7 +873,20 @@ export const useWorkoutStore = create<WorkoutState>()(
                 const state = get();
                 const session = state.savedSessions.find((item) => item.id === state.activeSessionId) ?? state.editingSessionDraft;
                 if (!session) {
-                    set({ sessionStatus: 'idle', isRunningSession: false });
+                    set({
+                        sessionStatus: 'idle',
+                        isRunningSession: false,
+                        isTimerRunning: false,
+                        timerStatus: 'Ready',
+                        sessionNodeRuntimeType: null,
+                        sessionRestTimeLeft: 0,
+                        sessionLastTickSecond: -1,
+                        activeSessionId: null,
+                        activeSessionNodeIndex: 0,
+                        timeLeft: 0,
+                        setElapsedTime: 0,
+                        lastTickSecond: -1,
+                    });
                     return;
                 }
 

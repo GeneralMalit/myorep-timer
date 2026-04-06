@@ -266,6 +266,45 @@ describe('useWorkoutStore', () => {
             expect(state.activeSessionNodeIndex).toBe(2);
         });
 
+        it('should fully reset volatile runtime state if the active session disappears', () => {
+            const store = useWorkoutStore.getState();
+
+            act(() => {
+                useWorkoutStore.setState({
+                    sessionStatus: 'running',
+                    isRunningSession: true,
+                    isTimerRunning: true,
+                    timerStatus: 'Resting',
+                    sessionNodeRuntimeType: 'rest',
+                    sessionRestTimeLeft: 7,
+                    sessionLastTickSecond: 3,
+                    activeSessionId: 'missing-session',
+                    activeSessionNodeIndex: 1,
+                    timeLeft: 4,
+                    setElapsedTime: 9,
+                    lastTickSecond: 2,
+                });
+            });
+
+            act(() => {
+                store.advanceSessionNode();
+            });
+
+            const state = useWorkoutStore.getState();
+            expect(state.sessionStatus).toBe('idle');
+            expect(state.isRunningSession).toBe(false);
+            expect(state.isTimerRunning).toBe(false);
+            expect(state.timerStatus).toBe('Ready');
+            expect(state.sessionNodeRuntimeType).toBeNull();
+            expect(state.sessionRestTimeLeft).toBe(0);
+            expect(state.sessionLastTickSecond).toBe(-1);
+            expect(state.activeSessionId).toBeNull();
+            expect(state.activeSessionNodeIndex).toBe(0);
+            expect(state.timeLeft).toBe(0);
+            expect(state.setElapsedTime).toBe(0);
+            expect(state.lastTickSecond).toBe(-1);
+        });
+
         it('should support draft node edits and movement', () => {
             const store = useWorkoutStore.getState();
 

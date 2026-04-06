@@ -3,6 +3,13 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import App from '@/App';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
 
+const concentricTimerMock = vi.fn(({ textMain, textSub }: { textMain: string; textSub: string }) => (
+    <div>
+        <div>{textMain}</div>
+        <div>{textSub}</div>
+    </div>
+));
+
 vi.mock('@/utils/audioEngine', () => ({
     audioEngine: {
         init: vi.fn(),
@@ -25,12 +32,7 @@ vi.mock('@/components/SettingsPanel', () => ({
 }));
 
 vi.mock('@/components/ConcentricTimer', () => ({
-    default: ({ textMain, textSub }: { textMain: string; textSub: string }) => (
-        <div>
-            <div>{textMain}</div>
-            <div>{textSub}</div>
-        </div>
-    ),
+    default: (props: { textMain: string; textSub: string }) => concentricTimerMock(props),
 }));
 
 const resetStore = () => {
@@ -84,6 +86,7 @@ describe('App', () => {
     beforeEach(() => {
         resetStore();
         vi.restoreAllMocks();
+        concentricTimerMock.mockClear();
     });
 
     it('renders setup mode with sets min constraint and semantic version footer', () => {
@@ -115,7 +118,60 @@ describe('App', () => {
 
         expect(screen.getByText(/Build a Session/i)).toBeInTheDocument();
         expect(screen.getByText(/Session Canvas/i)).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /back to workout setup/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /workout setup/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /session builder/i })).toBeInTheDocument();
+    });
+
+    it('uses the session rest duration for rest-node outer max display', () => {
+        useWorkoutStore.setState({
+            appPhase: 'timer',
+            timerStatus: 'Resting',
+            isTimerRunning: true,
+            currentSet: 1,
+            currentRep: 1,
+            isMainRep: true,
+            isWorking: false,
+            sets: '1',
+            reps: '10',
+            seconds: '3',
+            rest: '20',
+            myoReps: '4',
+            myoWorkSecs: '2',
+            timeLeft: 8,
+            setTotalDuration: 8,
+            savedSessions: [
+                {
+                    id: 'session-1',
+                    name: 'Session One',
+                    nodes: [
+                        {
+                            id: 'node-1',
+                            type: 'rest',
+                            name: 'Session Rest',
+                            seconds: '8',
+                            createdAt: '2026-03-01T00:00:00.000Z',
+                            updatedAt: '2026-03-01T00:00:00.000Z',
+                        },
+                    ],
+                    timesUsed: 0,
+                    lastUsedAt: null,
+                    createdAt: '2026-03-01T00:00:00.000Z',
+                    updatedAt: '2026-03-01T00:00:00.000Z',
+                },
+            ],
+            activeSessionId: 'session-1',
+            activeSessionNodeIndex: 0,
+            sessionStatus: 'running',
+            isRunningSession: true,
+            sessionNodeRuntimeType: 'rest',
+            sessionRestTimeLeft: 8,
+            selectedSavedSessionId: 'session-1',
+        });
+
+        render(<App />);
+
+        const timerProps = concentricTimerMock.mock.calls[0]?.[0] as { outerMax: number };
+        expect(timerProps.outerMax).toBe(8);
     });
 
     it('lets users toggle voice guidance and open protocol intel from setup', () => {

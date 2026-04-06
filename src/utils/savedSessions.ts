@@ -98,6 +98,22 @@ const resolveImportedName = (name: string, usedNames: Set<string>): { name: stri
     }
 };
 
+const resolveImportedSessionId = (candidateId: unknown, usedIds: Set<string>): string => {
+    const originalId = typeof candidateId === 'string' ? candidateId.trim() : '';
+    if (originalId && !usedIds.has(originalId)) {
+        usedIds.add(originalId);
+        return originalId;
+    }
+
+    let nextId = createId();
+    while (usedIds.has(nextId)) {
+        nextId = createId();
+    }
+
+    usedIds.add(nextId);
+    return nextId;
+};
+
 const toImportedSessionNode = (value: unknown): SessionNode | null => {
     if (!value || typeof value !== 'object') {
         return null;
@@ -359,6 +375,7 @@ export const mergeSavedSessionsFromImport = (
 
     const nextSessions = [...existing];
     const usedNames = new Set(existing.map((session) => normalizeName(session.name).toLowerCase()));
+    const usedIds = new Set(existing.map((session) => session.id));
 
     record.sessions.forEach((candidate, index) => {
         if (!candidate || typeof candidate !== 'object') {
@@ -392,7 +409,7 @@ export const mergeSavedSessionsFromImport = (
 
         const nowIso = new Date().toISOString();
         nextSessions.push({
-            id: typeof sessionRecord.id === 'string' && sessionRecord.id.trim() ? sessionRecord.id : createId(),
+            id: resolveImportedSessionId(sessionRecord.id, usedIds),
             name: resolvedName.name,
             nodes: nodes.map((node) => cloneSessionNode(node, nowIso)),
             timesUsed: parsePositiveInt(sessionRecord.timesUsed) ?? 0,
