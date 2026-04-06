@@ -120,6 +120,50 @@ describe('App', () => {
         expect(screen.getByText(/Session Canvas/i)).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /workout setup/i })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /session builder/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /^workout$/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /^rest$/i })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /add workout node/i })).not.toBeInTheDocument();
+    });
+
+    it('opens a node editor modal with saved workout import controls', () => {
+        useWorkoutStore.setState({
+            setupMode: 'session',
+            editingSessionNodeId: 'node-1',
+            editingSessionDraft: {
+                id: 'session-1',
+                name: 'Session One',
+                nodes: [
+                    {
+                        id: 'node-1',
+                        type: 'workout',
+                        name: 'Workout Node',
+                        config: {
+                            sets: '3',
+                            reps: '10',
+                            seconds: '3',
+                            rest: '20',
+                            myoReps: '4',
+                            myoWorkSecs: '2',
+                        },
+                        sourceWorkoutId: null,
+                        createdAt: '2026-03-01T00:00:00.000Z',
+                        updatedAt: '2026-03-01T00:00:00.000Z',
+                    },
+                ],
+                timesUsed: 0,
+                lastUsedAt: null,
+                createdAt: '2026-03-01T00:00:00.000Z',
+                updatedAt: '2026-03-01T00:00:00.000Z',
+            },
+            savedWorkouts: [baseWorkout],
+        });
+
+        render(<App />);
+
+        fireEvent.click(screen.getByRole('button', { name: /edit workout node/i }));
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
+        expect(screen.getByText(/Import Saved Workout/i)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /import workout/i })).toBeInTheDocument();
     });
 
     it('uses the session rest duration for rest-node outer max display', () => {

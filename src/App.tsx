@@ -369,7 +369,7 @@ export default function App() {
 
                 {appPhase === 'setup' ? (
                     isSessionSetup ? (
-                        <div className="relative z-10 flex h-full min-h-0 w-full flex-col p-4 sm:p-6 lg:p-8">
+                        <div className="relative z-10 flex h-full min-h-0 w-full flex-col">
                             <SessionBuilder />
                         </div>
                     ) : (

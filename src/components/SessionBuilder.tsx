@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { Plus, Play, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import SessionCanvas from '@/components/SessionCanvas';
+import SessionNodeEditor from '@/components/SessionNodeEditor';
 import SetupModeToggle from '@/components/SetupModeToggle';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
 
@@ -18,10 +19,8 @@ const SessionBuilder = () => {
         startSession,
         addWorkoutNodeFromCurrentSetup,
         addRestNode,
-        updateWorkoutNode,
-        updateRestNode,
         removeSessionNode,
-        moveSessionNode,
+        moveSessionNodeToIndex,
     } = useWorkoutStore();
 
     const nodeCount = editingSessionDraft?.nodes.length ?? 0;
@@ -90,6 +89,24 @@ const SessionBuilder = () => {
                 <div className="flex flex-col items-start gap-3 sm:flex-row sm:flex-wrap sm:items-center">
                     <SetupModeToggle mode={setupMode} onChange={setSetupMode} />
                     <div className="flex flex-wrap gap-2">
+                        <Button
+                            type="button"
+                            variant="secondary"
+                            onClick={() => addWorkoutNodeFromCurrentSetup()}
+                            className="gap-2 rounded-full px-4 font-black italic tracking-tighter"
+                        >
+                            <Plus size={16} /> Workout
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="secondary"
+                            onClick={() => addRestNode()}
+                            className="gap-2 rounded-full px-4 font-black italic tracking-tighter"
+                        >
+                            <Plus size={16} /> Rest
+                        </Button>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
                         <Button type="button" variant="secondary" onClick={handleNewSession} className="gap-2 rounded-full px-4 font-black italic tracking-tighter">
                             <Plus size={16} /> New
                         </Button>
@@ -111,16 +128,12 @@ const SessionBuilder = () => {
                     nodes={editingSessionDraft?.nodes ?? []}
                     activeNodeId={editingSessionNodeId}
                     onEditNode={setEditingSessionNodeId}
-                    onMoveLeft={(nodeId) => moveSessionNode(nodeId, 'left')}
-                    onMoveRight={(nodeId) => moveSessionNode(nodeId, 'right')}
                     onRemoveNode={removeSessionNode}
-                    onInsertWorkoutHere={() => addWorkoutNodeFromCurrentSetup()}
-                    onInsertRestHere={() => addRestNode()}
-                    onUpdateWorkoutNode={(nodeId, config, name) => updateWorkoutNode(nodeId, config, name)}
-                    onUpdateRestNode={(nodeId, seconds, name) => updateRestNode(nodeId, seconds, name)}
+                    onMoveNodeToIndex={(nodeId, targetIndex) => moveSessionNodeToIndex(nodeId, targetIndex)}
                 />
             </div>
 
+            <SessionNodeEditor />
         </section>
     );
 };

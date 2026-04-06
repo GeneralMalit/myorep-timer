@@ -1,7 +1,6 @@
-import { Plus, Play, Square } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { useState } from 'react';
+import { Play, Square } from 'lucide-react';
 import type { SessionNode } from '@/types/savedSessions';
-import type { SavedWorkoutConfig } from '@/types/savedWorkouts';
 import { cn } from '@/lib/utils';
 import SessionNodeCard from '@/components/SessionNodeCard';
 
@@ -9,25 +8,9 @@ interface SessionCanvasProps {
     nodes: SessionNode[];
     activeNodeId: string | null;
     onEditNode: (nodeId: string) => void;
-    onMoveLeft: (nodeId: string) => void;
-    onMoveRight: (nodeId: string) => void;
     onRemoveNode: (nodeId: string) => void;
-    onInsertWorkoutHere: (afterNodeId: string | null) => void;
-    onInsertRestHere: (afterNodeId: string | null) => void;
-    onUpdateWorkoutNode: (nodeId: string, config: SavedWorkoutConfig, name?: string) => void;
-    onUpdateRestNode: (nodeId: string, seconds: string, name?: string) => void;
+    onMoveNodeToIndex: (nodeId: string, targetIndex: number) => void;
 }
-
-const insertButtons = (onWorkout: () => void, onRest: () => void) => (
-    <div className="flex flex-wrap items-center justify-center gap-2">
-        <Button variant="secondary" size="sm" onClick={onWorkout} className="gap-1 rounded-full px-3 text-[10px] font-black uppercase tracking-[0.18em]">
-            <Plus size={11} /> Workout
-        </Button>
-        <Button variant="ghost" size="sm" onClick={onRest} className="gap-1 rounded-full px-3 text-[10px] font-black uppercase tracking-[0.18em]">
-            <Plus size={11} /> Rest
-        </Button>
-    </div>
-);
 
 const Anchor = ({ label, tone, icon }: { label: string; tone: 'start' | 'end'; icon: typeof Play | typeof Square }) => {
     const Icon = icon;
@@ -57,95 +40,103 @@ const SessionCanvas = ({
     nodes,
     activeNodeId,
     onEditNode,
-    onMoveLeft,
-    onMoveRight,
     onRemoveNode,
-    onInsertWorkoutHere,
-    onInsertRestHere,
-    onUpdateWorkoutNode,
-    onUpdateRestNode,
+    onMoveNodeToIndex,
 }: SessionCanvasProps) => {
+    const [draggedNodeId, setDraggedNodeId] = useState<string | null>(null);
+    const [dropIndex, setDropIndex] = useState<number | null>(null);
+
+    const handleDrop = (targetIndex: number) => {
+        if (!draggedNodeId) {
+            return;
+        }
+
+        onMoveNodeToIndex(draggedNodeId, targetIndex);
+        setDraggedNodeId(null);
+        setDropIndex(null);
+    };
+
     return (
-        <div className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-[32px] border border-border/50 bg-[radial-gradient(circle_at_1px_1px,rgba(255,255,255,0.05)_1px,transparent_0)] bg-[size:28px_28px] bg-black/90 shadow-[0_24px_80px_rgba(0,0,0,0.25)]">
+        <div
+            className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-[32px] border border-border/50 bg-[radial-gradient(circle_at_1px_1px,rgba(255,255,255,0.05)_1px,transparent_0)] bg-[size:28px_28px] bg-black/90 shadow-[0_24px_80px_rgba(0,0,0,0.25)]"
+            onDragOver={(event) => event.preventDefault()}
+            onDrop={(event) => {
+                event.preventDefault();
+                handleDrop(nodes.length);
+            }}
+        >
             <div className="flex items-center justify-between gap-4 border-b border-white/5 px-6 py-4">
                 <div className="space-y-1">
                     <div className="text-[11px] font-black uppercase tracking-[0.3em] text-muted-foreground">
                         Session Canvas
                     </div>
                     <div className="text-sm text-muted-foreground">
-                        Nodes stay editable right on the canvas.
+                        Drag tiles to reorder. Edit opens the node modal.
                     </div>
                 </div>
-                <div className="hidden sm:flex">
-                    {insertButtons(
-                        () => onInsertWorkoutHere(null),
-                        () => onInsertRestHere(null),
-                    )}
+                <div className="text-[10px] font-black uppercase tracking-[0.26em] text-muted-foreground">
+                    Start {nodes.length ? '-> Nodes ->' : '->'} End
                 </div>
             </div>
 
             <div className="relative flex min-h-0 flex-1 overflow-auto">
-                <div className="flex min-h-full min-w-full items-center px-6 py-10 sm:px-10 lg:px-14">
-                    <div className="flex min-h-[520px] min-w-full items-center justify-center gap-6 md:justify-start md:gap-8">
+                <div className="flex min-h-full min-w-full items-stretch px-6 py-10 sm:px-10 lg:px-14">
+                    <div className="flex min-h-full min-w-full items-center gap-6 md:gap-8">
                         <Anchor label="Start" tone="start" icon={Play} />
 
-                        <div className="flex min-h-0 flex-1 items-center gap-4 overflow-x-auto py-6 md:gap-6">
-                            {nodes.length === 0 ? (
-                                <div className="flex min-h-[240px] min-w-[360px] flex-1 items-center justify-center rounded-[28px] border border-dashed border-white/10 bg-white/3 px-8 text-center">
-                                    <div className="max-w-sm space-y-2">
-                                        <div className="text-sm font-black italic tracking-tight text-foreground">
-                                            Empty canvas
-                                        </div>
-                                        <div className="text-sm text-muted-foreground">
-                                            Add nodes to build the session chain. Edit each node directly on the canvas.
+                        <div className="flex min-h-full flex-1 items-center overflow-x-auto py-6">
+                            <div className="flex min-h-full min-w-full items-center gap-4 md:gap-6">
+                                {nodes.length === 0 ? (
+                                    <div className="flex min-h-[320px] min-w-[320px] flex-1 items-center justify-center rounded-[28px] border border-dashed border-white/10 bg-white/3 px-8 text-center">
+                                        <div className="max-w-sm space-y-2">
+                                            <div className="text-sm font-black italic tracking-tight text-foreground">
+                                                Empty canvas
+                                            </div>
+                                            <div className="text-sm text-muted-foreground">
+                                                Add workout and rest nodes from the header, then drag them around here.
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
-                            ) : null}
-
-                            {nodes.map((node, index) => (
-                                <div key={node.id} className="flex items-center gap-4">
-                                    {index > 0 && (
-                                        <div className="hidden h-px w-12 bg-white/10 md:block" />
-                                    )}
-                                    <SessionNodeCard
-                                        node={node}
-                                        isActive={node.id === activeNodeId}
-                                        onSelect={() => onEditNode(node.id)}
-                                        onMoveLeft={() => onMoveLeft(node.id)}
-                                        onMoveRight={() => onMoveRight(node.id)}
-                                        onRemove={() => onRemoveNode(node.id)}
-                                        onUpdateWorkout={(config, name) => onUpdateWorkoutNode(node.id, config, name)}
-                                        onUpdateRest={(seconds, name) => onUpdateRestNode(node.id, seconds, name)}
-                                    />
-                                    <div className="flex flex-col items-center gap-2">
-                                        <div className="hidden md:block h-px w-8 bg-white/10" />
-                                        <div className="md:hidden h-8 w-px bg-white/10" />
-                                        <div className="flex">
-                                            {insertButtons(
-                                                () => onInsertWorkoutHere(node.id),
-                                                () => onInsertRestHere(node.id),
+                                ) : (
+                                    nodes.map((node, index) => (
+                                        <div
+                                            key={node.id}
+                                            className="flex items-center gap-4"
+                                            onDragOver={(event) => {
+                                                event.preventDefault();
+                                                setDropIndex(index);
+                                            }}
+                                            onDrop={(event) => {
+                                                event.preventDefault();
+                                                handleDrop(index);
+                                            }}
+                                        >
+                                            {dropIndex === index && draggedNodeId && draggedNodeId !== node.id && (
+                                                <div className="h-24 w-1 rounded-full bg-primary/80 shadow-[0_0_18px_rgba(139,92,246,0.45)]" />
                                             )}
+                                            <SessionNodeCard
+                                                node={node}
+                                                isActive={node.id === activeNodeId}
+                                                isDragging={draggedNodeId === node.id}
+                                                onSelect={() => onEditNode(node.id)}
+                                                onEdit={() => onEditNode(node.id)}
+                                                onDelete={() => onRemoveNode(node.id)}
+                                                onDragStart={() => setDraggedNodeId(node.id)}
+                                                onDragEnd={() => {
+                                                    setDraggedNodeId(null);
+                                                    setDropIndex(null);
+                                                }}
+                                            />
                                         </div>
-                                    </div>
-                                </div>
-                            ))}
+                                    ))
+                                )}
+                            </div>
                         </div>
 
                         <Anchor label="End" tone="end" icon={Square} />
                     </div>
                 </div>
             </div>
-
-            <button
-                type="button"
-                className="absolute bottom-6 right-6 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-[0_16px_40px_rgba(139,92,246,0.28)] transition-transform hover:scale-105 active:scale-95"
-                onClick={() => onInsertWorkoutHere(nodes.length > 0 ? nodes[nodes.length - 1].id : null)}
-                aria-label="Add workout node"
-                title="Add workout node"
-            >
-                <Plus size={22} />
-            </button>
         </div>
     );
 };

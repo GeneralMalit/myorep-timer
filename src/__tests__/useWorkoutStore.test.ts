@@ -358,6 +358,69 @@ describe('useWorkoutStore', () => {
             expect(updatedDraft?.nodes.some((node) => node.name === 'Updated Rest')).toBe(true);
         });
 
+        it('should reorder nodes by index and replace a workout node from a saved workout', () => {
+            const store = useWorkoutStore.getState();
+
+            act(() => {
+                store.setWorkoutConfig({
+                    sets: '2',
+                    reps: '10',
+                    seconds: '3',
+                    rest: '15',
+                    myoReps: '4',
+                    myoWorkSecs: '2',
+                });
+            });
+
+            act(() => {
+                store.createSession('Canvas');
+                store.addWorkoutNodeFromCurrentSetup();
+                store.addRestNode('20');
+            });
+
+            const workoutNodeId = useWorkoutStore.getState().editingSessionDraft?.nodes.find((node) => node.type === 'workout')?.id;
+            const restNodeId = useWorkoutStore.getState().editingSessionDraft?.nodes.find((node) => node.type === 'rest')?.id;
+            expect(workoutNodeId).toBeDefined();
+            expect(restNodeId).toBeDefined();
+
+            act(() => {
+                store.moveSessionNodeToIndex(restNodeId!, 0);
+            });
+            expect(useWorkoutStore.getState().editingSessionDraft?.nodes[0].type).toBe('rest');
+            expect(useWorkoutStore.getState().editingSessionDraft?.nodes[1].type).toBe('workout');
+
+            act(() => {
+                useWorkoutStore.setState({
+                    savedWorkouts: [
+                        {
+                            id: 'saved-workout-1',
+                            name: 'Saved Pull',
+                            sets: '5',
+                            reps: '8',
+                            seconds: '4',
+                            rest: '25',
+                            myoReps: '3',
+                            myoWorkSecs: '2',
+                            timesUsed: 0,
+                            lastUsedAt: null,
+                            createdAt: '2026-01-01T00:00:00.000Z',
+                            updatedAt: '2026-01-01T00:00:00.000Z',
+                        },
+                    ],
+                });
+            });
+
+            const replaceResult = store.replaceWorkoutNodeWithSavedWorkout(workoutNodeId!, 'saved-workout-1');
+            expect(replaceResult.ok).toBe(true);
+
+            const updatedNode = useWorkoutStore.getState().editingSessionDraft?.nodes.find((node) => node.id === workoutNodeId);
+            expect(updatedNode?.name).toBe('Saved Pull');
+            if (updatedNode?.type === 'workout') {
+                expect(updatedNode.config.sets).toBe('5');
+                expect(updatedNode.sourceWorkoutId).toBe('saved-workout-1');
+            }
+        });
+
         it('should rename, duplicate, and delete sessions', () => {
             const store = useWorkoutStore.getState();
             let sessionId = '';

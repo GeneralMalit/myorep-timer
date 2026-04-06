@@ -168,8 +168,10 @@ interface WorkoutState {
     updateRestNode: (nodeId: string, seconds: string, name?: string) => { ok: boolean; error?: string };
     removeSessionNode: (nodeId: string) => void;
     moveSessionNode: (nodeId: string, direction: 'left' | 'right') => void;
+    moveSessionNodeToIndex: (nodeId: string, targetIndex: number) => { ok: boolean; error?: string };
     insertSessionNodeAfter: (afterNodeId: string | null, node: SessionNode) => void;
     setEditingSessionNodeId: (nodeId: string | null) => void;
+    replaceWorkoutNodeWithSavedWorkout: (nodeId: string, workoutId: string) => { ok: boolean; error?: string };
     startSession: (id: string) => { ok: boolean; error?: string };
     pauseSession: () => void;
     resumeSession: () => void;
@@ -770,6 +772,40 @@ export const useWorkoutStore = create<WorkoutState>()(
                     },
                 };
             }),
+            moveSessionNodeToIndex: (nodeId, targetIndex) => {
+                const state = get();
+                const draft = state.editingSessionDraft;
+                if (!draft) {
+                    return { ok: false, error: 'No session draft is open.' };
+                }
+
+                const currentIndex = draft.nodes.findIndex((node) => node.id === nodeId);
+                if (currentIndex === -1) {
+                    return { ok: false, error: 'Node not found.' };
+                }
+
+                const normalizedTargetIndex = Math.max(0, Math.min(targetIndex, draft.nodes.length));
+                if (normalizedTargetIndex === currentIndex) {
+                    return { ok: true };
+                }
+
+                const nextNodes = [...draft.nodes];
+                const [movedNode] = nextNodes.splice(currentIndex, 1);
+                const adjustedTargetIndex = normalizedTargetIndex > currentIndex
+                    ? normalizedTargetIndex - 1
+                    : normalizedTargetIndex;
+                nextNodes.splice(adjustedTargetIndex, 0, movedNode);
+
+                set({
+                    editingSessionDraft: {
+                        ...draft,
+                        nodes: nextNodes,
+                        updatedAt: new Date().toISOString(),
+                    },
+                });
+
+                return { ok: true };
+            },
             insertSessionNodeAfter: (afterNodeId, node) => set((state) => {
                 if (!state.editingSessionDraft) {
                     const nowIso = new Date().toISOString();
@@ -807,6 +843,42 @@ export const useWorkoutStore = create<WorkoutState>()(
                 };
             }),
             setEditingSessionNodeId: (nodeId) => set({ editingSessionNodeId: nodeId }),
+            replaceWorkoutNodeWithSavedWorkout: (nodeId, workoutId) => {
+                const state = get();
+                const draft = state.editingSessionDraft;
+                if (!draft) {
+                    return { ok: false, error: 'No session draft is open.' };
+                }
+
+                const workout = state.savedWorkouts.find((item) => item.id === workoutId);
+                if (!workout) {
+                    return { ok: false, error: 'Workout not found.' };
+                }
+
+                const nowIso = new Date().toISOString();
+                const nextNodes = draft.nodes.map((node) => (
+                    node.id === nodeId && isWorkoutSessionNode(node)
+                        ? {
+                            ...node,
+                            name: workout.name,
+                            config: sanitizeSavedWorkoutConfig(workout),
+                            sourceWorkoutId: workout.id,
+                            updatedAt: nowIso,
+                        }
+                        : node
+                ));
+
+                set({
+                    editingSessionDraft: {
+                        ...draft,
+                        nodes: nextNodes,
+                        updatedAt: nowIso,
+                    },
+                    selectedSavedWorkoutId: workout.id,
+                });
+
+                return { ok: true };
+            },
 
             startSession: (id) => {
                 const session = get().savedSessions.find((item) => item.id === id) ?? get().editingSessionDraft;
