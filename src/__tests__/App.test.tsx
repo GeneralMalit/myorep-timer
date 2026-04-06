@@ -114,7 +114,7 @@ describe('App', () => {
         render(<App />);
 
         expect(screen.getByText(/Build a Session/i)).toBeInTheDocument();
-        expect(screen.getByText(/Saved Sessions/i)).toBeInTheDocument();
+        expect(screen.getByText(/Session Canvas/i)).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /back to workout setup/i })).toBeInTheDocument();
     });
 
