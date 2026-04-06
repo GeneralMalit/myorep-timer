@@ -1,10 +1,9 @@
-﻿import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // We need to test the timerWorker logic
 // Since Workers run in isolation, we'll test the logic by mocking the worker environment
 
 describe('timerWorker', () => {
-    let workerCode: string;
     let mockPostMessage: ReturnType<typeof vi.fn>;
     let messageHandler: ((e: MessageEvent) => void) | null = null;
     let intervalIds: number[] = [];
@@ -211,7 +210,6 @@ describe('timerWorker', () => {
         it('should calculate elapsed time correctly', async () => {
             vi.useFakeTimers();
 
-            const startTime = 10000;
             const elapsedTimes = [10000, 10500, 11000, 11500];
             let callIndex = 0;
 
@@ -322,4 +320,5 @@ describe('timerWorker source module', () => {
         vi.useRealTimers();
     });
 });
+
 

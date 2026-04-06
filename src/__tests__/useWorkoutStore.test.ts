@@ -1,4 +1,4 @@
-﻿import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { useWorkoutStore } from '../store/useWorkoutStore';
 import { act } from '@testing-library/react';
 
@@ -23,6 +23,19 @@ describe('useWorkoutStore', () => {
                 savedWorkouts: [],
                 selectedSavedWorkoutId: null,
                 lastImportSummary: null,
+                savedSessions: [],
+                selectedSavedSessionId: null,
+                setupMode: 'workout',
+                editingSessionId: null,
+                editingSessionDraft: null,
+                editingSessionNodeId: null,
+                activeSessionId: null,
+                activeSessionNodeIndex: 0,
+                sessionStatus: 'idle',
+                isRunningSession: false,
+                sessionNodeRuntimeType: null,
+                sessionRestTimeLeft: 0,
+                sessionLastTickSecond: -1,
             });
         });
     });
@@ -114,6 +127,243 @@ describe('useWorkoutStore', () => {
             });
 
             expect(useWorkoutStore.getState().settings.concentricSecond).toBe(3);
+        });
+    });
+
+    describe('Saved Sessions', () => {
+        it('should create, edit, and save a session draft', () => {
+            const store = useWorkoutStore.getState();
+
+            act(() => {
+                store.setWorkoutConfig({
+                    sets: '2',
+                    reps: '12',
+                    seconds: '4',
+                    rest: '15',
+                    myoReps: '4',
+                    myoWorkSecs: '2',
+                });
+            });
+
+            let createdId = '';
+            act(() => {
+                const created = store.createSession('Leg Day');
+                expect(created.ok).toBe(true);
+                createdId = created.id as string;
+            });
+
+            act(() => {
+                store.addWorkoutNodeFromCurrentSetup();
+                store.addRestNode('30');
+            });
+
+            const saveResult = store.saveSessionDraft();
+            expect(saveResult.ok).toBe(true);
+
+            const state = useWorkoutStore.getState();
+            expect(state.setupMode).toBe('session');
+            expect(state.selectedSavedSessionId).toBe(createdId);
+            expect(state.savedSessions).toHaveLength(1);
+            expect(state.savedSessions[0].name).toBe('Leg Day');
+            expect(state.savedSessions[0].nodes).toHaveLength(2);
+            expect(state.savedSessions[0].nodes[0].type).toBe('workout');
+            expect(state.savedSessions[0].nodes[1].type).toBe('rest');
+        });
+
+        it('should load a saved session for editing with a cloned draft', () => {
+            const store = useWorkoutStore.getState();
+
+            act(() => {
+                store.setWorkoutConfig({
+                    sets: '1',
+                    reps: '10',
+                    seconds: '3',
+                    rest: '',
+                    myoReps: '',
+                    myoWorkSecs: '',
+                });
+            });
+
+            let sessionId = '';
+            act(() => {
+                const created = store.createSession('Upper Body');
+                expect(created.ok).toBe(true);
+                sessionId = created.id as string;
+            });
+            act(() => {
+                store.addWorkoutNodeFromCurrentSetup();
+            });
+            act(() => {
+                store.saveSessionDraft();
+            });
+
+            const loadResult = store.loadSessionForEditing(sessionId);
+            expect(loadResult.ok).toBe(true);
+
+            const state = useWorkoutStore.getState();
+            expect(state.editingSessionDraft?.id).toBe(sessionId);
+            expect(state.editingSessionDraft).not.toBe(state.savedSessions[0]);
+            expect(state.editingSessionDraft?.nodes).toHaveLength(1);
+        });
+
+        it('should run a session through workout and rest nodes', () => {
+            const store = useWorkoutStore.getState();
+
+            act(() => {
+                store.setWorkoutConfig({
+                    sets: '1',
+                    reps: '1',
+                    seconds: '2',
+                    rest: '',
+                    myoReps: '',
+                    myoWorkSecs: '',
+                });
+            });
+
+            let sessionId = '';
+            act(() => {
+                const created = store.createSession('Quick Session');
+                expect(created.ok).toBe(true);
+                sessionId = created.id as string;
+            });
+            act(() => {
+                store.addWorkoutNodeFromCurrentSetup();
+                store.addRestNode('8');
+            });
+            act(() => {
+                store.saveSessionDraft();
+            });
+
+            act(() => {
+                store.startSession(sessionId);
+            });
+
+            expect(useWorkoutStore.getState().sessionStatus).toBe('running');
+            expect(useWorkoutStore.getState().sessionNodeRuntimeType).toBe('workout');
+            expect(useWorkoutStore.getState().activeSessionNodeIndex).toBe(0);
+            expect(useWorkoutStore.getState().timerStatus).toBe('Preparing');
+
+            act(() => {
+                store.advanceCycle();
+            });
+            expect(useWorkoutStore.getState().timerStatus).toBe('Main Set');
+
+            act(() => {
+                store.advanceCycle();
+            });
+            expect(useWorkoutStore.getState().sessionNodeRuntimeType).toBe('rest');
+            expect(useWorkoutStore.getState().activeSessionNodeIndex).toBe(1);
+            expect(useWorkoutStore.getState().timerStatus).toBe('Resting');
+
+            act(() => {
+                store.completeSessionNode();
+            });
+
+            const state = useWorkoutStore.getState();
+            expect(state.sessionStatus).toBe('finished');
+            expect(state.isRunningSession).toBe(false);
+            expect(state.timerStatus).toBe('Finished');
+            expect(state.activeSessionNodeIndex).toBe(2);
+        });
+
+        it('should support draft node edits and movement', () => {
+            const store = useWorkoutStore.getState();
+
+            let sessionId = '';
+            act(() => {
+                const created = store.createSession('Circuit');
+                expect(created.ok).toBe(true);
+                sessionId = created.id as string;
+            });
+            act(() => {
+                store.addRestNode('20');
+                store.addWorkoutNodeFromCurrentSetup();
+            });
+
+            const draftBeforeMove = useWorkoutStore.getState().editingSessionDraft;
+            expect(draftBeforeMove).not.toBeNull();
+            const nodeIdToMove = draftBeforeMove!.nodes[1].id;
+            act(() => {
+                store.moveSessionNode(nodeIdToMove, 'left');
+            });
+
+            const draft = useWorkoutStore.getState().editingSessionDraft;
+            expect(draft?.id).toBe(sessionId);
+            expect(draft?.nodes).toHaveLength(2);
+            expect(draft?.nodes[0].type).toBe('workout');
+            expect(draft?.nodes[1].type).toBe('rest');
+
+            const workoutNode = draft?.nodes[0];
+            if (workoutNode?.type === 'workout') {
+                act(() => {
+                    store.updateWorkoutNode(workoutNode.id, {
+                        sets: '3',
+                        reps: '8',
+                        seconds: '5',
+                        rest: '20',
+                        myoReps: '4',
+                        myoWorkSecs: '3',
+                    }, 'Updated Workout');
+                });
+            }
+
+            const restNode = useWorkoutStore.getState().editingSessionDraft?.nodes.find((node) => node.type === 'rest');
+            if (restNode && restNode.type === 'rest') {
+                act(() => {
+                    store.updateRestNode(restNode.id, '45', 'Updated Rest');
+                });
+            }
+
+            const updatedDraft = useWorkoutStore.getState().editingSessionDraft;
+            expect(updatedDraft?.nodes.some((node) => node.name === 'Updated Workout')).toBe(true);
+            expect(updatedDraft?.nodes.some((node) => node.name === 'Updated Rest')).toBe(true);
+        });
+
+        it('should rename, duplicate, and delete sessions', () => {
+            const store = useWorkoutStore.getState();
+            let sessionId = '';
+
+            act(() => {
+                store.setWorkoutConfig({
+                    sets: '2',
+                    reps: '10',
+                    seconds: '4',
+                    rest: '15',
+                    myoReps: '4',
+                    myoWorkSecs: '2',
+                });
+            });
+            act(() => {
+                const created = store.createSession('Block A');
+                expect(created.ok).toBe(true);
+                sessionId = created.id as string;
+            });
+
+            act(() => {
+                store.addWorkoutNodeFromCurrentSetup();
+            });
+
+            const saved = store.saveSessionDraft();
+            expect(saved.ok).toBe(true);
+
+            const renamed = store.renameSession(sessionId, 'Block A Updated');
+            expect(renamed.ok).toBe(true);
+
+            expect(useWorkoutStore.getState().savedSessions[0].name).toBe('Block A Updated');
+
+            let duplicateId = '';
+            const duplicated = store.duplicateSession(sessionId, 'Block A Copy');
+            expect(duplicated.ok).toBe(true);
+            duplicateId = duplicated.id as string;
+
+            expect(useWorkoutStore.getState().savedSessions).toHaveLength(2);
+            expect(useWorkoutStore.getState().savedSessions.some((session) => session.id === duplicateId)).toBe(true);
+
+            store.deleteSession(sessionId);
+
+            const state = useWorkoutStore.getState();
+            expect(state.savedSessions).toHaveLength(1);
+            expect(state.savedSessions[0].id).toBe(duplicateId);
         });
     });
 
@@ -901,4 +1151,5 @@ describe('useWorkoutStore', () => {
         });
     });
 });
+
 

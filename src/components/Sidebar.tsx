@@ -15,6 +15,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { SavedWorkout, SavedWorkoutsImportSummary } from '@/types/savedWorkouts';
+import { SavedSession } from '@/types/savedSessions';
 import { APP_VERSION } from '@/constants/version';
 
 interface SidebarProps {
@@ -36,6 +37,12 @@ interface SidebarProps {
     onImportWorkouts: (payload: unknown) => void;
     importSummary: SavedWorkoutsImportSummary | null;
     clearImportSummary: () => void;
+    savedSessions: SavedSession[];
+    onCreateSession: () => void;
+    onLoadSession: (id: string) => void;
+    onDuplicateSession: (id: string) => void;
+    onRenameSession: (id: string) => void;
+    onDeleteSession: (id: string) => void;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({
@@ -57,6 +64,12 @@ const Sidebar: React.FC<SidebarProps> = ({
     onImportWorkouts,
     importSummary,
     clearImportSummary,
+    savedSessions,
+    onCreateSession,
+    onLoadSession,
+    onDuplicateSession,
+    onRenameSession,
+    onDeleteSession,
 }) => {
     const fileInputRef = useRef<HTMLInputElement | null>(null);
     const isSetupMode = appPhase === 'setup';
@@ -163,6 +176,47 @@ const Sidebar: React.FC<SidebarProps> = ({
                             <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground/70 uppercase tracking-tight">
                                 What myo-reps are and how this timer interprets them.
                             </p>
+                        </section>
+
+                        <section className="border border-border/50 rounded-xl p-3 space-y-3">
+                            <div className="flex items-center justify-between gap-2">
+                                <div className="text-xs font-bold uppercase tracking-widest text-muted-foreground/70">Saved Sessions</div>
+                                <Button variant="outline" size="sm" onClick={onCreateSession} className="h-7 px-2 text-[10px]" disabled={!isSetupMode}>
+                                    New
+                                </Button>
+                            </div>
+
+                            <div className="space-y-2 max-h-52 overflow-y-auto no-scrollbar pr-1">
+                                {savedSessions.length === 0 && (
+                                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground/60 p-2 border border-dashed border-border rounded-lg">
+                                        No saved sessions yet
+                                    </div>
+                                )}
+
+                                {savedSessions.map((session) => (
+                                    <div key={session.id} className="rounded-lg border border-border/50 bg-accent/20 p-2 space-y-2">
+                                        <div className="text-xs font-bold truncate">{session.name}</div>
+                                        <div className="text-[10px] text-muted-foreground uppercase tracking-tight">
+                                            {session.nodes.length} nodes
+                                            {session.lastUsedAt ? ` • Last ${new Date(session.lastUsedAt).toLocaleDateString()}` : ''}
+                                        </div>
+                                        <div className="grid grid-cols-4 gap-1">
+                                            <Button variant="default" size="sm" className="h-6 px-1 text-[9px] font-bold" onClick={() => onLoadSession(session.id)} disabled={!isSetupMode} title="Load Session">
+                                                Load
+                                            </Button>
+                                            <Button variant="secondary" size="sm" className="h-6 px-1 text-[9px] font-bold" onClick={() => onDuplicateSession(session.id)} disabled={!isSetupMode} title="Duplicate Session">
+                                                Copy
+                                            </Button>
+                                            <Button variant="secondary" size="sm" className="h-6 px-1 text-[9px] font-bold" onClick={() => onRenameSession(session.id)} disabled={!isSetupMode} title="Rename Session">
+                                                Rename
+                                            </Button>
+                                            <Button variant="ghost" size="sm" className="h-6 px-1 text-[9px] font-bold" onClick={() => onDeleteSession(session.id)} disabled={!isSetupMode} title="Delete Session">
+                                                Del
+                                            </Button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
                         </section>
 
                         <section className="border border-border/50 rounded-xl p-3 space-y-3">

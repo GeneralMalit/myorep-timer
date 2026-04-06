@@ -49,6 +49,19 @@ const resetStore = () => {
         savedWorkouts: [],
         selectedSavedWorkoutId: null,
         lastImportSummary: null,
+        savedSessions: [],
+        selectedSavedSessionId: null,
+        setupMode: 'workout',
+        editingSessionId: null,
+        editingSessionDraft: null,
+        editingSessionNodeId: null,
+        activeSessionId: null,
+        activeSessionNodeIndex: 0,
+        sessionStatus: 'idle',
+        isRunningSession: false,
+        sessionNodeRuntimeType: null,
+        sessionRestTimeLeft: 0,
+        sessionLastTickSecond: -1,
     });
 };
 
@@ -80,6 +93,29 @@ describe('App', () => {
         const cycleInput = screen.getAllByRole('spinbutton')[0] as HTMLInputElement;
         expect(cycleInput.min).toBe('1');
         expect(screen.getByText(/MYOREP v9.9.9-test/i)).toBeInTheDocument();
+    });
+
+    it('renders the session builder when setup mode is session', () => {
+        useWorkoutStore.setState({
+            setupMode: 'session',
+            editingSessionDraft: {
+                id: 'session-1',
+                name: 'Session One',
+                nodes: [],
+                timesUsed: 0,
+                lastUsedAt: null,
+                createdAt: '2026-03-01T00:00:00.000Z',
+                updatedAt: '2026-03-01T00:00:00.000Z',
+            },
+            savedSessions: [],
+            selectedSavedSessionId: 'session-1',
+        });
+
+        render(<App />);
+
+        expect(screen.getByText(/Build a Session/i)).toBeInTheDocument();
+        expect(screen.getByText(/Saved Sessions/i)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /back to workout setup/i })).toBeInTheDocument();
     });
 
     it('lets users toggle voice guidance and open protocol intel from setup', () => {

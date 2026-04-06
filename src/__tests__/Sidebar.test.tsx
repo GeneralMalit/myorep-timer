@@ -1,7 +1,8 @@
-﻿import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import Sidebar from '@/components/Sidebar';
 import { SavedWorkout } from '@/types/savedWorkouts';
+import { SavedSession } from '@/types/savedSessions';
 
 const baseWorkout: SavedWorkout = {
     id: 'w-1',
@@ -18,59 +19,66 @@ const baseWorkout: SavedWorkout = {
     updatedAt: '2026-03-01T00:00:00.000Z',
 };
 
-describe('Sidebar', () => {
-    it('renders saved workouts and triggers actions', () => {
-        const onSaveCurrent = vi.fn();
-        const onSaveAsCurrent = vi.fn();
-        const onLoadWorkout = vi.fn();
-        const onRenameWorkout = vi.fn();
-        const onDeleteWorkout = vi.fn();
-        const onExportWorkouts = vi.fn();
+const baseSession: SavedSession = {
+    id: 's-1',
+    name: 'Push Session',
+    nodes: [],
+    timesUsed: 0,
+    lastUsedAt: null,
+    createdAt: '2026-03-01T00:00:00.000Z',
+    updatedAt: '2026-03-01T00:00:00.000Z',
+};
 
-        render(
-            <Sidebar
-                currentTheme="theme-default"
-                setTheme={vi.fn()}
-                setShowSettings={vi.fn()}
-                onOpenProtocolIntel={vi.fn()}
-                showSettings={false}
-                isCollapsed={false}
-                toggleSidebar={vi.fn()}
-                appPhase="setup"
-                savedWorkouts={[baseWorkout]}
-                onSaveCurrent={onSaveCurrent}
-                onSaveAsCurrent={onSaveAsCurrent}
-                onLoadWorkout={onLoadWorkout}
-                onRenameWorkout={onRenameWorkout}
-                onDeleteWorkout={onDeleteWorkout}
-                onExportWorkouts={onExportWorkouts}
-                onImportWorkouts={vi.fn()}
-                importSummary={null}
-                clearImportSummary={vi.fn()}
-            />,
-        );
+const baseProps = {
+    currentTheme: 'theme-default',
+    setTheme: vi.fn(),
+    setShowSettings: vi.fn(),
+    onOpenProtocolIntel: vi.fn(),
+    showSettings: false,
+    isCollapsed: false,
+    toggleSidebar: vi.fn(),
+    appPhase: 'setup' as const,
+    savedWorkouts: [baseWorkout],
+    onSaveCurrent: vi.fn(),
+    onSaveAsCurrent: vi.fn(),
+    onLoadWorkout: vi.fn(),
+    onRenameWorkout: vi.fn(),
+    onDeleteWorkout: vi.fn(),
+    onExportWorkouts: vi.fn(),
+    onImportWorkouts: vi.fn(),
+    importSummary: null,
+    clearImportSummary: vi.fn(),
+    savedSessions: [baseSession],
+    onCreateSession: vi.fn(),
+    onLoadSession: vi.fn(),
+    onDuplicateSession: vi.fn(),
+    onRenameSession: vi.fn(),
+    onDeleteSession: vi.fn(),
+};
+
+describe('Sidebar', () => {
+    it('renders saved workouts and saved sessions and triggers actions', () => {
+        render(<Sidebar {...baseProps} />);
 
         expect(screen.getByText('Saved Workouts')).toBeInTheDocument();
+        expect(screen.getByText('Saved Sessions')).toBeInTheDocument();
         expect(screen.getByText('Push Day')).toBeInTheDocument();
+        expect(screen.getByText('Push Session')).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
         fireEvent.click(screen.getByRole('button', { name: /^save as$/i }));
         fireEvent.click(screen.getByRole('button', { name: /export/i }));
 
-        const loadButton = screen.getByTitle('Load');
-        const renameButton = screen.getByTitle('Rename');
-        const deleteButton = screen.getByTitle('Delete');
+        fireEvent.click(screen.getByTitle('Load'));
+        fireEvent.click(screen.getByTitle('Rename'));
+        fireEvent.click(screen.getByTitle('Delete'));
 
-        fireEvent.click(loadButton);
-        fireEvent.click(renameButton);
-        fireEvent.click(deleteButton);
-
-        expect(onSaveCurrent).toHaveBeenCalled();
-        expect(onSaveAsCurrent).toHaveBeenCalled();
-        expect(onExportWorkouts).toHaveBeenCalled();
-        expect(onLoadWorkout).toHaveBeenCalledWith('w-1');
-        expect(onRenameWorkout).toHaveBeenCalledWith('w-1');
-        expect(onDeleteWorkout).toHaveBeenCalledWith('w-1');
+        expect(baseProps.onSaveCurrent).toHaveBeenCalled();
+        expect(baseProps.onSaveAsCurrent).toHaveBeenCalled();
+        expect(baseProps.onExportWorkouts).toHaveBeenCalled();
+        expect(baseProps.onLoadWorkout).toHaveBeenCalledWith('w-1');
+        expect(baseProps.onRenameWorkout).toHaveBeenCalledWith('w-1');
+        expect(baseProps.onDeleteWorkout).toHaveBeenCalledWith('w-1');
     });
 
     it('disables setup-only actions during timer mode and handles file import', async () => {
@@ -78,24 +86,11 @@ describe('Sidebar', () => {
 
         render(
             <Sidebar
-                currentTheme="theme-default"
-                setTheme={vi.fn()}
-                setShowSettings={vi.fn()}
-                onOpenProtocolIntel={vi.fn()}
-                showSettings={false}
-                isCollapsed={false}
-                toggleSidebar={vi.fn()}
+                {...baseProps}
                 appPhase="timer"
-                savedWorkouts={[baseWorkout]}
-                onSaveCurrent={vi.fn()}
-                onSaveAsCurrent={vi.fn()}
-                onLoadWorkout={vi.fn()}
-                onRenameWorkout={vi.fn()}
-                onDeleteWorkout={vi.fn()}
-                onExportWorkouts={vi.fn()}
                 onImportWorkouts={onImportWorkouts}
                 importSummary={{ imported: 1, renamed: 0, skipped: 0, errors: [] }}
-                clearImportSummary={vi.fn()}
+                savedSessions={[]}
             />,
         );
 
@@ -117,35 +112,18 @@ describe('Sidebar', () => {
         expect(screen.getByText(/Imported 1/i)).toBeInTheDocument();
     });
 
-    it('renders collapsed mode and handles invalid import payload', async () => {
-        const onImportWorkouts = vi.fn();
-
+    it('renders collapsed mode', () => {
         render(
             <Sidebar
-                currentTheme="theme-default"
-                setTheme={vi.fn()}
-                setShowSettings={vi.fn()}
-                onOpenProtocolIntel={vi.fn()}
-                showSettings={false}
-                isCollapsed={true}
-                toggleSidebar={vi.fn()}
-                appPhase="setup"
+                {...baseProps}
+                isCollapsed
                 savedWorkouts={[]}
-                onSaveCurrent={vi.fn()}
-                onSaveAsCurrent={vi.fn()}
-                onLoadWorkout={vi.fn()}
-                onRenameWorkout={vi.fn()}
-                onDeleteWorkout={vi.fn()}
-                onExportWorkouts={vi.fn()}
-                onImportWorkouts={onImportWorkouts}
-                importSummary={null}
-                clearImportSummary={vi.fn()}
+                savedSessions={[]}
             />,
         );
 
         expect(screen.queryByText('Saved Workouts')).not.toBeInTheDocument();
-        const fileInput = document.querySelector('input[type="file"]');
-        expect(fileInput).toBeNull();
+        expect(screen.queryByText('Saved Sessions')).not.toBeInTheDocument();
+        expect(document.querySelector('input[type="file"]')).toBeNull();
     });
 });
-

@@ -7,6 +7,7 @@ import Sidebar from '@/components/Sidebar';
 import SettingsPanel from '@/components/SettingsPanel';
 import ProtocolIntelModal from '@/components/ProtocolIntelModal';
 import ConcentricTimer from '@/components/ConcentricTimer';
+import SessionBuilder from '@/components/SessionBuilder';
 
 import {
     Play,
@@ -37,7 +38,8 @@ export default function App() {
     const {
         settings,
         sets, reps, seconds, rest, myoReps, myoWorkSecs, setWorkoutConfig,
-        savedWorkouts, selectedSavedWorkoutId, lastImportSummary,
+        savedWorkouts, savedSessions, selectedSavedWorkoutId, lastImportSummary,
+        activeSessionId, activeSessionNodeIndex, sessionStatus, isRunningSession, sessionNodeRuntimeType, completeSessionNode,
         appPhase, timerStatus, isTimerRunning, setIsTimerRunning,
         currentSet, currentRep, isMainRep, isWorking,
         timeLeft,
@@ -45,6 +47,8 @@ export default function App() {
         lastTickSecond, setLastTickSecond,
         startWorkout, resetWorkout, advanceCycle, updateTimerBaselines,
         saveCurrentWorkout, saveCurrentWorkoutAs, loadWorkout, renameWorkout, deleteWorkout, exportSavedWorkouts, importSavedWorkouts, clearImportSummary,
+        createSession, loadSessionForEditing, duplicateSession, renameSession, deleteSession,
+        setupMode, setSetupMode,
         showSettings, setShowSettings, setSettings,
         isSidebarCollapsed, setIsSidebarCollapsed,
         theme, setTheme
@@ -58,6 +62,11 @@ export default function App() {
     const loadedWorkout = selectedSavedWorkoutId
         ? savedWorkouts.find((workout) => workout.id === selectedSavedWorkoutId) ?? null
         : null;
+    const activeSession = activeSessionId
+        ? savedSessions.find((session) => session.id === activeSessionId) ?? null
+        : null;
+    const activeSessionNode = activeSession?.nodes[activeSessionNodeIndex] ?? null;
+    const isSessionSetup = appPhase === 'setup' && setupMode === 'session';
 
     // Floating Window Refs
     const pipCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -97,12 +106,22 @@ export default function App() {
                 // Phase end
                 workerRef.current.postMessage({ action: 'stop' });
                 baseSetElapsedTime.current = setElapsedTime;
-                advanceCycle();
+                if (isRunningSession && sessionNodeRuntimeType === 'rest') {
+                    completeSessionNode();
+                } else {
+                    advanceCycle();
+                }
             }
         } else {
             workerRef.current.postMessage({ action: 'stop' });
         }
-    }, [isTimerRunning, timeLeft <= 0.001, timerStatus, advanceCycle, settings.smoothAnimation]);
+    }, [isTimerRunning, timeLeft <= 0.001, timerStatus, advanceCycle, completeSessionNode, isRunningSession, sessionNodeRuntimeType, settings.smoothAnimation, setElapsedTime]);
+
+    useEffect(() => {
+        if (isRunningSession && sessionNodeRuntimeType === 'workout' && sessionStatus === 'running' && timerStatus === 'Finished') {
+            completeSessionNode();
+        }
+    }, [completeSessionNode, isRunningSession, sessionNodeRuntimeType, sessionStatus, timerStatus]);
 
     // Re-sync base baselines on phase change
     useEffect(() => {
@@ -260,6 +279,49 @@ export default function App() {
         importSavedWorkouts(payload);
     };
 
+    const handleCreateSession = () => {
+        const name = window.prompt('Session name:', 'New Session');
+        if (!name) return;
+        const result = createSession(name);
+        if (!result.ok) {
+            window.alert(result.error ?? 'Could not create session.');
+        }
+    };
+
+    const handleLoadSession = (id: string) => {
+        const result = loadSessionForEditing(id);
+        if (!result.ok) {
+            window.alert(result.error ?? 'Could not load session.');
+        }
+    };
+
+    const handleDuplicateSession = (id: string) => {
+        const session = savedSessions.find((entry) => entry.id === id);
+        const name = window.prompt('Duplicate session as:', `${session?.name ?? 'Session'} Copy`);
+        if (!name) return;
+        const result = duplicateSession(id, name);
+        if (!result.ok) {
+            window.alert(result.error ?? 'Could not duplicate session.');
+        }
+    };
+
+    const handleRenameSession = (id: string) => {
+        const session = savedSessions.find((entry) => entry.id === id);
+        const name = window.prompt('Rename session:', session?.name ?? '');
+        if (name === null) return;
+        const result = renameSession(id, name);
+        if (!result.ok) {
+            window.alert(result.error ?? 'Could not rename session.');
+        }
+    };
+
+    const handleDeleteSession = (id: string) => {
+        const session = savedSessions.find((entry) => entry.id === id);
+        const confirmed = window.confirm(`Delete "${session?.name ?? 'this session'}"?`);
+        if (!confirmed) return;
+        deleteSession(id);
+    };
+
     return (
         <div className={cn("min-h-screen bg-background text-foreground flex transition-colors duration-500 font-sans selection:bg-primary/30", theme)}>
             <Sidebar
@@ -281,6 +343,12 @@ export default function App() {
                 onImportWorkouts={handleImportWorkouts}
                 importSummary={lastImportSummary}
                 clearImportSummary={clearImportSummary}
+                savedSessions={savedSessions}
+                onCreateSession={handleCreateSession}
+                onLoadSession={handleLoadSession}
+                onDuplicateSession={handleDuplicateSession}
+                onRenameSession={handleRenameSession}
+                onDeleteSession={handleDeleteSession}
             />
 
             <SettingsPanel isOpen={showSettings} onClose={() => setShowSettings(false)} />
@@ -298,12 +366,32 @@ export default function App() {
 
                 <div className="w-full max-w-4xl z-10 space-y-12 flex flex-col items-center">
                     {appPhase === 'setup' ? (
-                        <div className="w-full space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+                        isSessionSetup ? (
+                            <SessionBuilder />
+                        ) : (
+                            <div className="w-full space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
                             <div className="text-center space-y-2">
                                 <h1 className="text-6xl font-black italic tracking-tighter text-transparent bg-clip-text bg-gradient-to-br from-foreground to-foreground/50">
                                     SYSTEM SETUP
                                 </h1>
                                 <p className="text-muted-foreground font-bold uppercase tracking-[0.3em] text-xs">Configure Hypertrophy Parameters</p>
+                            </div>
+
+                            <div className="flex items-center justify-center gap-3">
+                                <Button
+                                    variant="default"
+                                    onClick={() => setSetupMode('workout')}
+                                    className="rounded-full"
+                                >
+                                    Workout Setup
+                                </Button>
+                                <Button
+                                    variant="secondary"
+                                    onClick={() => setSetupMode('session')}
+                                    className="rounded-full"
+                                >
+                                    Session Builder
+                                </Button>
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -393,7 +481,8 @@ export default function App() {
                                     </div>
                                 </CardContent>
                             </Card>
-                        </div>
+                            </div>
+                        )
                     ) : (
                         <div className="w-full flex flex-col items-center space-y-12 animate-in fade-in zoom-in-95 duration-500">
                             {settings.fullScreenMode && (
@@ -411,12 +500,22 @@ export default function App() {
 
                             <div className="text-center space-y-4">
                                 <div className="flex flex-wrap items-center justify-center gap-3">
+                                    {isRunningSession && activeSession && (
+                                        <div className="px-4 py-1.5 rounded-full bg-primary/20 border border-primary/30 text-primary text-xs font-black italic tracking-widest">
+                                            {activeSession.name}
+                                        </div>
+                                    )}
                                     <div className="px-4 py-1.5 rounded-full bg-primary/20 border border-primary/30 text-primary text-xs font-black italic tracking-widest">
                                         SET {currentSet} / {sets}
                                     </div>
                                     <div className="px-4 py-1.5 rounded-full bg-muted border border-border text-muted-foreground text-xs font-black italic tracking-widest">
                                         {isMainRep ? 'ACTIVATION' : 'MYO REPS'}
                                     </div>
+                                    {isRunningSession && activeSessionNode && (
+                                        <div className="px-4 py-1.5 rounded-full bg-muted border border-border text-muted-foreground text-xs font-black italic tracking-widest">
+                                            NODE {activeSessionNodeIndex + 1} {activeSessionNode.type === 'rest' ? 'REST' : 'WORKOUT'}
+                                        </div>
+                                    )}
                                 </div>
                                 <h2 className="text-5xl font-black italic tracking-tighter text-foreground uppercase drop-shadow-sm">
                                     {timerStatus}
@@ -434,7 +533,11 @@ export default function App() {
                                 innerValue={timeLeft}
                                 innerMax={timerStatus === 'Preparing' ? settings.prepTime : (isMainRep ? parseInt(seconds || '0') : parseInt(myoWorkSecs || '0'))}
                                 textMain={formatTime(Math.ceil(timeLeft))}
-                                textSub={timerStatus === 'Preparing' ? "Get Ready" : (!isWorking ? "Rest Period" : (timerStatus === 'Finished' ? "Protocol Clear" : `Rep ${currentRep}`))}
+                                textSub={timerStatus === 'Preparing'
+                                    ? "Get Ready"
+                                    : (isRunningSession && sessionNodeRuntimeType === 'rest'
+                                        ? (activeSessionNode?.name ?? 'Session Rest')
+                                        : (!isWorking ? "Rest Period" : (timerStatus === 'Finished' ? "Protocol Clear" : `Rep ${currentRep}`)))}
                                 isFinished={timerStatus === 'Finished'}
                                 isPreparing={timerStatus === 'Preparing'}
                             />
