@@ -21,6 +21,7 @@ interface SidebarProps {
     currentTheme: string;
     setTheme: (id: string) => void;
     setShowSettings: (show: boolean) => void;
+    onOpenProtocolIntel: () => void;
     showSettings: boolean;
     isCollapsed: boolean;
     toggleSidebar: () => void;
@@ -41,6 +42,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     currentTheme,
     setTheme,
     setShowSettings,
+    onOpenProtocolIntel,
     showSettings,
     isCollapsed,
     toggleSidebar,
@@ -147,6 +149,20 @@ const Sidebar: React.FC<SidebarProps> = ({
                                     </button>
                                 ))}
                             </div>
+                        </section>
+
+                        <section className="px-2">
+                            <Button
+                                type="button"
+                                variant="link"
+                                className="h-auto p-0 text-left text-xs font-black uppercase tracking-[0.24em]"
+                                onClick={onOpenProtocolIntel}
+                            >
+                                Protocol Intel
+                            </Button>
+                            <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground/70 uppercase tracking-tight">
+                                What myo-reps are and how this timer interprets them.
+                            </p>
                         </section>
 
                         <section className="border border-border/50 rounded-xl p-3 space-y-3">

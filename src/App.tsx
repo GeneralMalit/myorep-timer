@@ -1,10 +1,11 @@
-﻿import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
 import { audioEngine } from '@/utils/audioEngine';
 import TimerWorker from '@/utils/timerWorker?worker&inline';
 
 import Sidebar from '@/components/Sidebar';
 import SettingsPanel from '@/components/SettingsPanel';
+import ProtocolIntelModal from '@/components/ProtocolIntelModal';
 import ConcentricTimer from '@/components/ConcentricTimer';
 
 import {
@@ -14,12 +15,14 @@ import {
     ChevronRight,
     Zap,
     Activity,
-    Maximize2
+    Maximize2,
+    Volume2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import { APP_VERSION } from '@/constants/version';
 import { normalizeSetsInput } from '@/utils/savedWorkouts';
@@ -42,10 +45,11 @@ export default function App() {
         lastTickSecond, setLastTickSecond,
         startWorkout, resetWorkout, advanceCycle, updateTimerBaselines,
         saveCurrentWorkout, saveCurrentWorkoutAs, loadWorkout, renameWorkout, deleteWorkout, exportSavedWorkouts, importSavedWorkouts, clearImportSummary,
-        showSettings, setShowSettings,
+        showSettings, setShowSettings, setSettings,
         isSidebarCollapsed, setIsSidebarCollapsed,
         theme, setTheme
     } = useWorkoutStore();
+    const [showProtocolIntel, setShowProtocolIntel] = useState(false);
     const isSingleCycle = parseInt(sets, 10) === 1;
 
     const workerRef = useRef<Worker | null>(null);
@@ -262,6 +266,7 @@ export default function App() {
                 currentTheme={theme}
                 setTheme={setTheme}
                 setShowSettings={setShowSettings}
+                onOpenProtocolIntel={() => setShowProtocolIntel(true)}
                 showSettings={showSettings}
                 isCollapsed={isSidebarCollapsed}
                 toggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
@@ -279,6 +284,7 @@ export default function App() {
             />
 
             <SettingsPanel isOpen={showSettings} onClose={() => setShowSettings(false)} />
+            <ProtocolIntelModal isOpen={showProtocolIntel} onClose={() => setShowProtocolIntel(false)} />
 
             <main className={cn(
                 "flex-1 transition-all duration-300 flex flex-col items-center justify-center p-6 relative overflow-hidden",
@@ -339,6 +345,33 @@ export default function App() {
                                     </div>
                                 ))}
                             </div>
+
+                            <Card className="bg-accent/20 border-border/50 rounded-3xl overflow-hidden">
+                                <CardContent className="p-5 flex items-center justify-between gap-4">
+                                    <div className="space-y-1">
+                                        <div className="flex items-center gap-2">
+                                            <Volume2 size={16} className="text-primary" />
+                                            <p className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground">
+                                                Voice Guidance
+                                            </p>
+                                        </div>
+                                        <p className="text-xs leading-relaxed text-muted-foreground font-medium">
+                                            Toggle spoken countdowns and rep calls without opening the right settings panel.
+                                        </p>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <Label htmlFor="setup-voice-guidance" className="text-xs font-black uppercase tracking-widest">
+                                            Voice Guidance
+                                        </Label>
+                                        <Switch
+                                            id="setup-voice-guidance"
+                                            checked={settings.ttsEnabled}
+                                            onCheckedChange={(checked) => setSettings({ ttsEnabled: checked })}
+                                            aria-label="Voice Guidance"
+                                        />
+                                    </div>
+                                </CardContent>
+                            </Card>
 
                             <Button
                                 onClick={() => { audioEngine.init(); startWorkout(); }}
@@ -451,4 +484,3 @@ export default function App() {
         </div>
     );
 }
-

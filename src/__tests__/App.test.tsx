@@ -82,6 +82,23 @@ describe('App', () => {
         expect(screen.getByText(/MYOREP v9.9.9-test/i)).toBeInTheDocument();
     });
 
+    it('lets users toggle voice guidance and open protocol intel from setup', () => {
+        render(<App />);
+
+        const voiceToggle = screen.getByRole('switch', { name: /voice guidance/i });
+        expect(voiceToggle).toBeChecked();
+
+        fireEvent.click(voiceToggle);
+        expect(useWorkoutStore.getState().settings.ttsEnabled).toBe(false);
+
+        fireEvent.click(screen.getByRole('button', { name: /protocol intel/i }));
+        expect(screen.getByRole('dialog', { name: /protocol intel/i })).toBeInTheDocument();
+        expect(screen.getByText(/what myo-reps actually are/i)).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: /close protocol intel/i }));
+        expect(screen.queryByRole('dialog', { name: /protocol intel/i })).not.toBeInTheDocument();
+    });
+
     it('starts workout when valid config is entered', () => {
         render(<App />);
 
@@ -121,6 +138,17 @@ describe('App', () => {
         expect(screen.getByText(/Finished/i)).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /new session/i })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /terminate/i })).toBeInTheDocument();
+    });
+
+    it('opens and closes the protocol intel modal from the sidebar link', () => {
+        render(<App />);
+
+        fireEvent.click(screen.getByRole('button', { name: /protocol intel/i }));
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
+        expect(screen.getByText(/what myo-reps actually are/i)).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: /close protocol intel/i }));
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
 
     it('disables cluster inputs for single-cycle setup and supports save workflow errors', () => {
