@@ -107,9 +107,11 @@ const SessionBuilder = () => {
     };
 
     const insertAfterNode = (afterNodeId: string | null, nodeType: 'workout' | 'rest') => {
+        const workoutCount = editingSessionDraft?.nodes.filter((node) => node.type === 'workout').length ?? 0;
+        const restCount = editingSessionDraft?.nodes.filter((node) => node.type === 'rest').length ?? 0;
         const node = nodeType === 'workout'
-            ? buildWorkoutNode('Workout Node')
-            : buildRestNode('Rest Node', '10');
+            ? buildWorkoutNode(`Workout ${workoutCount + 1}`)
+            : buildRestNode(`Rest ${restCount + 1}`, '10');
 
         insertSessionNodeAfter(afterNodeId, node);
     };
