@@ -357,8 +357,9 @@ export default function App() {
             <ProtocolIntelModal isOpen={showProtocolIntel} onClose={() => setShowProtocolIntel(false)} />
 
             <main className={cn(
-                "flex-1 transition-all duration-300 flex flex-col items-center justify-center p-6 relative overflow-hidden",
-                isSidebarCollapsed ? "ml-16" : "ml-64"
+                "flex-1 transition-all duration-300 relative overflow-hidden",
+                isSidebarCollapsed ? "ml-16" : "ml-64",
+                isSessionSetup ? "p-0" : "flex flex-col items-center justify-center p-6"
             )}>
                 {/* Ambient Glow */}
                 <div
@@ -366,11 +367,13 @@ export default function App() {
                     style={{ backgroundColor: timerStatus === 'Preparing' || !isWorking ? settings.restColor : settings.activeColor }}
                 />
 
-                <div className="w-full max-w-4xl z-10 space-y-12 flex flex-col items-center">
-                    {appPhase === 'setup' ? (
-                        isSessionSetup ? (
+                {appPhase === 'setup' ? (
+                    isSessionSetup ? (
+                        <div className="relative z-10 flex h-full min-h-0 w-full flex-col p-4 sm:p-6 lg:p-8">
                             <SessionBuilder />
-                        ) : (
+                        </div>
+                    ) : (
+                        <div className="w-full max-w-4xl z-10 space-y-12 flex flex-col items-center">
                             <div className="w-full space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
                             <div className="text-center space-y-2">
                                 <h1 className="text-6xl font-black italic tracking-tighter text-transparent bg-clip-text bg-gradient-to-br from-foreground to-foreground/50">
@@ -471,8 +474,10 @@ export default function App() {
                                 </CardContent>
                             </Card>
                             </div>
-                        )
-                    ) : (
+                        </div>
+                    )
+                ) : (
+                    <div className="w-full flex-1 min-h-0 z-10 flex flex-col items-center space-y-12 animate-in fade-in zoom-in-95 duration-500">
                         <div className="w-full flex flex-col items-center space-y-12 animate-in fade-in zoom-in-95 duration-500">
                             {settings.fullScreenMode && (
                                 <div
@@ -557,17 +562,19 @@ export default function App() {
                                 </Button>
                             )}
                         </div>
-                    )}
-                </div>
+                    </div>
+                )}
 
-                <footer className="mt-20 py-8 border-t border-border/50 w-full text-center space-y-2 opacity-30 group hover:opacity-100 transition-opacity">
-                    <div className="text-[10px] font-black uppercase tracking-[0.5em] text-muted-foreground">
-                        MYOREP v{APP_VERSION}
-                    </div>
-                    <div className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/60">
-                        Engineered by General Malit
-                    </div>
-                </footer>
+                {!isSessionSetup && (
+                    <footer className="mt-20 py-8 border-t border-border/50 w-full text-center space-y-2 opacity-30 group hover:opacity-100 transition-opacity">
+                        <div className="text-[10px] font-black uppercase tracking-[0.5em] text-muted-foreground">
+                            MYOREP v{APP_VERSION}
+                        </div>
+                        <div className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/60">
+                            Engineered by General Malit
+                        </div>
+                    </footer>
+                )}
 
                 {/* PiP Canvas */}
                 <div style={{ display: 'none' }}>
