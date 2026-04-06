@@ -1,3 +1,10 @@
+# [3.4.0](https://github.com/GeneralMalit/myorep-timer/compare/v3.3.1...v3.4.0) (2026-04-06)
+
+
+### Features
+
+* **timer:** add setup voice toggle and protocol intel modal ([49375cb](https://github.com/GeneralMalit/myorep-timer/commit/49375cb0276be1940391d8b8a75d6930ca6bb216))
+
 ## [3.3.1](https://github.com/GeneralMalit/myorep-timer/compare/v3.3.0...v3.3.1) (2026-04-04)
 
 
