@@ -131,20 +131,24 @@ describe('useWorkoutStore edge cases', () => {
         expect(useWorkoutStore.getState().savedWorkouts[0].name).toBe('Alpha Prime');
 
         expect(store.saveCurrentWorkoutAs('Alpha Prime')).toMatchObject({ ok: false, error: 'Workout name already exists.' });
+        expect(store.saveWorkoutFromConfig('Beta Prime', validConfig, 'w-2')).toMatchObject({ ok: true, id: 'w-2' });
+        expect(useWorkoutStore.getState().savedWorkouts.find((workout) => workout.id === 'w-2')?.name).toBe('Beta Prime');
+        expect(store.saveWorkoutFromConfig('Gamma Prime', validConfig)).toMatchObject({ ok: true });
+        expect(useWorkoutStore.getState().savedWorkouts).toHaveLength(3);
         expect(store.loadWorkout('missing')).toMatchObject({ ok: false, error: 'Workout not found.' });
         expect(store.renameWorkout('missing', '')).toMatchObject({ ok: false, error: 'Workout name is required.' });
         expect(store.renameWorkout('w-2', 'Alpha Prime')).toMatchObject({ ok: false, error: 'Workout name already exists.' });
         expect(store.renameWorkout('w-2', 'Beta Prime')).toMatchObject({ ok: true });
 
         act(() => {
-            store.deleteWorkout('w-1');
+            store.deleteWorkout('w-2');
         });
         expect(useWorkoutStore.getState().selectedSavedWorkoutId).toBeNull();
 
         act(() => {
-            store.recordWorkoutUsed('w-2');
+            store.recordWorkoutUsed('w-1');
         });
-        expect(useWorkoutStore.getState().savedWorkouts.find((workout) => workout.id === 'w-2')?.timesUsed).toBe(1);
+        expect(useWorkoutStore.getState().savedWorkouts.find((workout) => workout.id === 'w-1')?.timesUsed).toBe(2);
     });
 
     it('covers session draft and node editor validation branches', () => {

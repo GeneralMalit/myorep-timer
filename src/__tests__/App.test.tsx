@@ -289,8 +289,9 @@ describe('App', () => {
 
         fireEvent.click(screen.getByRole('button', { name: /edit workout node/i }));
         expect(screen.getByRole('dialog')).toBeInTheDocument();
-        expect(screen.getByText(/Import Saved Workout/i)).toBeInTheDocument();
+        expect(screen.getByText(/Import or Save Workout/i)).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /import workout/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /save workout/i })).toBeInTheDocument();
     });
 
     it('uses the session rest duration for rest-node outer max display', () => {

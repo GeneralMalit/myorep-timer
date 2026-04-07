@@ -147,6 +147,7 @@ interface WorkoutState {
     setWorkoutConfig: (config: Partial<Pick<WorkoutState, 'sets' | 'reps' | 'seconds' | 'rest' | 'myoReps' | 'myoWorkSecs'>>) => void;
     saveCurrentWorkout: (name: string) => { ok: boolean; error?: string; id?: string };
     saveCurrentWorkoutAs: (name: string) => { ok: boolean; error?: string; id?: string };
+    saveWorkoutFromConfig: (name: string, config: SavedWorkoutConfig, targetWorkoutId?: string | null) => { ok: boolean; error?: string; id?: string };
     loadWorkout: (id: string) => { ok: boolean; error?: string };
     renameWorkout: (id: string, name: string) => { ok: boolean; error?: string };
     deleteWorkout: (id: string) => void;
@@ -286,26 +287,30 @@ export const useWorkoutStore = create<WorkoutState>()(
                     },
                 };
             }),
-            saveCurrentWorkout: (name) => {
+            saveWorkoutFromConfig: (name, config, targetWorkoutId = null) => {
                 const normalizedName = name.trim();
                 if (!normalizedName) {
                     return { ok: false, error: 'Workout name is required.' };
                 }
 
-                const state = get();
-                const config = sanitizeSavedWorkoutConfig(toWorkoutConfig(state));
-                if (!isValidWorkoutConfig(config)) {
+                const sanitizedConfig = sanitizeSavedWorkoutConfig(config);
+                if (!isValidWorkoutConfig(sanitizedConfig)) {
                     return { ok: false, error: 'Workout config is invalid.' };
                 }
 
+                const state = get();
                 const nowIso = new Date().toISOString();
-                const selectedWorkout = state.selectedSavedWorkoutId
-                    ? state.savedWorkouts.find((workout) => workout.id === state.selectedSavedWorkoutId)
+                const targetWorkout = targetWorkoutId
+                    ? state.savedWorkouts.find((workout) => workout.id === targetWorkoutId)
                     : null;
 
-                if (selectedWorkout) {
+                if (targetWorkoutId && !targetWorkout) {
+                    return { ok: false, error: 'Workout not found.' };
+                }
+
+                if (targetWorkout) {
                     const duplicateName = state.savedWorkouts.some((workout) => (
-                        workout.id !== selectedWorkout.id
+                        workout.id !== targetWorkout.id
                         && workout.name.toLowerCase() === normalizedName.toLowerCase()
                     ));
                     if (duplicateName) {
@@ -314,14 +319,19 @@ export const useWorkoutStore = create<WorkoutState>()(
 
                     set({
                         savedWorkouts: state.savedWorkouts.map((workout) => (
-                            workout.id === selectedWorkout.id
-                                ? { ...workout, name: normalizedName, ...config, updatedAt: nowIso }
+                            workout.id === targetWorkout.id
+                                ? {
+                                    ...workout,
+                                    name: normalizedName,
+                                    ...sanitizedConfig,
+                                    updatedAt: nowIso,
+                                }
                                 : workout
                         )),
-                        selectedSavedWorkoutId: selectedWorkout.id,
+                        selectedSavedWorkoutId: targetWorkout.id,
                     });
 
-                    return { ok: true, id: selectedWorkout.id };
+                    return { ok: true, id: targetWorkout.id };
                 }
 
                 const duplicateName = state.savedWorkouts.some((workout) => workout.name.toLowerCase() === normalizedName.toLowerCase());
@@ -329,37 +339,20 @@ export const useWorkoutStore = create<WorkoutState>()(
                     return { ok: false, error: 'Workout name already exists.' };
                 }
 
-                const newWorkout = createSavedWorkout(normalizedName, config, nowIso);
+                const newWorkout = createSavedWorkout(normalizedName, sanitizedConfig, nowIso);
                 set({
                     savedWorkouts: [...state.savedWorkouts, newWorkout],
                 });
 
                 return { ok: true, id: newWorkout.id };
             },
-            saveCurrentWorkoutAs: (name) => {
-                const normalizedName = name.trim();
-                if (!normalizedName) {
-                    return { ok: false, error: 'Workout name is required.' };
-                }
-
+            saveCurrentWorkout: (name) => {
                 const state = get();
-                const config = sanitizeSavedWorkoutConfig(toWorkoutConfig(state));
-                if (!isValidWorkoutConfig(config)) {
-                    return { ok: false, error: 'Workout config is invalid.' };
-                }
-
-                const duplicateName = state.savedWorkouts.some((workout) => workout.name.toLowerCase() === normalizedName.toLowerCase());
-                if (duplicateName) {
-                    return { ok: false, error: 'Workout name already exists.' };
-                }
-
-                const nowIso = new Date().toISOString();
-                const newWorkout = createSavedWorkout(normalizedName, config, nowIso);
-                set({
-                    savedWorkouts: [...state.savedWorkouts, newWorkout],
-                });
-
-                return { ok: true, id: newWorkout.id };
+                return state.saveWorkoutFromConfig(name, toWorkoutConfig(state), state.selectedSavedWorkoutId);
+            },
+            saveCurrentWorkoutAs: (name) => {
+                const state = get();
+                return state.saveWorkoutFromConfig(name, toWorkoutConfig(state), null);
             },
             loadWorkout: (id) => {
                 const workout = get().savedWorkouts.find((item) => item.id === id);

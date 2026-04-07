@@ -138,6 +138,22 @@ describe('SessionBuilder', () => {
             expect(importedWorkoutNode.sourceWorkoutId).toBe(baseWorkout.id);
         }
 
+        const workoutTargetSelect = within(workoutDialog).getByLabelText(/workout target/i) as HTMLSelectElement;
+        const workoutNameInput = within(workoutDialog).getByLabelText(/^name$/i);
+
+        fireEvent.change(workoutNameInput, { target: { value: 'Push Day Updated' } });
+        fireEvent.click(within(workoutDialog).getByRole('button', { name: /save workout/i }));
+
+        expect(useWorkoutStore.getState().savedWorkouts).toHaveLength(1);
+        expect(useWorkoutStore.getState().savedWorkouts[0].name).toBe('Push Day Updated');
+
+        fireEvent.change(workoutTargetSelect, { target: { value: '__new__' } });
+        fireEvent.change(workoutNameInput, { target: { value: 'Push Day Copy' } });
+        fireEvent.click(within(workoutDialog).getByRole('button', { name: /save workout/i }));
+
+        expect(useWorkoutStore.getState().savedWorkouts).toHaveLength(2);
+        expect(useWorkoutStore.getState().savedWorkouts[1].name).toBe('Push Day Copy');
+
         fireEvent.click(within(workoutDialog).getByRole('button', { name: /close node editor/i }));
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 

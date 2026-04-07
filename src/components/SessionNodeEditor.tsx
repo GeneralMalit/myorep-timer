@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { X, Activity, Square, Zap, Upload } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { X, Activity, Square, Zap, Upload, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -25,10 +25,12 @@ const SessionNodeEditor = () => {
         setEditingSessionNodeId,
         savedWorkouts,
         replaceWorkoutNodeWithSavedWorkout,
+        saveWorkoutFromConfig,
         updateWorkoutNode,
         updateRestNode,
     } = useWorkoutStore();
-    const [selectedWorkoutId, setSelectedWorkoutId] = useState('');
+    const [selectedWorkoutId, setSelectedWorkoutId] = useState('__new__');
+    const lastNodeIdRef = useRef<string | null>(null);
 
     const node = useMemo(() => {
         if (!editingSessionDraft || !editingSessionNodeId) {
@@ -40,11 +42,29 @@ const SessionNodeEditor = () => {
 
     useEffect(() => {
         if (!node || node.type !== 'workout') {
-            setSelectedWorkoutId('');
+            lastNodeIdRef.current = null;
+            setSelectedWorkoutId('__new__');
             return;
         }
 
-        setSelectedWorkoutId(node.sourceWorkoutId ?? savedWorkouts[0]?.id ?? '');
+        if (lastNodeIdRef.current !== node.id) {
+            lastNodeIdRef.current = node.id;
+            setSelectedWorkoutId(node.sourceWorkoutId ?? savedWorkouts[0]?.id ?? '__new__');
+            return;
+        }
+
+        setSelectedWorkoutId((current) => {
+            if (current === '__new__') {
+                return current;
+            }
+
+            const stillExists = savedWorkouts.some((workout) => workout.id === current);
+            if (stillExists) {
+                return current;
+            }
+
+            return node.sourceWorkoutId ?? savedWorkouts[0]?.id ?? '__new__';
+        });
     }, [node, savedWorkouts]);
 
     if (!node) {
@@ -58,11 +78,24 @@ const SessionNodeEditor = () => {
     const handleClose = () => setEditingSessionNodeId(null);
 
     const handleImportWorkout = () => {
-        if (!workoutNode || !selectedWorkoutId) {
+        if (!workoutNode || !selectedWorkoutId || selectedWorkoutId === '__new__') {
             return;
         }
 
         replaceWorkoutNodeWithSavedWorkout(workoutNode.id, selectedWorkoutId);
+    };
+
+    const handleSaveWorkout = () => {
+        if (!workoutNode) {
+            return;
+        }
+
+        const targetWorkoutId = selectedWorkoutId === '__new__' ? null : selectedWorkoutId;
+        const result = saveWorkoutFromConfig(workoutNode.name, workoutNode.config, targetWorkoutId);
+
+        if (!result.ok) {
+            window.alert(result.error ?? 'Could not save workout.');
+        }
     };
 
     return (
@@ -99,10 +132,11 @@ const SessionNodeEditor = () => {
                     <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
                         <div className="space-y-4">
                             <div className="space-y-2">
-                                <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                                <Label htmlFor="session-node-name" className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
                                     Name
                                 </Label>
                                 <Input
+                                    id="session-node-name"
                                     value={node.name}
                                     onChange={(event) => {
                                         if (workoutNode) {
@@ -165,26 +199,27 @@ const SessionNodeEditor = () => {
                                         <div className="flex items-center gap-2">
                                             <Upload size={14} className="text-primary" />
                                             <div className="text-[10px] font-black uppercase tracking-[0.22em] text-muted-foreground">
-                                                Import Saved Workout
+                                                Import or Save Workout
                                             </div>
                                         </div>
                                         <p className="text-xs text-muted-foreground">
-                                            Replace this node’s workout settings with one of your saved workouts.
+                                            Replace this node's workout settings, or save the edited node back into your workout library.
                                         </p>
                                     </div>
 
                                     <div className="space-y-2">
-                                        <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                                            Saved Workout
+                                        <Label htmlFor="workout-target-select" className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                                            Workout Target
                                         </Label>
                                         <select
+                                            id="workout-target-select"
                                             value={selectedWorkoutId}
                                             onChange={(event) => setSelectedWorkoutId(event.target.value)}
                                             className={cn(
                                                 'h-11 w-full rounded-2xl border border-border/50 bg-background px-3 text-sm outline-none',
                                             )}
                                         >
-                                            <option value="">Select workout...</option>
+                                            <option value="__new__">Save as new workout...</option>
                                             {savedWorkouts.map((workout) => (
                                                 <option key={workout.id} value={workout.id}>
                                                     {workout.name}
@@ -193,16 +228,28 @@ const SessionNodeEditor = () => {
                                         </select>
                                     </div>
 
-                                    <Button
-                                        type="button"
-                                        variant="secondary"
-                                        className="w-full gap-2 rounded-2xl font-black italic tracking-tighter"
-                                        onClick={handleImportWorkout}
-                                        disabled={!selectedWorkoutId}
-                                    >
-                                        <Upload size={14} />
-                                        Import Workout
-                                    </Button>
+                                    <div className="grid gap-2 sm:grid-cols-2">
+                                        <Button
+                                            type="button"
+                                            variant="secondary"
+                                            className="gap-2 rounded-2xl font-black italic tracking-tighter"
+                                            onClick={handleImportWorkout}
+                                            disabled={!selectedWorkoutId || selectedWorkoutId === '__new__'}
+                                        >
+                                            <Upload size={14} />
+                                            Import Workout
+                                        </Button>
+
+                                        <Button
+                                            type="button"
+                                            variant="secondary"
+                                            className="gap-2 rounded-2xl font-black italic tracking-tighter"
+                                            onClick={handleSaveWorkout}
+                                        >
+                                            <Save size={14} />
+                                            Save Workout
+                                        </Button>
+                                    </div>
                                 </div>
                             ) : (
                                 <div className="rounded-[20px] border border-border/50 bg-muted/20 p-4 text-sm text-muted-foreground">
