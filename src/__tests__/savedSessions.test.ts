@@ -208,4 +208,129 @@ describe('savedSessions utilities', () => {
         expect(new Set(importedIds).size).toBe(importedIds.length);
         expect(importedIds).not.toContain(existing.id);
     });
+
+    it('covers creation helpers and invalid session validation branches', () => {
+        expect(sanitizeRestNodeSeconds(undefined)).toBe('');
+        expect(sanitizeRestNodeSeconds(null)).toBe('');
+
+        const restWithNow = createRestSessionNode('Cooldown', '30', '2026-01-03T00:00:00.000Z');
+        expect(restWithNow.name).toBe('Cooldown');
+        expect(restWithNow.seconds).toBe('30');
+
+        const defaultRest = createRestSessionNode('45');
+        expect(defaultRest.name).toBe('Rest');
+        expect(defaultRest.seconds).toBe('45');
+
+        const workoutFromConfig = createWorkoutSessionNode(
+            {
+                sets: '2',
+                reps: '8',
+                seconds: '4',
+                rest: '20',
+                myoReps: '3',
+                myoWorkSecs: '2',
+            },
+            'Warmup',
+            'source-workout',
+        );
+        expect(workoutFromConfig.name).toBe('Warmup');
+        expect(workoutFromConfig.sourceWorkoutId).toBe('source-workout');
+
+        expect(isValidSavedSession({ name: '  ', nodes: [restWithNow] })).toBe(false);
+        expect(isValidSavedSession({ name: 'Session', nodes: [] })).toBe(false);
+        expect(isValidSavedSession({
+            name: 'Session',
+            nodes: [
+                {
+                    ...restWithNow,
+                    seconds: '',
+                },
+            ],
+        })).toBe(false);
+    });
+
+    it('handles malformed imports and duplicate names plus ids', () => {
+        const nowIso = '2026-01-01T00:00:00.000Z';
+
+        expect(mergeSavedSessionsFromImport([], null).summary.errors[0]).toContain('Invalid import payload');
+        expect(mergeSavedSessionsFromImport([], { schemaVersion: 2, sessions: [] }).summary.errors[0]).toContain('Unsupported schema version');
+        expect(mergeSavedSessionsFromImport([], { schemaVersion: 1, sessions: {} }).summary.errors[0]).toContain('Missing sessions array');
+
+        const existing = createSavedSession(
+            'Day One',
+            [
+                createWorkoutSessionNode(
+                    'Workout One',
+                    {
+                        sets: '2',
+                        reps: '10',
+                        seconds: '3',
+                        rest: '20',
+                        myoReps: '4',
+                        myoWorkSecs: '2',
+                    },
+                    nowIso,
+                ),
+            ],
+            nowIso,
+        );
+
+        const payload = {
+            schemaVersion: 1,
+            exportedAt: nowIso,
+            sessions: [
+                null,
+                {
+                    id: existing.id,
+                    name: 'Day One',
+                    nodes: [
+                        {
+                            id: 'invalid-rest',
+                            type: 'rest',
+                            name: 'Broken Rest',
+                            seconds: '0',
+                            createdAt: nowIso,
+                            updatedAt: nowIso,
+                        },
+                    ],
+                },
+                {
+                    id: existing.id,
+                    name: 'Day One',
+                    nodes: [
+                        {
+                            id: 'good-rest',
+                            type: 'rest',
+                            name: 'Recovery',
+                            seconds: '30',
+                            createdAt: nowIso,
+                            updatedAt: nowIso,
+                        },
+                    ],
+                },
+                {
+                    id: existing.id,
+                    name: 'Day One',
+                    nodes: [
+                        {
+                            id: 'good-rest-2',
+                            type: 'rest',
+                            name: 'Recovery Two',
+                            seconds: '45',
+                            createdAt: nowIso,
+                            updatedAt: nowIso,
+                        },
+                    ],
+                },
+            ],
+        };
+
+        const imported = mergeSavedSessionsFromImport([existing], payload);
+        expect(imported.summary.imported).toBe(2);
+        expect(imported.summary.renamed).toBe(2);
+        expect(imported.summary.skipped).toBe(2);
+        expect(imported.sessions).toHaveLength(3);
+        expect(new Set(imported.sessions.map((session) => session.id)).size).toBe(3);
+        expect(imported.sessions.some((session) => session.name.startsWith('Day One (Imported'))).toBe(true);
+    });
 });
