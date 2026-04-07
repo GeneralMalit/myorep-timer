@@ -1,3 +1,19 @@
+# [3.5.0](https://github.com/GeneralMalit/myorep-timer/compare/v3.4.0...v3.5.0) (2026-04-07)
+
+
+### Bug Fixes
+
+* label inserted session nodes ([ad2ecb3](https://github.com/GeneralMalit/myorep-timer/commit/ad2ecb3a66d9419690506aa14e4adaff60f78b4e))
+* **timer:** prevent worker restart loop ([064deaf](https://github.com/GeneralMalit/myorep-timer/commit/064deaf51e1be4ab955fbf0ba06f6da3a7e7cab3))
+
+
+### Features
+
+* add saved sessions workflow ([325ad04](https://github.com/GeneralMalit/myorep-timer/commit/325ad045a4055beac17777d6dd94e6e37a4e80e0))
+* **session:** fill builder with canvas ([2104ec9](https://github.com/GeneralMalit/myorep-timer/commit/2104ec947c303bd528b4fa0f8c7645319780671e))
+* **session:** simplify canvas and node editing ([6596b57](https://github.com/GeneralMalit/myorep-timer/commit/6596b57088b3eef46cef332e00adf58445effe8c))
+* **session:** simplify setup workspace and fix session bugs ([2e6723f](https://github.com/GeneralMalit/myorep-timer/commit/2e6723f93fa4ce3802e1946e41c500bbcd519367))
+
 # [3.4.0](https://github.com/GeneralMalit/myorep-timer/compare/v3.3.1...v3.4.0) (2026-04-06)
 
 

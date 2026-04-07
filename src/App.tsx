@@ -138,8 +138,8 @@ export default function App() {
     useEffect(() => {
         if (isTimerRunning && settings.metronomeEnabled && isWorking && timerStatus !== 'Preparing') {
             const currentSecond = Math.ceil(timeLeft);
-            if (currentSecond !== lastTickSecond && currentSecond >= 2) {
-                if (settings.ttsEnabled) {
+            if (currentSecond !== lastTickSecond && currentSecond >= 0) {
+                if (settings.ttsEnabled && currentSecond >= 2) {
                     audioEngine.speak(currentSecond);
                 }
                 if (settings.metronomeEnabled) {
