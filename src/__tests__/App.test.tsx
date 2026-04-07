@@ -345,7 +345,7 @@ describe('App', () => {
         expect(timerProps.outerMax).toBe(8);
     });
 
-    it('lets users toggle voice guidance and open protocol intel from setup', () => {
+    it('lets users toggle voice guidance and open myo-rep info from setup', () => {
         render(<App />);
 
         const voiceToggle = screen.getByRole('switch', { name: /voice guidance/i });
@@ -354,7 +354,7 @@ describe('App', () => {
         fireEvent.click(voiceToggle);
         expect(useWorkoutStore.getState().settings.ttsEnabled).toBe(false);
 
-        fireEvent.click(screen.getByRole('button', { name: /protocol intel/i }));
+        fireEvent.click(screen.getByRole('button', { name: /what are "myo-reps"\?/i }));
         expect(screen.getByRole('dialog', { name: /protocol intel/i })).toBeInTheDocument();
         expect(screen.getByText(/what myo-reps actually are/i)).toBeInTheDocument();
 
@@ -568,10 +568,10 @@ describe('App', () => {
         expect(screen.getByRole('button', { name: /terminate/i })).toBeInTheDocument();
     });
 
-    it('opens and closes the protocol intel modal from the sidebar link', () => {
+    it('opens and closes the myo-rep info modal from the sidebar link', () => {
         render(<App />);
 
-        fireEvent.click(screen.getByRole('button', { name: /protocol intel/i }));
+        fireEvent.click(screen.getByRole('button', { name: /what are "myo-reps"\?/i }));
         expect(screen.getByRole('dialog')).toBeInTheDocument();
         expect(screen.getByText(/what myo-reps actually are/i)).toBeInTheDocument();
 

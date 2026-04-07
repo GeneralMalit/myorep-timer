@@ -459,20 +459,6 @@ export default function App() {
                             >
                                 INITIALIZE PROTOCOL <ChevronRight className="group-hover:translate-x-1 transition-transform" />
                             </Button>
-
-                            <Card className="bg-primary/5 border-primary/20 rounded-3xl overflow-hidden">
-                                <CardContent className="p-6 flex items-start gap-4">
-                                    <div className="p-3 rounded-2xl bg-primary/20 text-primary">
-                                        <Zap size={24} />
-                                    </div>
-                                    <div className="space-y-1">
-                                        <h3 className="font-black italic text-sm">PROTOCOL INTEL</h3>
-                                        <p className="text-xs text-muted-foreground leading-relaxed font-medium uppercase tracking-tight">
-                                            Activation set (Phase 1) maximizes fiber recruitment through controlled tempo. Myo Reps (Phase 2+) keep recruitment peaked via high-frequency cluster sets.
-                                        </p>
-                                    </div>
-                                </CardContent>
-                            </Card>
                             </div>
                         </div>
                     )

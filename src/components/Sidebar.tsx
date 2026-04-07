@@ -171,7 +171,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                                 className="h-auto p-0 text-left text-xs font-black uppercase tracking-[0.24em]"
                                 onClick={onOpenProtocolIntel}
                             >
-                                Protocol Intel
+                                What are "Myo-Reps"?
                             </Button>
                             <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground/70 uppercase tracking-tight">
                                 What myo-reps are and how this timer interprets them.
