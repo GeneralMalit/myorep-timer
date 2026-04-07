@@ -111,6 +111,7 @@ describe('SessionBuilder', () => {
 
         expect(screen.getByText(/1 node in the chain/i)).toBeInTheDocument();
         expect(screen.getByText('Workout 1')).toBeInTheDocument();
+        expect(screen.getByText('10 @ 3s + (1 * 4 @ 2s)')).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: /^Save$/i }));
         expect(useWorkoutStore.getState().savedSessions).toHaveLength(1);
@@ -161,7 +162,8 @@ describe('SessionBuilder', () => {
 
         fireEvent.click(screen.getByRole('button', { name: /start/i }));
         expect(useWorkoutStore.getState().appPhase).toBe('timer');
-        expect(useWorkoutStore.getState().timerStatus).toBe('Preparing');
+        expect(useWorkoutStore.getState().timerStatus).toBe('Main Set');
+        expect(useWorkoutStore.getState().timeLeft).toBe(3);
         expect(useWorkoutStore.getState().isRunningSession).toBe(true);
         expect(alertSpy).not.toHaveBeenCalled();
     });

@@ -1,4 +1,4 @@
-import { GripVertical, Pencil, Trash2, Activity, Square, Zap } from 'lucide-react';
+import { GripVertical, Pencil, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import type { SessionNode } from '@/types/savedSessions';
@@ -26,8 +26,14 @@ const SessionNodeCard = ({
     onDragEnd,
 }: SessionNodeCardProps) => {
     const isWorkout = node.type === 'workout';
+    const workoutConfig = isWorkout ? node.config : null;
+    const workoutSets = Math.max(0, parseInt(workoutConfig?.sets ?? '0', 10));
+    const activationSummary = `${workoutConfig?.reps ?? '0'} @ ${workoutConfig?.seconds ?? '0'}s`;
+    const myoSets = Math.max(0, workoutSets - 1);
     const summary = isWorkout
-        ? `${node.config.sets} x ${node.config.reps} @ ${node.config.seconds}s`
+        ? (myoSets > 0
+            ? `${activationSummary} + (${myoSets} * ${workoutConfig?.myoReps ?? '0'} @ ${workoutConfig?.myoWorkSecs ?? '0'}s)`
+            : activationSummary)
         : `${node.seconds}s rest`;
 
     return (
@@ -41,14 +47,14 @@ const SessionNodeCard = ({
             onDragEnd={onDragEnd}
             onClick={onSelect}
             className={cn(
-                'h-[244px] w-[194px] cursor-grab select-none rounded-[18px] border-border/60 bg-card/90 shadow-sm transition-all duration-200 active:cursor-grabbing',
+                'h-[200px] w-[194px] cursor-grab select-none rounded-[18px] border-border/60 bg-card/90 shadow-sm transition-all duration-200 active:cursor-grabbing',
                 isActive && 'border-primary/70 ring-2 ring-primary/25',
                 isDragging && 'opacity-60 scale-[0.98]',
             )}
         >
-            <CardContent className="flex h-full flex-col gap-3 p-3">
+            <CardContent className="flex h-full flex-col gap-2 p-3">
                 <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1 space-y-1">
+                    <div className="min-w-0 flex-1 space-y-0.5">
                         <div className="flex items-center gap-2">
                             <span className="rounded-full border border-border/50 bg-muted px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.24em]">
                                 {isWorkout ? 'Workout' : 'Rest'}
@@ -62,7 +68,9 @@ const SessionNodeCard = ({
                         <div className="truncate text-sm font-black italic tracking-tight" title={node.name}>
                             {node.name}
                         </div>
-                        <div className="text-[10px] leading-tight text-muted-foreground">{summary}</div>
+                        <div className="truncate text-[10px] leading-tight text-muted-foreground" title={summary}>
+                            {summary}
+                        </div>
                     </div>
 
                     <div className="flex items-center gap-1 pt-0.5">
@@ -97,26 +105,6 @@ const SessionNodeCard = ({
                         <Trash2 size={12} />
                         Delete
                     </Button>
-                </div>
-
-                <div className="mt-auto space-y-2">
-                    {isWorkout ? (
-                        <div className="grid grid-cols-2 gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">
-                            <div className="flex items-center gap-2">
-                                <Activity size={11} className="text-primary" />
-                                <span>{node.config.rest || '0'}s rest</span>
-                            </div>
-                            <div className="flex items-center justify-end gap-2">
-                                <Zap size={11} className="text-primary" />
-                                <span>{node.config.myoWorkSecs || '0'}s myo</span>
-                            </div>
-                        </div>
-                    ) : (
-                        <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">
-                            <Square size={11} className="text-primary" />
-                            <span>Recovery node</span>
-                        </div>
-                    )}
                 </div>
             </CardContent>
         </Card>
