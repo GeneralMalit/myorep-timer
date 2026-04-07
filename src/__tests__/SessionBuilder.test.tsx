@@ -167,4 +167,47 @@ describe('SessionBuilder', () => {
         expect(useWorkoutStore.getState().isRunningSession).toBe(true);
         expect(alertSpy).not.toHaveBeenCalled();
     });
+
+    it('reorders nodes when dropping a dragged node onto a middle node', () => {
+        render(<SessionBuilder />);
+
+        fireEvent.click(screen.getByRole('button', { name: /^new$/i }));
+        fireEvent.click(screen.getByRole('button', { name: /^Workout$/i }));
+        fireEvent.click(screen.getByRole('button', { name: /^Rest$/i }));
+        fireEvent.click(screen.getByRole('button', { name: /^Workout$/i }));
+
+        const workoutOne = screen.getByText('Workout 1').closest('[draggable="true"]') as HTMLElement;
+        const workoutTwo = screen.getByText('Workout 2').closest('[draggable="true"]') as HTMLElement;
+        expect(workoutOne).toBeTruthy();
+        expect(workoutTwo).toBeTruthy();
+
+        const dataTransfer = {
+            data: {} as Record<string, string>,
+            dropEffect: 'move',
+            effectAllowed: 'move',
+            files: [],
+            items: [],
+            types: [],
+            setData(format: string, value: string) {
+                this.data[format] = value;
+            },
+            getData(format: string) {
+                return this.data[format] ?? '';
+            },
+            clearData() {
+                this.data = {};
+            },
+            setDragImage() {},
+        } as unknown as DataTransfer;
+
+        fireEvent.dragStart(workoutOne, { dataTransfer });
+        fireEvent.dragOver(workoutTwo, { dataTransfer });
+        fireEvent.drop(workoutTwo, { dataTransfer });
+
+        expect(useWorkoutStore.getState().editingSessionDraft?.nodes.map((node) => node.name)).toEqual([
+            'Rest 1',
+            'Workout 1',
+            'Workout 2',
+        ]);
+    });
 });

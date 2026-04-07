@@ -108,6 +108,7 @@ const SessionCanvas = ({
                                             }}
                                             onDrop={(event) => {
                                                 event.preventDefault();
+                                                event.stopPropagation();
                                                 handleDrop(index);
                                             }}
                                         >
