@@ -47,33 +47,33 @@ const SessionNodeCard = ({
             onDragEnd={onDragEnd}
             onClick={onSelect}
             className={cn(
-                'h-[146px] w-[150px] cursor-grab select-none rounded-[12px] border-border/60 bg-card/90 shadow-sm transition-all duration-200 active:cursor-grabbing',
+                'h-[126px] w-[226px] cursor-grab select-none rounded-[14px] border-border/60 bg-card/90 shadow-sm transition-all duration-200 active:cursor-grabbing',
                 isActive && 'border-primary/70 ring-2 ring-primary/25',
                 isDragging && 'opacity-60 scale-[0.98]',
             )}
         >
-            <CardContent className="flex h-full flex-col gap-1 p-1.5">
+            <CardContent className="flex h-full flex-col gap-0.5 p-2">
                 <div className="flex items-start justify-between gap-1">
                     <div className="min-w-0 flex-1 space-y-0.5">
                         <div className="flex items-center gap-1">
-                            <span className="rounded-full border border-border/50 bg-muted px-1.5 py-0.5 text-[6px] font-black uppercase tracking-[0.18em]">
+                            <span className="rounded-full border border-border/50 bg-muted px-1.5 py-0.5 text-[7px] font-black uppercase tracking-[0.18em]">
                                 {isWorkout ? 'Workout' : 'Rest'}
                             </span>
                             {isActive && (
-                                <span className="rounded-full border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[6px] font-black uppercase tracking-[0.18em] text-primary">
+                                <span className="rounded-full border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[7px] font-black uppercase tracking-[0.18em] text-primary">
                                     Active
                                 </span>
                             )}
                         </div>
-                        <div className="truncate text-[11px] font-black italic leading-tight tracking-tight" title={node.name}>
+                        <div className="truncate text-[15px] font-black italic leading-none tracking-tight" title={node.name}>
                             {node.name}
                         </div>
-                        <div className="truncate text-[7px] leading-tight text-muted-foreground" title={summary}>
+                        <div className="truncate text-[10px] leading-tight text-muted-foreground" title={summary}>
                             {summary}
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-1 pt-0.25">
+                    <div className="flex items-center gap-1 pt-0.5">
                         <GripVertical size={12} className="text-muted-foreground" />
                     </div>
                 </div>
