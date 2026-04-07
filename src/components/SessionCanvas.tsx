@@ -81,11 +81,11 @@ const SessionCanvas = ({
 
             <div className="relative flex min-h-0 flex-1 overflow-auto">
                 <div className="flex min-h-full min-w-full items-stretch px-6 py-10 sm:px-10 lg:px-14">
-                    <div className="flex min-h-full min-w-full items-center gap-6 md:gap-8">
+                    <div className="flex min-h-full min-w-full items-center gap-4 md:gap-5">
                         <Anchor label="Start" tone="start" icon={Play} />
 
                         <div className="flex min-h-full flex-1 items-center overflow-x-auto py-6">
-                            <div className="flex min-h-full min-w-full items-center gap-4 md:gap-6">
+                            <div className="flex min-h-full min-w-full items-center gap-3 md:gap-4">
                                 {nodes.length === 0 ? (
                                     <div className="flex min-h-[320px] min-w-[320px] flex-1 items-center justify-center rounded-[28px] border border-dashed border-white/10 bg-white/3 px-8 text-center">
                                         <div className="max-w-sm space-y-2">
@@ -101,7 +101,7 @@ const SessionCanvas = ({
                                     nodes.map((node, index) => (
                                         <div
                                             key={node.id}
-                                            className="flex items-center gap-4"
+                                            className="flex items-center gap-2.5"
                                             onDragOver={(event) => {
                                                 event.preventDefault();
                                                 setDropIndex(index);
@@ -113,7 +113,7 @@ const SessionCanvas = ({
                                             }}
                                         >
                                             {dropIndex === index && draggedNodeId && draggedNodeId !== node.id && (
-                                                <div className="h-60 w-1 rounded-full bg-primary/80 shadow-[0_0_18px_rgba(139,92,246,0.45)]" />
+                                                <div className="h-44 w-1 rounded-full bg-primary/80 shadow-[0_0_18px_rgba(139,92,246,0.45)]" />
                                             )}
                                             <SessionNodeCard
                                                 node={node}
