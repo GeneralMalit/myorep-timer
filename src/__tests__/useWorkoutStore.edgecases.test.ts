@@ -241,6 +241,20 @@ describe('useWorkoutStore edge cases', () => {
         });
 
         act(() => {
+            store.updateWorkoutNode('node-1', validConfig, '');
+            store.updateWorkoutNode('node-1', validConfig, '  Spacey Name  ');
+        });
+        expect(useWorkoutStore.getState().editingSessionDraft?.nodes[0].name).toBe('  Spacey Name  ');
+        act(() => {
+            store.updateWorkoutNode('node-1', validConfig, '');
+        });
+        expect(useWorkoutStore.getState().editingSessionDraft?.nodes[0].name).toBe('');
+        expect(store.saveSessionDraft()).toMatchObject({ ok: false, error: 'Session is invalid.' });
+        act(() => {
+            store.updateWorkoutNode('node-1', validConfig, 'Workout 1');
+        });
+
+        act(() => {
             store.insertSessionNodeAfter('missing-node', buildWorkoutNode('node-4', 'Workout 4'));
         });
         expect(useWorkoutStore.getState().editingSessionDraft?.nodes.some((node) => node.id === 'node-4')).toBe(true);

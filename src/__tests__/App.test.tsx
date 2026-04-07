@@ -363,6 +363,17 @@ describe('App', () => {
         expect(screen.queryByRole('dialog', { name: /protocol intel/i })).not.toBeInTheDocument();
     });
 
+    it('grays out rest and myo inputs when the cycle count is one', () => {
+        render(<App />);
+
+        const inputs = screen.getAllByRole('spinbutton');
+        fireEvent.change(inputs[0], { target: { value: '1' } });
+
+        expect(inputs[3]).toBeDisabled();
+        expect(inputs[4]).toBeDisabled();
+        expect(inputs[5]).toBeDisabled();
+    });
+
     it('starts workout when valid config is entered', () => {
         render(<App />);
 

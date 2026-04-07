@@ -692,7 +692,7 @@ export const useWorkoutStore = create<WorkoutState>()(
                     node.id === nodeId && isWorkoutSessionNode(node)
                         ? {
                             ...node,
-                            name: name?.trim() || node.name,
+                            name: name ?? node.name,
                             config: sanitizeSavedWorkoutConfig(config),
                             updatedAt: nowIso,
                         }
@@ -720,7 +720,7 @@ export const useWorkoutStore = create<WorkoutState>()(
                     node.id === nodeId && isRestSessionNode(node)
                         ? {
                             ...node,
-                            name: name?.trim() || node.name,
+                            name: name ?? node.name,
                             seconds: sanitizeRestNodeSeconds(seconds),
                             updatedAt: nowIso,
                         }

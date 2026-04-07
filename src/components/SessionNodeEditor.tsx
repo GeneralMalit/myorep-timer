@@ -74,6 +74,7 @@ const SessionNodeEditor = () => {
     const isWorkout = node.type === 'workout';
     const workoutNode = isWorkout ? node : null;
     const restNode = node.type === 'rest' ? node : null;
+    const isSingleCycle = workoutNode ? parseInt(workoutNode.config.sets || '0', 10) === 1 : false;
 
     const handleClose = () => setEditingSessionNodeId(null);
 
@@ -152,8 +153,10 @@ const SessionNodeEditor = () => {
                                 <div className="grid gap-3 sm:grid-cols-2">
                                     {workoutFields.map((field) => {
                                         const Icon = field.icon;
+                                        const isDisabled = isSingleCycle && field.key !== 'sets' && field.key !== 'reps' && field.key !== 'seconds';
+                                        const shouldGrayOut = isSingleCycle && field.key !== 'sets' && field.key !== 'reps' && field.key !== 'seconds';
                                         return (
-                                            <div key={field.key} className="space-y-2">
+                                            <div key={field.key} className={cn('space-y-2', shouldGrayOut && 'opacity-45')}>
                                                 <div className="flex items-center gap-2">
                                                     <Icon size={12} className="text-primary" />
                                                     <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
@@ -163,6 +166,7 @@ const SessionNodeEditor = () => {
                                                 <Input
                                                     type="number"
                                                     value={workoutNode.config[field.key]}
+                                                    disabled={isDisabled}
                                                     onChange={(event) => {
                                                         const nextValue = field.key === 'sets'
                                                             ? normalizeSetsInput(event.target.value)

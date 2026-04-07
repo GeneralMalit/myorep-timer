@@ -119,6 +119,12 @@ describe('SessionBuilder', () => {
         fireEvent.click(screen.getByRole('button', { name: /edit workout 1/i }));
 
         const workoutDialog = screen.getByRole('dialog', { name: /workout node editor/i });
+        const workoutNameInput = within(workoutDialog).getByLabelText(/^name$/i);
+        fireEvent.change(workoutNameInput, { target: { value: '' } });
+        expect(useWorkoutStore.getState().editingSessionDraft?.nodes.find((node) => node.type === 'workout')?.name).toBe('');
+        fireEvent.change(workoutNameInput, { target: { value: '  Push Day  ' } });
+        expect(useWorkoutStore.getState().editingSessionDraft?.nodes.find((node) => node.type === 'workout')?.name).toBe('  Push Day  ');
+
         const workoutInputs = within(workoutDialog).getAllByRole('spinbutton');
         fireEvent.change(workoutInputs[0], { target: { value: '0' } });
 
@@ -127,6 +133,9 @@ describe('SessionBuilder', () => {
         if (workoutNode?.type === 'workout') {
             expect(workoutNode.config.sets).toBe('1');
         }
+        expect(workoutInputs[3]).toBeDisabled();
+        expect(workoutInputs[4]).toBeDisabled();
+        expect(workoutInputs[5]).toBeDisabled();
 
         fireEvent.click(within(workoutDialog).getByRole('button', { name: /import workout/i }));
 
@@ -139,7 +148,6 @@ describe('SessionBuilder', () => {
         }
 
         const workoutTargetSelect = within(workoutDialog).getByLabelText(/workout target/i) as HTMLSelectElement;
-        const workoutNameInput = within(workoutDialog).getByLabelText(/^name$/i);
 
         fireEvent.change(workoutNameInput, { target: { value: 'Push Day Updated' } });
         fireEvent.click(within(workoutDialog).getByRole('button', { name: /save workout/i }));
