@@ -2,6 +2,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import App from '@/App';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
+import { audioEngine } from '@/utils/audioEngine';
 
 const concentricTimerMock = vi.fn(({ textMain, textSub }: { textMain: string; textSub: string }) => (
     <div>
@@ -40,6 +41,25 @@ const resetStore = () => {
         appPhase: 'setup',
         timerStatus: 'Ready',
         isTimerRunning: false,
+        settings: {
+            activeColor: '#bb86fc',
+            restColor: '#03dac6',
+            concentricColor: '#cf6679',
+            concentricSecond: 1,
+            smoothAnimation: true,
+            prepTime: 5,
+            fullScreenMode: false,
+            metronomeEnabled: true,
+            metronomeSound: 'woodblock',
+            floatingWindow: false,
+            upDownMode: false,
+            infoVisibility: 'always',
+            soundMode: 'metronome',
+            ttsEnabled: true,
+            pulseEffect: 'always',
+            finishedColor: '#4caf50',
+            pipShowInfo: true,
+        },
         sets: '',
         reps: '',
         seconds: '',
@@ -123,6 +143,27 @@ describe('App', () => {
         expect(screen.getByRole('button', { name: /^workout$/i })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /^rest$/i })).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /add workout node/i })).not.toBeInTheDocument();
+    });
+
+    it('does not speak the count of 1 during countdown voice triggers', () => {
+        useWorkoutStore.setState({
+            appPhase: 'timer',
+            timerStatus: 'Main Set',
+            isTimerRunning: true,
+            isWorking: true,
+            isMainRep: true,
+            timeLeft: 1,
+            lastTickSecond: -1,
+            settings: {
+                ...useWorkoutStore.getState().settings,
+                ttsEnabled: true,
+                metronomeEnabled: true,
+            },
+        });
+
+        render(<App />);
+
+        expect(audioEngine.speak).not.toHaveBeenCalledWith(1);
     });
 
     it('opens a node editor modal with saved workout import controls', () => {

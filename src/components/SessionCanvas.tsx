@@ -112,7 +112,7 @@ const SessionCanvas = ({
                                             }}
                                         >
                                             {dropIndex === index && draggedNodeId && draggedNodeId !== node.id && (
-                                                <div className="h-24 w-1 rounded-full bg-primary/80 shadow-[0_0_18px_rgba(139,92,246,0.45)]" />
+                                                <div className="h-60 w-1 rounded-full bg-primary/80 shadow-[0_0_18px_rgba(139,92,246,0.45)]" />
                                             )}
                                             <SessionNodeCard
                                                 node={node}

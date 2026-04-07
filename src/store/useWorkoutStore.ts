@@ -990,17 +990,18 @@ export const useWorkoutStore = create<WorkoutState>()(
 
                 const node = session.nodes[index];
                 if (node.type === 'workout') {
+                    const workoutDuration = parseInt(node.config.reps, 10) * parseInt(node.config.seconds, 10);
                     set({
                         ...node.config,
                         currentSet: 1,
                         currentRep: 1,
                         isMainRep: true,
                         isWorking: true,
-                        setTotalDuration: parseInt(node.config.reps, 10) * parseInt(node.config.seconds, 10),
+                        setTotalDuration: workoutDuration,
                         setElapsedTime: 0,
                         appPhase: 'timer',
-                        timerStatus: 'Preparing',
-                        timeLeft: state.settings.prepTime,
+                        timerStatus: 'Main Set',
+                        timeLeft: parseInt(node.config.seconds, 10),
                         isTimerRunning: true,
                         setupMode: 'session',
                         lastTickSecond: -1,

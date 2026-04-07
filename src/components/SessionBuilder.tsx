@@ -72,7 +72,7 @@ const SessionBuilder = () => {
     };
 
     return (
-        <section className="flex h-full min-h-0 w-full flex-col gap-5">
+        <section className="flex h-full min-h-0 w-full flex-col gap-5 px-4 py-4 sm:px-6 sm:py-6 xl:px-8 xl:py-8">
             <header className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
                 <div className="space-y-2">
                     <div className="text-[11px] font-black uppercase tracking-[0.35em] text-primary">

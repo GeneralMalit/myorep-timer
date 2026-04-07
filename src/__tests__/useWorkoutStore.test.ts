@@ -20,6 +20,25 @@ describe('useWorkoutStore', () => {
             store.updateTimerBaselines(0, 0);
             store.setIsTimerRunning(false);
             useWorkoutStore.setState({
+                settings: {
+                    activeColor: '#bb86fc',
+                    restColor: '#03dac6',
+                    concentricColor: '#cf6679',
+                    concentricSecond: 1,
+                    smoothAnimation: true,
+                    prepTime: 5,
+                    fullScreenMode: false,
+                    metronomeEnabled: true,
+                    metronomeSound: 'woodblock',
+                    floatingWindow: false,
+                    upDownMode: false,
+                    infoVisibility: 'always',
+                    soundMode: 'metronome',
+                    ttsEnabled: true,
+                    pulseEffect: 'always',
+                    finishedColor: '#4caf50',
+                    pipShowInfo: true,
+                },
                 savedWorkouts: [],
                 selectedSavedWorkoutId: null,
                 lastImportSummary: null,
@@ -210,6 +229,7 @@ describe('useWorkoutStore', () => {
             const store = useWorkoutStore.getState();
 
             act(() => {
+                store.setSettings({ prepTime: 11 });
                 store.setWorkoutConfig({
                     sets: '1',
                     reps: '1',
@@ -241,12 +261,9 @@ describe('useWorkoutStore', () => {
             expect(useWorkoutStore.getState().sessionStatus).toBe('running');
             expect(useWorkoutStore.getState().sessionNodeRuntimeType).toBe('workout');
             expect(useWorkoutStore.getState().activeSessionNodeIndex).toBe(0);
-            expect(useWorkoutStore.getState().timerStatus).toBe('Preparing');
-
-            act(() => {
-                store.advanceCycle();
-            });
             expect(useWorkoutStore.getState().timerStatus).toBe('Main Set');
+            expect(useWorkoutStore.getState().timeLeft).toBe(2);
+            expect(useWorkoutStore.getState().setTotalDuration).toBe(2);
 
             act(() => {
                 store.advanceCycle();
@@ -254,6 +271,7 @@ describe('useWorkoutStore', () => {
             expect(useWorkoutStore.getState().sessionNodeRuntimeType).toBe('rest');
             expect(useWorkoutStore.getState().activeSessionNodeIndex).toBe(1);
             expect(useWorkoutStore.getState().timerStatus).toBe('Resting');
+            expect(useWorkoutStore.getState().timeLeft).toBe(8);
 
             act(() => {
                 store.completeSessionNode();
