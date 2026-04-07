@@ -252,6 +252,171 @@ describe('App', () => {
         expect(useWorkoutStore.getState().timerStatus).toBe('Preparing');
     });
 
+    it('keeps the timer worker running without restarting it on every tick', async () => {
+        vi.useFakeTimers();
+
+        const originalWorker = global.Worker;
+
+        class RepeatingWorker {
+            static instances: RepeatingWorker[] = [];
+            onmessage: ((event: MessageEvent) => void) | null = null;
+            private timerId: ReturnType<typeof setInterval> | null = null;
+            private startTime = 0;
+            startMessages = 0;
+
+            constructor() {
+                RepeatingWorker.instances.push(this);
+            }
+
+            postMessage(data: unknown) {
+                const message = data as { action?: string; interval?: number };
+                if (message.action === 'start') {
+                    this.startMessages += 1;
+                    if (this.timerId) {
+                        clearInterval(this.timerId);
+                    }
+
+                    const interval = message.interval ?? 1000;
+                    this.startTime = performance.now();
+                    this.timerId = setInterval(() => {
+                        if (!this.onmessage) return;
+                        const elapsed = performance.now() - this.startTime;
+                        this.onmessage(new MessageEvent('message', { data: { action: 'tick', elapsed } }));
+                    }, interval);
+                    return;
+                }
+
+                if (message.action === 'stop' && this.timerId) {
+                    clearInterval(this.timerId);
+                    this.timerId = null;
+                }
+            }
+
+            terminate() {
+                if (this.timerId) {
+                    clearInterval(this.timerId);
+                    this.timerId = null;
+                }
+            }
+
+            addEventListener() {}
+            removeEventListener() {}
+        }
+
+        global.Worker = RepeatingWorker as unknown as typeof Worker;
+        RepeatingWorker.instances = [];
+
+        try {
+            render(<App />);
+
+            const inputs = screen.getAllByRole('spinbutton');
+            fireEvent.change(inputs[0], { target: { value: '3' } });
+            fireEvent.change(inputs[1], { target: { value: '12' } });
+            fireEvent.change(inputs[2], { target: { value: '3' } });
+            fireEvent.change(inputs[3], { target: { value: '20' } });
+            fireEvent.change(inputs[4], { target: { value: '4' } });
+            fireEvent.change(inputs[5], { target: { value: '2' } });
+
+            fireEvent.click(screen.getByRole('button', { name: /initialize protocol/i }));
+
+            await act(async () => {
+                await vi.advanceTimersByTimeAsync(200);
+            });
+
+            expect(RepeatingWorker.instances[0].startMessages).toBe(1);
+            expect(useWorkoutStore.getState().timeLeft).toBeLessThan(4.9);
+        } finally {
+            global.Worker = originalWorker;
+            vi.useRealTimers();
+        }
+    });
+
+    it('advances from Preparing to Main Set exactly once when the worker countdown completes', async () => {
+        vi.useFakeTimers();
+
+        const originalWorker = global.Worker;
+
+        class FinishingWorker {
+            static instances: FinishingWorker[] = [];
+            onmessage: ((event: MessageEvent) => void) | null = null;
+            private timerId: ReturnType<typeof setInterval> | null = null;
+            private startTime = 0;
+            startMessages = 0;
+            stopMessages = 0;
+
+            constructor() {
+                FinishingWorker.instances.push(this);
+            }
+
+            postMessage(data: unknown) {
+                const message = data as { action?: string; interval?: number };
+                if (message.action === 'start') {
+                    this.startMessages += 1;
+                    if (this.timerId) {
+                        clearInterval(this.timerId);
+                    }
+
+                    const interval = message.interval ?? 1000;
+                    this.startTime = performance.now();
+                    this.timerId = setInterval(() => {
+                        if (!this.onmessage) return;
+                        const elapsed = performance.now() - this.startTime;
+                        this.onmessage(new MessageEvent('message', { data: { action: 'tick', elapsed } }));
+                    }, interval);
+                    return;
+                }
+
+                if (message.action === 'stop') {
+                    this.stopMessages += 1;
+                    if (this.timerId) {
+                        clearInterval(this.timerId);
+                        this.timerId = null;
+                    }
+                }
+            }
+
+            terminate() {
+                if (this.timerId) {
+                    clearInterval(this.timerId);
+                    this.timerId = null;
+                }
+            }
+
+            addEventListener() {}
+            removeEventListener() {}
+        }
+
+        global.Worker = FinishingWorker as unknown as typeof Worker;
+        FinishingWorker.instances = [];
+
+        try {
+            render(<App />);
+
+            const inputs = screen.getAllByRole('spinbutton');
+            fireEvent.change(inputs[0], { target: { value: '3' } });
+            fireEvent.change(inputs[1], { target: { value: '12' } });
+            fireEvent.change(inputs[2], { target: { value: '3' } });
+            fireEvent.change(inputs[3], { target: { value: '20' } });
+            fireEvent.change(inputs[4], { target: { value: '4' } });
+            fireEvent.change(inputs[5], { target: { value: '2' } });
+
+            fireEvent.click(screen.getByRole('button', { name: /initialize protocol/i }));
+
+            await act(async () => {
+                await vi.advanceTimersByTimeAsync(5100);
+            });
+
+            expect(FinishingWorker.instances[0].startMessages).toBe(2);
+            expect(FinishingWorker.instances[0].stopMessages).toBeGreaterThanOrEqual(1);
+            expect(useWorkoutStore.getState().timerStatus).toBe('Main Set');
+            expect(useWorkoutStore.getState().timeLeft).toBeGreaterThan(2.5);
+            expect(useWorkoutStore.getState().timeLeft).toBeLessThan(3);
+        } finally {
+            global.Worker = originalWorker;
+            vi.useRealTimers();
+        }
+    });
+
     it('renders timer branch with finished status controls', () => {
         useWorkoutStore.setState({
             appPhase: 'timer',

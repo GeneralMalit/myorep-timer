@@ -117,7 +117,7 @@ export default function App() {
         } else {
             workerRef.current.postMessage({ action: 'stop' });
         }
-    }, [isTimerRunning, timeLeft <= 0.001, timerStatus, advanceCycle, completeSessionNode, isRunningSession, sessionNodeRuntimeType, settings.smoothAnimation, setElapsedTime]);
+    }, [isTimerRunning, timeLeft <= 0.001, timerStatus, advanceCycle, completeSessionNode, isRunningSession, sessionNodeRuntimeType, settings.smoothAnimation]);
 
     useEffect(() => {
         if (isRunningSession && sessionNodeRuntimeType === 'workout' && sessionStatus === 'running' && timerStatus === 'Finished') {
