@@ -2,6 +2,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import App from '@/App';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
+import { audioEngine } from '@/utils/audioEngine';
 
 const concentricTimerMock = vi.fn(({ textMain, textSub }: { textMain: string; textSub: string }) => (
     <div>
@@ -86,6 +87,9 @@ describe('App', () => {
     beforeEach(() => {
         resetStore();
         vi.restoreAllMocks();
+        vi.mocked(audioEngine.init).mockClear();
+        vi.mocked(audioEngine.speak).mockClear();
+        vi.mocked(audioEngine.playTick).mockClear();
         concentricTimerMock.mockClear();
     });
 
@@ -123,6 +127,89 @@ describe('App', () => {
         expect(screen.getByRole('button', { name: /^workout$/i })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /^rest$/i })).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /add workout node/i })).not.toBeInTheDocument();
+    });
+
+    it('covers sidebar session handler cancellations and duplicate errors', () => {
+        const promptSpy = vi.spyOn(window, 'prompt')
+            .mockReturnValueOnce(null)
+            .mockReturnValueOnce(' ')
+            .mockReturnValueOnce(null)
+            .mockReturnValueOnce('Empty Session')
+            .mockReturnValueOnce(null)
+            .mockReturnValueOnce('Empty Session');
+        const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+        const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => { });
+
+        useWorkoutStore.setState({
+            savedSessions: [
+                {
+                    id: 'session-1',
+                    name: 'Empty Session',
+                    nodes: [],
+                    timesUsed: 0,
+                    lastUsedAt: null,
+                    createdAt: '2026-03-01T00:00:00.000Z',
+                    updatedAt: '2026-03-01T00:00:00.000Z',
+                },
+            ],
+        });
+
+        render(<App />);
+
+        const sessionNewButton = screen.getAllByRole('button', { name: /^new$/i })[0];
+        fireEvent.click(sessionNewButton);
+        fireEvent.click(sessionNewButton);
+        fireEvent.click(screen.getByRole('button', { name: /load/i }));
+        fireEvent.click(screen.getByTitle('Duplicate Session'));
+        fireEvent.click(screen.getByTitle('Duplicate Session'));
+        fireEvent.click(screen.getByTitle('Rename Session'));
+        fireEvent.click(screen.getByTitle('Rename Session'));
+        fireEvent.click(screen.getByTitle('Delete Session'));
+
+        expect(promptSpy).toHaveBeenCalled();
+        expect(confirmSpy).toHaveBeenCalled();
+        expect(alertSpy).toHaveBeenCalled();
+    });
+
+    it('covers the successful rename and delete session branches', () => {
+        const promptSpy = vi.spyOn(window, 'prompt')
+            .mockReturnValueOnce('Renamed Session');
+        const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+        const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => { });
+
+        useWorkoutStore.setState({
+            savedSessions: [
+                {
+                    id: 'session-1',
+                    name: 'Original Session',
+                    nodes: [
+                        {
+                            id: 'node-1',
+                            type: 'rest',
+                            name: 'Rest Node',
+                            seconds: '30',
+                            createdAt: '2026-03-01T00:00:00.000Z',
+                            updatedAt: '2026-03-01T00:00:00.000Z',
+                        },
+                    ],
+                    timesUsed: 0,
+                    lastUsedAt: null,
+                    createdAt: '2026-03-01T00:00:00.000Z',
+                    updatedAt: '2026-03-01T00:00:00.000Z',
+                },
+            ],
+        });
+
+        render(<App />);
+
+        fireEvent.click(screen.getByTitle('Rename Session'));
+        expect(useWorkoutStore.getState().savedSessions[0].name).toBe('Renamed Session');
+
+        fireEvent.click(screen.getByTitle('Delete Session'));
+        expect(useWorkoutStore.getState().savedSessions).toHaveLength(0);
+        expect(promptSpy).toHaveBeenCalledTimes(1);
+        expect(confirmSpy).toHaveBeenCalledTimes(1);
+        expect(alertSpy).not.toHaveBeenCalled();
     });
 
     it('opens a node editor modal with saved workout import controls', () => {
@@ -608,6 +695,36 @@ describe('App', () => {
         rerender(<App />);
         expect(screen.getAllByText(/MYO REPS/i).length).toBeGreaterThan(0);
         expect(screen.getByText(/Rep 2/i)).toBeInTheDocument();
+    });
+
+    it('does not speak when the rep countdown is at 1 second', () => {
+        useWorkoutStore.setState({
+            appPhase: 'timer',
+            timerStatus: 'Main Set',
+            isTimerRunning: true,
+            currentSet: 1,
+            currentRep: 1,
+            isMainRep: true,
+            isWorking: true,
+            sets: '1',
+            reps: '10',
+            rest: '10',
+            myoReps: '4',
+            myoWorkSecs: '2',
+            seconds: '2',
+            timeLeft: 1,
+            lastTickSecond: -1,
+            settings: {
+                ...useWorkoutStore.getState().settings,
+                ttsEnabled: true,
+                metronomeEnabled: true,
+            },
+        });
+
+        render(<App />);
+
+        expect(audioEngine.speak).not.toHaveBeenCalled();
+        expect(audioEngine.playTick).toHaveBeenCalledTimes(1);
     });
 
     it('shows PIP active state when picture-in-picture is already open', () => {
