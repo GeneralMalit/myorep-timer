@@ -906,9 +906,21 @@ export const useWorkoutStore = create<WorkoutState>()(
                     editingSessionId: nextSession.id,
                     editingSessionDraft: nextSession,
                     editingSessionNodeId: null,
+                    appPhase: 'timer',
+                    timerStatus: 'Preparing',
+                    isTimerRunning: true,
+                    isWorking: false,
+                    currentSet: 1,
+                    currentRep: 1,
+                    isMainRep: true,
+                    timeLeft: get().settings.prepTime,
+                    setTotalDuration: get().settings.prepTime,
+                    setElapsedTime: 0,
+                    lastTickSecond: -1,
+                    sessionNodeRuntimeType: null,
+                    sessionRestTimeLeft: 0,
+                    sessionLastTickSecond: -1,
                 });
-
-                get().startSessionNode(0);
                 return { ok: true };
             },
             pauseSession: () => set((state) => ({
@@ -1138,6 +1150,11 @@ export const useWorkoutStore = create<WorkoutState>()(
                 const isSessionRunning = Boolean(state.activeSessionId) && state.isRunningSession;
 
                 if (state.timerStatus === 'Preparing') {
+                    if (isSessionRunning) {
+                        get().startSessionNode(state.activeSessionNodeIndex);
+                        return;
+                    }
+
                     set({
                         timerStatus: 'Main Set',
                         timeLeft: mainSecs,

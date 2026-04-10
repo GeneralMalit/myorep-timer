@@ -191,10 +191,14 @@ describe('SessionBuilder', () => {
 
         fireEvent.click(screen.getByRole('button', { name: /start/i }));
         expect(useWorkoutStore.getState().appPhase).toBe('timer');
-        expect(useWorkoutStore.getState().timerStatus).toBe('Main Set');
-        expect(useWorkoutStore.getState().timeLeft).toBe(3);
+        expect(useWorkoutStore.getState().timerStatus).toBe('Preparing');
+        expect(useWorkoutStore.getState().timeLeft).toBe(useWorkoutStore.getState().settings.prepTime);
         expect(useWorkoutStore.getState().isRunningSession).toBe(true);
         expect(alertSpy).not.toHaveBeenCalled();
+
+        useWorkoutStore.getState().advanceCycle();
+        expect(useWorkoutStore.getState().timerStatus).toBe('Main Set');
+        expect(useWorkoutStore.getState().timeLeft).toBe(3);
     });
 
     it('reorders nodes when dropping a dragged node onto a middle node', () => {

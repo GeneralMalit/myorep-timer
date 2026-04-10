@@ -259,6 +259,15 @@ describe('useWorkoutStore', () => {
             });
 
             expect(useWorkoutStore.getState().sessionStatus).toBe('running');
+            expect(useWorkoutStore.getState().sessionNodeRuntimeType).toBeNull();
+            expect(useWorkoutStore.getState().activeSessionNodeIndex).toBe(0);
+            expect(useWorkoutStore.getState().timerStatus).toBe('Preparing');
+            expect(useWorkoutStore.getState().timeLeft).toBe(11);
+            expect(useWorkoutStore.getState().setTotalDuration).toBe(11);
+
+            act(() => {
+                store.advanceCycle();
+            });
             expect(useWorkoutStore.getState().sessionNodeRuntimeType).toBe('workout');
             expect(useWorkoutStore.getState().activeSessionNodeIndex).toBe(0);
             expect(useWorkoutStore.getState().timerStatus).toBe('Main Set');

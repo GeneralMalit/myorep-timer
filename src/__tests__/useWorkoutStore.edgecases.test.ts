@@ -305,6 +305,8 @@ describe('useWorkoutStore edge cases', () => {
 
         expect(store.startSession('runtime-session')).toMatchObject({ ok: true });
         expect(useWorkoutStore.getState().sessionStatus).toBe('running');
+        expect(useWorkoutStore.getState().timerStatus).toBe('Preparing');
+        expect(useWorkoutStore.getState().timeLeft).toBe(useWorkoutStore.getState().settings.prepTime);
         expect(useWorkoutStore.getState().savedSessions).toHaveLength(1);
 
         act(() => {
