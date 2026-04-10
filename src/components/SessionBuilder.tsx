@@ -7,21 +7,19 @@ import SetupModeToggle from '@/components/SetupModeToggle';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
 
 const SessionBuilder = () => {
-    const {
-        editingSessionDraft,
-        editingSessionNodeId,
-        setEditingSessionNodeId,
-        setupMode,
-        setSetupMode,
-        createSession,
-        saveSessionDraft,
-        saveSessionDraftAs,
-        startSession,
-        addWorkoutNodeFromCurrentSetup,
-        addRestNode,
-        removeSessionNode,
-        moveSessionNodeToIndex,
-    } = useWorkoutStore();
+    const editingSessionDraft = useWorkoutStore((state) => state.editingSessionDraft);
+    const editingSessionNodeId = useWorkoutStore((state) => state.editingSessionNodeId);
+    const setEditingSessionNodeId = useWorkoutStore((state) => state.setEditingSessionNodeId);
+    const setupMode = useWorkoutStore((state) => state.setupMode);
+    const setSetupMode = useWorkoutStore((state) => state.setSetupMode);
+    const createSession = useWorkoutStore((state) => state.createSession);
+    const saveSessionDraft = useWorkoutStore((state) => state.saveSessionDraft);
+    const saveSessionDraftAs = useWorkoutStore((state) => state.saveSessionDraftAs);
+    const startSession = useWorkoutStore((state) => state.startSession);
+    const addWorkoutNodeFromCurrentSetup = useWorkoutStore((state) => state.addWorkoutNodeFromCurrentSetup);
+    const addRestNode = useWorkoutStore((state) => state.addRestNode);
+    const removeSessionNode = useWorkoutStore((state) => state.removeSessionNode);
+    const moveSessionNodeToIndex = useWorkoutStore((state) => state.moveSessionNodeToIndex);
 
     const nodeCount = editingSessionDraft?.nodes.length ?? 0;
     const summary = useMemo(() => {

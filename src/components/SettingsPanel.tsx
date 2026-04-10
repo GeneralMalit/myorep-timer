@@ -22,7 +22,10 @@ interface SettingsPanelProps {
 }
 
 const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
-    const { settings, setSettings, seconds, myoWorkSecs } = useWorkoutStore();
+    const settings = useWorkoutStore((state) => state.settings);
+    const setSettings = useWorkoutStore((state) => state.setSettings);
+    const seconds = useWorkoutStore((state) => state.seconds);
+    const myoWorkSecs = useWorkoutStore((state) => state.myoWorkSecs);
 
     if (!isOpen) return null;
 

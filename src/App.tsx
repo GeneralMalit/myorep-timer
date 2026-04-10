@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
 import { audioEngine } from '@/utils/audioEngine';
 import TimerWorker from '@/utils/timerWorker?worker&inline';
@@ -45,7 +45,6 @@ export default function App() {
         currentSet, currentRep, isMainRep, isWorking,
         timeLeft,
         setElapsedTime,
-        lastTickSecond, setLastTickSecond,
         startWorkout, resetWorkout, advanceCycle, updateTimerBaselines,
         saveCurrentWorkout, saveCurrentWorkoutAs, loadWorkout, renameWorkout, deleteWorkout, exportSavedWorkouts, importSavedWorkouts, clearImportSummary,
         createSession, loadSessionForEditing, duplicateSession, renameSession, deleteSession,
@@ -60,6 +59,8 @@ export default function App() {
     const workerRef = useRef<Worker | null>(null);
     const baseTimeLeft = useRef(0);
     const baseSetElapsedTime = useRef(0);
+    const lastSpokenSecondRef = useRef(-1);
+    const prepAnnouncedRef = useRef(false);
     const loadedWorkout = selectedSavedWorkoutId
         ? savedWorkouts.find((workout) => workout.id === selectedSavedWorkoutId) ?? null
         : null;
@@ -132,13 +133,15 @@ export default function App() {
         if (setElapsedTime === 0) {
             baseSetElapsedTime.current = 0;
         }
+
+        lastSpokenSecondRef.current = -1;
     }, [timerStatus, currentRep, isWorking, isMainRep]);
 
     // Audio Triggers
     useEffect(() => {
         if (isTimerRunning && settings.metronomeEnabled && isWorking && timerStatus !== 'Preparing') {
             const currentSecond = Math.ceil(timeLeft);
-            if (currentSecond !== lastTickSecond && currentSecond >= 0) {
+            if (currentSecond !== lastSpokenSecondRef.current && currentSecond >= 0) {
                 const activeRepTarget = isMainRep ? parseInt(reps || '0') : parseInt(myoReps || '0');
                 const shouldSpeakCurrentSecond = settings.ttsEnabled
                     && currentSecond >= 1
@@ -150,24 +153,29 @@ export default function App() {
                 if (settings.metronomeEnabled) {
                     audioEngine.playTick(settings.metronomeSound);
                 }
-                setLastTickSecond(currentSecond);
+                lastSpokenSecondRef.current = currentSecond;
             }
         } else {
-            if (lastTickSecond !== -1 && timerStatus !== 'Preparing') {
-                setLastTickSecond(-1);
+            if (timerStatus !== 'Preparing') {
+                lastSpokenSecondRef.current = -1;
             }
         }
-    }, [timeLeft, isTimerRunning, settings, isWorking, timerStatus, lastTickSecond, setLastTickSecond]);
+    }, [timeLeft, isTimerRunning, settings, isWorking, timerStatus, isMainRep, reps, myoReps]);
 
     // Initial sound on start
     useEffect(() => {
-        if (timerStatus === 'Preparing' && isTimerRunning && lastTickSecond === -1) {
+        if (timerStatus !== 'Preparing' || !isTimerRunning) {
+            prepAnnouncedRef.current = false;
+            return;
+        }
+
+        if (!prepAnnouncedRef.current) {
             if (settings.ttsEnabled) {
                 audioEngine.speak('Ready');
-                setLastTickSecond(-2); // Mark as initially spoken
             }
+            prepAnnouncedRef.current = true;
         }
-    }, [timerStatus, isTimerRunning, settings.ttsEnabled, lastTickSecond, setLastTickSecond]);
+    }, [timerStatus, isTimerRunning, settings.ttsEnabled]);
 
     // PiP Rendering
     useEffect(() => {
@@ -224,7 +232,11 @@ export default function App() {
         }
     };
 
-    const handleSaveWorkout = () => {
+    const toggleSidebar = useCallback(() => {
+        setIsSidebarCollapsed(!isSidebarCollapsed);
+    }, [isSidebarCollapsed, setIsSidebarCollapsed]);
+
+    const handleSaveWorkout = useCallback(() => {
         const workoutName = window.prompt('Name this workout template:', loadedWorkout?.name ?? '');
         if (!workoutName) return;
 
@@ -232,9 +244,9 @@ export default function App() {
         if (!result.ok) {
             window.alert(result.error ?? 'Could not save workout.');
         }
-    };
+    }, [loadedWorkout?.name, saveCurrentWorkout]);
 
-    const handleSaveWorkoutAs = () => {
+    const handleSaveWorkoutAs = useCallback(() => {
         const workoutName = window.prompt('Save as:', loadedWorkout?.name ?? '');
         if (!workoutName) return;
 
@@ -242,17 +254,17 @@ export default function App() {
         if (!result.ok) {
             window.alert(result.error ?? 'Could not save workout.');
         }
-    };
+    }, [loadedWorkout?.name, saveCurrentWorkoutAs]);
     /* c8 ignore stop */
 
-    const handleLoadWorkout = (id: string) => {
+    const handleLoadWorkout = useCallback((id: string) => {
         const result = loadWorkout(id);
         if (!result.ok) {
             window.alert(result.error ?? 'Could not load workout.');
         }
-    };
+    }, [loadWorkout]);
 
-    const handleRenameWorkout = (id: string) => {
+    const handleRenameWorkout = useCallback((id: string) => {
         const workout = savedWorkouts.find((entry) => entry.id === id);
         const nextName = window.prompt('Rename workout:', workout?.name ?? '');
         if (nextName === null) return;
@@ -260,16 +272,16 @@ export default function App() {
         if (!result.ok) {
             window.alert(result.error ?? 'Could not rename workout.');
         }
-    };
+    }, [renameWorkout, savedWorkouts]);
 
-    const handleDeleteWorkout = (id: string) => {
+    const handleDeleteWorkout = useCallback((id: string) => {
         const workout = savedWorkouts.find((entry) => entry.id === id);
         const confirmed = window.confirm(`Delete "${workout?.name ?? 'this workout'}"?`);
         if (!confirmed) return;
         deleteWorkout(id);
-    };
+    }, [deleteWorkout, savedWorkouts]);
 
-    const handleExportWorkouts = () => {
+    const handleExportWorkouts = useCallback(() => {
         const payload = exportSavedWorkouts();
         const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
@@ -280,29 +292,29 @@ export default function App() {
         anchor.click();
         anchor.remove();
         URL.revokeObjectURL(url);
-    };
+    }, [exportSavedWorkouts]);
 
-    const handleImportWorkouts = (payload: unknown) => {
+    const handleImportWorkouts = useCallback((payload: unknown) => {
         importSavedWorkouts(payload);
-    };
+    }, [importSavedWorkouts]);
 
-    const handleCreateSession = () => {
+    const handleCreateSession = useCallback(() => {
         const name = window.prompt('Session name:', 'New Session');
         if (!name) return;
         const result = createSession(name);
         if (!result.ok) {
             window.alert(result.error ?? 'Could not create session.');
         }
-    };
+    }, [createSession]);
 
-    const handleLoadSession = (id: string) => {
+    const handleLoadSession = useCallback((id: string) => {
         const result = loadSessionForEditing(id);
         if (!result.ok) {
             window.alert(result.error ?? 'Could not load session.');
         }
-    };
+    }, [loadSessionForEditing]);
 
-    const handleDuplicateSession = (id: string) => {
+    const handleDuplicateSession = useCallback((id: string) => {
         const session = savedSessions.find((entry) => entry.id === id);
         const name = window.prompt('Duplicate session as:', `${session?.name ?? 'Session'} Copy`);
         if (!name) return;
@@ -310,9 +322,9 @@ export default function App() {
         if (!result.ok) {
             window.alert(result.error ?? 'Could not duplicate session.');
         }
-    };
+    }, [duplicateSession, savedSessions]);
 
-    const handleRenameSession = (id: string) => {
+    const handleRenameSession = useCallback((id: string) => {
         const session = savedSessions.find((entry) => entry.id === id);
         const name = window.prompt('Rename session:', session?.name ?? '');
         if (name === null) return;
@@ -320,14 +332,14 @@ export default function App() {
         if (!result.ok) {
             window.alert(result.error ?? 'Could not rename session.');
         }
-    };
+    }, [renameSession, savedSessions]);
 
-    const handleDeleteSession = (id: string) => {
+    const handleDeleteSession = useCallback((id: string) => {
         const session = savedSessions.find((entry) => entry.id === id);
         const confirmed = window.confirm(`Delete "${session?.name ?? 'this session'}"?`);
         if (!confirmed) return;
         deleteSession(id);
-    };
+    }, [deleteSession, savedSessions]);
 
     return (
         <div className={cn("min-h-screen bg-background text-foreground flex transition-colors duration-500 font-sans selection:bg-primary/30", theme)}>
@@ -338,7 +350,7 @@ export default function App() {
                 onOpenProtocolIntel={() => setShowProtocolIntel(true)}
                 showSettings={showSettings}
                 isCollapsed={isSidebarCollapsed}
-                toggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+                toggleSidebar={toggleSidebar}
                 appPhase={appPhase}
                 savedWorkouts={savedWorkouts}
                 onSaveCurrent={handleSaveWorkout}
@@ -358,7 +370,7 @@ export default function App() {
                 onDeleteSession={handleDeleteSession}
             />
 
-            <SettingsPanel isOpen={showSettings} onClose={() => setShowSettings(false)} />
+            {showSettings && <SettingsPanel isOpen={showSettings} onClose={() => setShowSettings(false)} />}
             <ProtocolIntelModal isOpen={showProtocolIntel} onClose={() => setShowProtocolIntel(false)} />
 
             <main className={cn(

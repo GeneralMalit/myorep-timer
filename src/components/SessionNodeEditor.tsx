@@ -19,16 +19,14 @@ const workoutFields: Array<{ key: keyof SavedWorkoutConfig; label: string; icon:
 ];
 
 const SessionNodeEditor = () => {
-    const {
-        editingSessionDraft,
-        editingSessionNodeId,
-        setEditingSessionNodeId,
-        savedWorkouts,
-        replaceWorkoutNodeWithSavedWorkout,
-        saveWorkoutFromConfig,
-        updateWorkoutNode,
-        updateRestNode,
-    } = useWorkoutStore();
+    const editingSessionDraft = useWorkoutStore((state) => state.editingSessionDraft);
+    const editingSessionNodeId = useWorkoutStore((state) => state.editingSessionNodeId);
+    const setEditingSessionNodeId = useWorkoutStore((state) => state.setEditingSessionNodeId);
+    const savedWorkouts = useWorkoutStore((state) => state.savedWorkouts);
+    const replaceWorkoutNodeWithSavedWorkout = useWorkoutStore((state) => state.replaceWorkoutNodeWithSavedWorkout);
+    const saveWorkoutFromConfig = useWorkoutStore((state) => state.saveWorkoutFromConfig);
+    const updateWorkoutNode = useWorkoutStore((state) => state.updateWorkoutNode);
+    const updateRestNode = useWorkoutStore((state) => state.updateRestNode);
     const [selectedWorkoutId, setSelectedWorkoutId] = useState('__new__');
     const [saveFeedback, setSaveFeedback] = useState<string | null>(null);
     const lastNodeIdRef = useRef<string | null>(null);
