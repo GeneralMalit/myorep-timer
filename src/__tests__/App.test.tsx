@@ -191,6 +191,28 @@ describe('App', () => {
         expect(audioEngine.speak).not.toHaveBeenCalledWith(1);
     });
 
+    it('suppresses speaking 1 during myo-rep countdowns when the active target is 1', () => {
+        useWorkoutStore.setState({
+            appPhase: 'timer',
+            timerStatus: 'Myo Reps',
+            isTimerRunning: true,
+            isWorking: true,
+            isMainRep: false,
+            myoReps: '1',
+            timeLeft: 1,
+            lastTickSecond: -1,
+            settings: {
+                ...useWorkoutStore.getState().settings,
+                ttsEnabled: true,
+                metronomeEnabled: true,
+            },
+        });
+
+        render(<App />);
+
+        expect(audioEngine.speak).not.toHaveBeenCalledWith(1);
+    });
+
     it('covers sidebar session handler cancellations and duplicate errors', () => {
         const promptSpy = vi.spyOn(window, 'prompt')
             .mockReturnValueOnce(null)
