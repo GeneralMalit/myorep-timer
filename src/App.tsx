@@ -139,7 +139,12 @@ export default function App() {
         if (isTimerRunning && settings.metronomeEnabled && isWorking && timerStatus !== 'Preparing') {
             const currentSecond = Math.ceil(timeLeft);
             if (currentSecond !== lastTickSecond && currentSecond >= 0) {
-                if (settings.ttsEnabled && currentSecond >= 2) {
+                const activeRepTarget = isMainRep ? parseInt(reps || '0') : parseInt(myoReps || '0');
+                const shouldSpeakCurrentSecond = settings.ttsEnabled
+                    && currentSecond >= 1
+                    && (currentSecond > 1 || activeRepTarget !== 1);
+
+                if (shouldSpeakCurrentSecond) {
                     audioEngine.speak(currentSecond);
                 }
                 if (settings.metronomeEnabled) {

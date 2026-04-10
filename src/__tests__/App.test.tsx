@@ -148,13 +148,35 @@ describe('App', () => {
         expect(screen.queryByRole('button', { name: /add workout node/i })).not.toBeInTheDocument();
     });
 
-    it('does not speak the count of 1 during countdown voice triggers', () => {
+    it('speaks the count of 1 during countdowns unless the active rep target is 1', () => {
         useWorkoutStore.setState({
             appPhase: 'timer',
             timerStatus: 'Main Set',
             isTimerRunning: true,
             isWorking: true,
             isMainRep: true,
+            timeLeft: 1,
+            lastTickSecond: -1,
+            settings: {
+                ...useWorkoutStore.getState().settings,
+                ttsEnabled: true,
+                metronomeEnabled: true,
+            },
+        });
+
+        render(<App />);
+
+        expect(audioEngine.speak).toHaveBeenCalledWith(1);
+    });
+
+    it('suppresses speaking 1 when the active rep target is 1', () => {
+        useWorkoutStore.setState({
+            appPhase: 'timer',
+            timerStatus: 'Main Set',
+            isTimerRunning: true,
+            isWorking: true,
+            isMainRep: true,
+            reps: '1',
             timeLeft: 1,
             lastTickSecond: -1,
             settings: {
@@ -749,7 +771,7 @@ describe('App', () => {
         expect(screen.getByText(/Rep 2/i)).toBeInTheDocument();
     });
 
-    it('does not speak when the rep countdown is at 1 second', () => {
+    it('speaks when the rep countdown is at 1 second', () => {
         useWorkoutStore.setState({
             appPhase: 'timer',
             timerStatus: 'Main Set',
@@ -775,7 +797,7 @@ describe('App', () => {
 
         render(<App />);
 
-        expect(audioEngine.speak).not.toHaveBeenCalled();
+        expect(audioEngine.speak).toHaveBeenCalledWith(1);
         expect(audioEngine.playTick).toHaveBeenCalledTimes(1);
     });
 
