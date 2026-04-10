@@ -30,6 +30,7 @@ const SessionNodeEditor = () => {
         updateRestNode,
     } = useWorkoutStore();
     const [selectedWorkoutId, setSelectedWorkoutId] = useState('__new__');
+    const [saveFeedback, setSaveFeedback] = useState<string | null>(null);
     const lastNodeIdRef = useRef<string | null>(null);
 
     const node = useMemo(() => {
@@ -42,12 +43,14 @@ const SessionNodeEditor = () => {
 
     useEffect(() => {
         if (!node || node.type !== 'workout') {
+            setSaveFeedback(null);
             lastNodeIdRef.current = null;
             setSelectedWorkoutId('__new__');
             return;
         }
 
         if (lastNodeIdRef.current !== node.id) {
+            setSaveFeedback(null);
             lastNodeIdRef.current = node.id;
             setSelectedWorkoutId(node.sourceWorkoutId ?? savedWorkouts[0]?.id ?? '__new__');
             return;
@@ -65,7 +68,19 @@ const SessionNodeEditor = () => {
 
             return node.sourceWorkoutId ?? savedWorkouts[0]?.id ?? '__new__';
         });
-    }, [node, savedWorkouts]);
+        }, [node, savedWorkouts]);
+
+    useEffect(() => {
+        if (!saveFeedback) {
+            return;
+        }
+
+        const timeoutId = window.setTimeout(() => {
+            setSaveFeedback(null);
+        }, 2500);
+
+        return () => window.clearTimeout(timeoutId);
+    }, [saveFeedback]);
 
     if (!node) {
         return null;
@@ -96,7 +111,12 @@ const SessionNodeEditor = () => {
 
         if (!result.ok) {
             window.alert(result.error ?? 'Could not save workout.');
+            return;
         }
+
+        setSaveFeedback(targetWorkoutId
+            ? 'Workout updated in your library.'
+            : 'Workout saved to your library.');
     };
 
     return (
@@ -105,7 +125,6 @@ const SessionNodeEditor = () => {
             aria-modal="true"
             aria-label={`${node.type} node editor`}
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
-            onClick={handleClose}
         >
             <Card
                 className="relative w-[min(920px,calc(100vw-2rem))] max-h-[calc(100vh-2rem)] overflow-auto border-border/60 bg-background/95 shadow-[0_30px_120px_rgba(0,0,0,0.55)]"
@@ -254,6 +273,16 @@ const SessionNodeEditor = () => {
                                             Save Workout
                                         </Button>
                                     </div>
+
+                                    {saveFeedback && (
+                                        <div
+                                            role="status"
+                                            aria-live="polite"
+                                            className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-200"
+                                        >
+                                            {saveFeedback}
+                                        </div>
+                                    )}
                                 </div>
                             ) : (
                                 <div className="rounded-[20px] border border-border/50 bg-muted/20 p-4 text-sm text-muted-foreground">

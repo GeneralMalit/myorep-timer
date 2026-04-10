@@ -154,6 +154,7 @@ describe('SessionBuilder', () => {
 
         expect(useWorkoutStore.getState().savedWorkouts).toHaveLength(1);
         expect(useWorkoutStore.getState().savedWorkouts[0].name).toBe('Push Day Updated');
+        expect(within(workoutDialog).getByRole('status')).toHaveTextContent(/updated in your library/i);
 
         fireEvent.change(workoutTargetSelect, { target: { value: '__new__' } });
         fireEvent.change(workoutNameInput, { target: { value: 'Push Day Copy' } });
@@ -161,6 +162,10 @@ describe('SessionBuilder', () => {
 
         expect(useWorkoutStore.getState().savedWorkouts).toHaveLength(2);
         expect(useWorkoutStore.getState().savedWorkouts[1].name).toBe('Push Day Copy');
+        expect(within(workoutDialog).getByRole('status')).toHaveTextContent(/saved to your library/i);
+
+        fireEvent.click(workoutDialog);
+        expect(screen.getByRole('dialog', { name: /workout node editor/i })).toBeInTheDocument();
 
         fireEvent.click(within(workoutDialog).getByRole('button', { name: /close node editor/i }));
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
