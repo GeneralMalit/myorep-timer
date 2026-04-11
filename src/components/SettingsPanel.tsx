@@ -42,22 +42,28 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
     };
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-end bg-background/80 backdrop-blur-sm animate-in fade-in duration-300">
-            <Card className="h-full w-full max-w-md rounded-none border-l shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-right duration-500">
-                <CardHeader className="flex flex-row items-center justify-between border-b pb-4 bg-muted/30">
-                    <CardTitle className="text-xl font-black italic tracking-tight flex items-center gap-2">
+        <div
+            className="fixed inset-0 z-[100] flex items-end justify-center bg-background/80 backdrop-blur-sm animate-in fade-in duration-300 md:items-center md:justify-end"
+            onMouseDown={(event) => {
+                if (event.target === event.currentTarget) {
+                    onClose();
+                }
+            }}
+        >
+            <Card className="flex h-[min(90vh,48rem)] w-full max-w-2xl flex-col overflow-hidden rounded-t-[2rem] border border-border/70 shadow-2xl animate-in slide-in-from-bottom-4 duration-500 md:h-full md:max-w-md md:rounded-none md:border-y-0 md:border-r-0 md:border-l">
+                <CardHeader className="flex flex-row items-center justify-between border-b border-border/60 bg-muted/30 px-5 pb-4 pt-[calc(var(--safe-top)+1rem)] md:px-6 md:pt-6">
+                    <CardTitle className="flex items-center gap-2 text-xl font-black italic tracking-tight">
                         <Monitor className="text-primary" size={20} />
                         System Configuration
                     </CardTitle>
-                    <Button variant="ghost" size="icon" onClick={onClose} className="rounded-full">
+                    <Button variant="ghost" size="icon" onClick={onClose} className="h-11 w-11 rounded-full" aria-label="Close Settings">
                         <X size={20} />
                     </Button>
                 </CardHeader>
 
-                <CardContent className="flex-1 overflow-y-auto pt-6 space-y-8 no-scrollbar pb-10">
-                    {/* Visual Identity */}
+                <CardContent className="no-scrollbar flex-1 space-y-8 overflow-y-auto px-5 pb-[calc(var(--safe-bottom)+1.5rem)] pt-6 md:px-6 md:pb-10">
                     <section className="space-y-4">
-                        <div className="flex items-center gap-2 text-primary font-black uppercase tracking-widest text-xs px-1">
+                        <div className="flex items-center gap-2 px-1 text-xs font-black uppercase tracking-widest text-primary">
                             <Palette size={16} />
                             <span>Visual Identity</span>
                         </div>
@@ -67,20 +73,20 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                                 { label: 'Resting', key: 'restColor' },
                                 { label: 'Concentric', key: 'concentricColor' },
                             ].map((item) => (
-                                <div key={item.key} className="space-y-2 p-3 rounded-xl bg-accent/40 border border-border/50">
+                                <div key={item.key} className="space-y-2 rounded-xl border border-border/50 bg-accent/40 p-3">
                                     <Label className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
                                         {item.label}
                                     </Label>
                                     <div className="flex items-center gap-3">
                                         <div
-                                            className="w-8 h-8 rounded-lg shadow-inner border border-white/10 shrink-0"
+                                            className="h-8 w-8 shrink-0 rounded-lg border border-white/10 shadow-inner"
                                             style={{ backgroundColor: (settings as any)[item.key] }}
                                         />
                                         <Input
                                             type="color"
                                             value={(settings as any)[item.key]}
                                             onChange={(e) => handleChange(item.key as any, e.target.value)}
-                                            className="h-8 p-0 border-none bg-transparent cursor-pointer w-full"
+                                            className="h-8 w-full cursor-pointer border-none bg-transparent p-0"
                                         />
                                     </div>
                                 </div>
@@ -88,15 +94,14 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                         </div>
                     </section>
 
-                    {/* Timer Logistics */}
                     <section className="space-y-4">
-                        <div className="flex items-center gap-2 text-primary font-black uppercase tracking-widest text-xs px-1">
+                        <div className="flex items-center gap-2 px-1 text-xs font-black uppercase tracking-widest text-primary">
                             <Zap size={16} />
                             <span>Logistics</span>
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid gap-4 sm:grid-cols-2">
                             <div className="space-y-2">
-                                <Label className="text-[10px] font-black uppercase tracking-wider text-muted-foreground px-1">Concentric window (s)</Label>
+                                <Label className="px-1 text-[10px] font-black uppercase tracking-wider text-muted-foreground">Concentric window (s)</Label>
                                 <Input
                                     type="number"
                                     value={settings.concentricSecond}
@@ -105,29 +110,29 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                                         const requested = Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
                                         handleChange('concentricSecond', concentricMax ? Math.min(requested, concentricMax) : requested);
                                     }}
-                                    className="bg-accent/40 font-bold border-border/50"
+                                    className="border-border/50 bg-accent/40 font-bold"
                                     min={1}
                                     max={concentricMax}
                                 />
-                                <p className="text-[10px] text-muted-foreground px-1 uppercase tracking-tight">
+                                <p className="px-1 text-[10px] uppercase tracking-tight text-muted-foreground">
                                     Max = fastest rep pace ({concentricMax ?? 1}s)
                                 </p>
                             </div>
                             <div className="space-y-2">
-                                <Label className="text-[10px] font-black uppercase tracking-wider text-muted-foreground px-1">Prep Buffer (s)</Label>
+                                <Label className="px-1 text-[10px] font-black uppercase tracking-wider text-muted-foreground">Prep Buffer (s)</Label>
                                 <Input
                                     type="number"
                                     value={settings.prepTime}
                                     onChange={(e) => handleChange('prepTime', parseInt(e.target.value) || 0)}
-                                    className="bg-accent/40 font-bold border-border/50"
+                                    className="border-border/50 bg-accent/40 font-bold"
                                 />
                             </div>
                         </div>
 
-                        <div className="flex items-center justify-between p-4 rounded-xl bg-accent/40 border border-border/50">
+                        <div className="flex items-center justify-between rounded-xl border border-border/50 bg-accent/40 p-4">
                             <div className="space-y-0.5">
                                 <Label className="text-sm font-bold tracking-tight">Fluid Animation</Label>
-                                <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-tighter">Enable high-frequency UI updates</p>
+                                <p className="text-[10px] font-medium uppercase tracking-tighter text-muted-foreground">Enable high-frequency UI updates</p>
                             </div>
                             <Switch
                                 checked={settings.smoothAnimation}
@@ -136,9 +141,8 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                         </div>
                     </section>
 
-                    {/* Core Display */}
                     <section className="space-y-4">
-                        <div className="flex items-center gap-2 text-primary font-black uppercase tracking-widest text-xs px-1">
+                        <div className="flex items-center gap-2 px-1 text-xs font-black uppercase tracking-widest text-primary">
                             <Info size={16} />
                             <span>Core Display</span>
                         </div>
@@ -147,12 +151,11 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                             {[
                                 { label: 'Full Screen Mode', key: 'fullScreenMode', desc: 'Active theme colors as background' },
                                 { label: 'Vertical Mode', key: 'upDownMode', desc: 'Large text ECCENTRIC/CONCENTRIC' },
-                                { label: 'Floating PIP', key: 'floatingWindow', desc: 'Picture-in-Picture window support' },
                             ].map((item) => (
-                                <div key={item.key} className="flex items-center justify-between p-4 rounded-xl bg-accent/40 border border-border/50">
+                                <div key={item.key} className="flex items-center justify-between rounded-xl border border-border/50 bg-accent/40 p-4">
                                     <div className="space-y-0.5">
                                         <Label className="text-sm font-bold tracking-tight">{item.label}</Label>
-                                        <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-tighter">{item.desc}</p>
+                                        <p className="text-[10px] font-medium uppercase tracking-tighter text-muted-foreground">{item.desc}</p>
                                     </div>
                                     <Switch
                                         checked={(settings as any)[item.key]}
@@ -163,18 +166,17 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                         </div>
                     </section>
 
-                    {/* Sound Architecture */}
                     <section className="space-y-4">
-                        <div className="flex items-center gap-2 text-primary font-black uppercase tracking-widest text-xs px-1">
+                        <div className="flex items-center gap-2 px-1 text-xs font-black uppercase tracking-widest text-primary">
                             <Volume2 size={16} />
                             <span>Sound Architecture</span>
                         </div>
 
                         <div className="space-y-3">
-                            <div className="flex items-center justify-between p-4 rounded-xl bg-accent/40 border border-border/50">
+                            <div className="flex items-center justify-between rounded-xl border border-border/50 bg-accent/40 p-4">
                                 <div className="space-y-0.5">
                                     <Label className="text-sm font-bold tracking-tight">Metronome Ticks</Label>
-                                    <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-tighter">Audible rhythm during reps</p>
+                                    <p className="text-[10px] font-medium uppercase tracking-tighter text-muted-foreground">Audible rhythm during reps</p>
                                 </div>
                                 <Switch
                                     checked={settings.metronomeEnabled}
@@ -182,10 +184,10 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                                 />
                             </div>
 
-                            <div className="flex items-center justify-between p-4 rounded-xl bg-accent/40 border border-border/50">
+                            <div className="flex items-center justify-between rounded-xl border border-border/50 bg-accent/40 p-4">
                                 <div className="space-y-0.5">
                                     <Label className="text-sm font-bold tracking-tight">Voice Feedback (TTS)</Label>
-                                    <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-tighter">Speak rep count and timings</p>
+                                    <p className="text-[10px] font-medium uppercase tracking-tighter text-muted-foreground">Speak rep count and timings</p>
                                 </div>
                                 <Switch
                                     checked={settings.ttsEnabled}
@@ -194,14 +196,14 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                             </div>
 
                             {(settings.metronomeEnabled || settings.ttsEnabled) && (
-                                <div className="grid grid-cols-2 gap-4 pt-2 animate-in slide-in-from-top-2 duration-300">
+                                <div className="grid gap-4 pt-2 animate-in slide-in-from-top-2 duration-300 sm:grid-cols-2">
                                     {settings.metronomeEnabled && (
                                         <div className="space-y-2">
-                                            <Label className="text-[10px] font-black uppercase tracking-wider text-muted-foreground px-1">Tick Sample</Label>
+                                            <Label className="px-1 text-[10px] font-black uppercase tracking-wider text-muted-foreground">Tick Sample</Label>
                                             <select
                                                 value={settings.metronomeSound}
                                                 onChange={(e) => handleChange('metronomeSound', e.target.value)}
-                                                className="w-full h-10 px-3 rounded-md bg-accent/40 border border-border/50 text-sm font-bold outline-none"
+                                                className="h-11 w-full rounded-md border border-border/50 bg-accent/40 px-3 text-sm font-bold outline-none"
                                             >
                                                 <option value="woodblock">Woodblock</option>
                                                 <option value="mechanical">Mechanical</option>
@@ -212,7 +214,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                                     )}
                                     {settings.ttsEnabled && (
                                         <div className="flex flex-col justify-end">
-                                            <Button onClick={testTTS} variant="outline" className="h-10 gap-2 font-black italic tracking-tighter">
+                                            <Button onClick={testTTS} variant="outline" className="min-h-11 gap-2 font-black italic tracking-tighter">
                                                 <Play size={14} /> TEST VOICES
                                             </Button>
                                         </div>

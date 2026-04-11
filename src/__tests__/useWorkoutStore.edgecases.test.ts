@@ -26,12 +26,12 @@ const buildWorkout = (id: string, name: string, overrides: Partial<Record<string
     updatedAt: '2026-03-01T00:00:00.000Z',
 });
 
-const buildWorkoutNode = (id: string, name: string) => ({
+const buildWorkoutNode = (id: string, name: string, sourceWorkoutId: string | null = null) => ({
     id,
     type: 'workout' as const,
     name,
     config: { ...validConfig },
-    sourceWorkoutId: null,
+    sourceWorkoutId,
     createdAt: '2026-03-01T00:00:00.000Z',
     updatedAt: '2026-03-01T00:00:00.000Z',
 });
@@ -76,6 +76,7 @@ const resetStore = () => {
         sessionNodeRuntimeType: null,
         sessionRestTimeLeft: 0,
         sessionLastTickSecond: -1,
+        completedSessionWorkoutNodeIds: [],
     });
 
     store.setWorkoutConfig({
@@ -268,6 +269,35 @@ describe('useWorkoutStore edge cases', () => {
         expect(store.replaceWorkoutNodeWithSavedWorkout('node-1', 'saved-1')).toMatchObject({ ok: true });
     });
 
+    it('keeps unsaved session drafts out of persisted storage', () => {
+        const state = useWorkoutStore.getState();
+
+        useWorkoutStore.setState({
+            setupMode: 'session',
+            selectedSavedSessionId: 'session-1',
+            editingSessionId: 'session-1',
+            editingSessionDraft: {
+                id: 'session-1',
+                name: 'Draft Session',
+                nodes: [buildRestNode('draft-rest', 'Rest 1', '30')],
+                timesUsed: 0,
+                lastUsedAt: null,
+                createdAt: '2026-03-01T00:00:00.000Z',
+                updatedAt: '2026-03-01T00:00:00.000Z',
+            },
+        });
+
+        const partialize = (useWorkoutStore as unknown as {
+            persist: { getOptions: () => { partialize: (value: typeof state) => Record<string, unknown> } };
+        }).persist.getOptions().partialize;
+        const persistedState = partialize(useWorkoutStore.getState());
+
+        expect(persistedState.selectedSavedSessionId).toBe('session-1');
+        expect(persistedState.setupMode).toBe('session');
+        expect(persistedState).not.toHaveProperty('editingSessionId');
+        expect(persistedState).not.toHaveProperty('editingSessionDraft');
+    });
+
     it('covers session runtime fallbacks and advanceCycle branches', () => {
         const store = useWorkoutStore.getState();
 
@@ -288,10 +318,30 @@ describe('useWorkoutStore edge cases', () => {
         });
         expect(store.startSession('invalid-session')).toMatchObject({ ok: false, error: 'Session is invalid.' });
 
+        const legacySession = {
+            id: 'legacy-session',
+            name: 'Legacy Session',
+            nodes: [buildWorkoutNode('legacy-workout', 'Workout 1')],
+            timesUsed: 0,
+            lastUsedAt: null,
+            createdAt: '2026-03-01T00:00:00.000Z',
+            updatedAt: '2026-03-01T00:00:00.000Z',
+        };
+        useWorkoutStore.setState({
+            savedSessions: [legacySession],
+            savedWorkouts: [],
+            editingSessionDraft: legacySession,
+        });
+        expect(store.startSession('legacy-session')).toMatchObject({ ok: true });
+        expect(useWorkoutStore.getState().sessionStatus).toBe('running');
+        act(() => {
+            store.resetSession();
+        });
+
         const runtimeSession = {
             id: 'runtime-session',
             name: 'Runtime Session',
-            nodes: [buildWorkoutNode('runtime-workout', 'Workout 1'), buildRestNode('runtime-rest', 'Rest 1', '8')],
+            nodes: [buildWorkoutNode('runtime-workout', 'Workout 1', 'w-runtime'), buildRestNode('runtime-rest', 'Rest 1', '8')],
             timesUsed: 0,
             lastUsedAt: null,
             createdAt: '2026-03-01T00:00:00.000Z',
@@ -299,6 +349,7 @@ describe('useWorkoutStore edge cases', () => {
         };
 
         useWorkoutStore.setState({
+            savedWorkouts: [buildWorkout('w-runtime', 'Runtime Workout')],
             savedSessions: [],
             editingSessionDraft: runtimeSession,
         });
@@ -537,5 +588,149 @@ describe('useWorkoutStore edge cases', () => {
             store.advanceCycle();
         });
         expect(useWorkoutStore.getState().timerStatus).toBe('Finished');
+    });
+
+    it('only counts completed workout nodes when a session is terminated early', () => {
+        const store = useWorkoutStore.getState();
+        const trackedWorkouts = [
+            buildWorkout('w-1', 'Workout One'),
+            buildWorkout('w-2', 'Workout Two'),
+            buildWorkout('w-3', 'Workout Three'),
+        ];
+        const session = {
+            id: 'session-partial',
+            name: 'Partial Session',
+            nodes: [
+                { ...buildWorkoutNode('node-1', 'Workout One'), config: { ...validConfig, sets: '1', reps: '1', seconds: '1' }, sourceWorkoutId: 'w-1' },
+                { ...buildWorkoutNode('node-2', 'Workout Two'), config: { ...validConfig, sets: '1', reps: '1', seconds: '1' }, sourceWorkoutId: 'w-2' },
+                { ...buildWorkoutNode('node-3', 'Workout Three'), config: { ...validConfig, sets: '1', reps: '1', seconds: '1' }, sourceWorkoutId: 'w-3' },
+            ],
+            timesUsed: 0,
+            lastUsedAt: null,
+            createdAt: '2026-03-01T00:00:00.000Z',
+            updatedAt: '2026-03-01T00:00:00.000Z',
+        };
+
+        useWorkoutStore.setState({
+            savedWorkouts: trackedWorkouts,
+            savedSessions: [session],
+            editingSessionDraft: session,
+        });
+
+        act(() => {
+            store.startSession(session.id);
+            store.advanceCycle();
+            store.advanceCycle();
+            store.advanceCycle();
+            store.resetWorkout();
+        });
+
+        const state = useWorkoutStore.getState();
+        expect(state.savedWorkouts.find((workout) => workout.id === 'w-1')?.timesUsed).toBe(1);
+        expect(state.savedWorkouts.find((workout) => workout.id === 'w-2')?.timesUsed).toBe(1);
+        expect(state.savedWorkouts.find((workout) => workout.id === 'w-3')?.timesUsed).toBe(0);
+        expect(state.savedSessions.find((entry) => entry.id === session.id)?.timesUsed).toBe(0);
+        expect(state.completedSessionWorkoutNodeIds).toEqual([]);
+    });
+
+    it('increments session usage only after the entire session finishes and ignores rest-only nodes for workout usage', () => {
+        const store = useWorkoutStore.getState();
+        const trackedWorkout = buildWorkout('w-1', 'Tracked Workout');
+        const session = {
+            id: 'session-finish',
+            name: 'Finish Session',
+            nodes: [
+                { ...buildWorkoutNode('node-1', 'Tracked Workout'), config: { ...validConfig, sets: '1', reps: '1', seconds: '1' }, sourceWorkoutId: 'w-1' },
+                buildRestNode('node-2', 'Rest', '8'),
+            ],
+            timesUsed: 0,
+            lastUsedAt: null,
+            createdAt: '2026-03-01T00:00:00.000Z',
+            updatedAt: '2026-03-01T00:00:00.000Z',
+        };
+
+        useWorkoutStore.setState({
+            savedWorkouts: [trackedWorkout],
+            savedSessions: [session],
+            editingSessionDraft: session,
+        });
+
+        act(() => {
+            store.startSession(session.id);
+        });
+
+        let state = useWorkoutStore.getState();
+        expect(state.savedSessions[0].timesUsed).toBe(0);
+        expect(state.savedWorkouts[0].timesUsed).toBe(0);
+
+        act(() => {
+            store.advanceCycle();
+            store.advanceCycle();
+        });
+
+        state = useWorkoutStore.getState();
+        expect(state.savedWorkouts[0].timesUsed).toBe(1);
+        expect(state.savedSessions[0].timesUsed).toBe(0);
+        expect(state.sessionNodeRuntimeType).toBe('rest');
+
+        act(() => {
+            store.completeSessionNode();
+        });
+
+        state = useWorkoutStore.getState();
+        expect(state.savedWorkouts[0].timesUsed).toBe(1);
+        expect(state.savedSessions[0].timesUsed).toBe(1);
+        expect(state.savedSessions[0].lastUsedAt).not.toBeNull();
+    });
+
+    it('clears session completion bookkeeping between runs and ignores workout nodes without source ids', () => {
+        const store = useWorkoutStore.getState();
+        const trackedWorkout = buildWorkout('w-1', 'Tracked Workout');
+        const session = {
+            id: 'session-repeat',
+            name: 'Repeat Session',
+            nodes: [
+                { ...buildWorkoutNode('node-1', 'Tracked Workout'), config: { ...validConfig, sets: '1', reps: '1', seconds: '1' }, sourceWorkoutId: 'w-1' },
+                { ...buildWorkoutNode('node-2', 'Custom Workout'), config: { ...validConfig, sets: '1', reps: '1', seconds: '1' }, sourceWorkoutId: null },
+            ],
+            timesUsed: 0,
+            lastUsedAt: null,
+            createdAt: '2026-03-01T00:00:00.000Z',
+            updatedAt: '2026-03-01T00:00:00.000Z',
+        };
+
+        useWorkoutStore.setState({
+            savedWorkouts: [trackedWorkout],
+            savedSessions: [session],
+            editingSessionDraft: session,
+        });
+
+        act(() => {
+            store.startSession(session.id);
+            store.advanceCycle();
+            store.advanceCycle();
+            store.advanceCycle();
+        });
+
+        let state = useWorkoutStore.getState();
+        expect(state.savedWorkouts[0].timesUsed).toBe(1);
+        expect(state.savedSessions[0].timesUsed).toBe(1);
+        expect(state.completedSessionWorkoutNodeIds).toEqual([]);
+
+        act(() => {
+            store.startSession(session.id);
+        });
+
+        expect(useWorkoutStore.getState().completedSessionWorkoutNodeIds).toEqual([]);
+
+        act(() => {
+            store.advanceCycle();
+            store.advanceCycle();
+            store.advanceCycle();
+        });
+
+        state = useWorkoutStore.getState();
+        expect(state.savedWorkouts[0].timesUsed).toBe(2);
+        expect(state.savedSessions[0].timesUsed).toBe(2);
     });
 });

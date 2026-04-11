@@ -40,6 +40,23 @@ const parsePositiveInt = (value: string | number): number | null => {
     return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : null;
 };
 
+const resolveUniqueWorkoutName = (
+    baseName: string,
+    savedWorkouts: SavedWorkout[],
+): string => {
+    const trimmedBaseName = baseName.trim() || 'Workout';
+    const usedNames = new Set(savedWorkouts.map((workout) => workout.name.trim().toLowerCase()));
+    let candidate = trimmedBaseName;
+    let suffix = 2;
+
+    while (usedNames.has(candidate.toLowerCase())) {
+        candidate = `${trimmedBaseName} (${suffix})`;
+        suffix += 1;
+    }
+
+    return candidate;
+};
+
 const getConcentricLimitFromPaces = (seconds: string, myoWorkSecs: string): number | null => {
     const candidates = [parsePositiveInt(seconds), parsePositiveInt(myoWorkSecs)].filter((value): value is number => value !== null);
     return candidates.length > 0 ? Math.min(...candidates) : null;
@@ -132,6 +149,7 @@ interface WorkoutState {
     sessionNodeRuntimeType: 'workout' | 'rest' | null;
     sessionRestTimeLeft: number;
     sessionLastTickSecond: number;
+    completedSessionWorkoutNodeIds: string[];
 
     // UI State
     showSettings: boolean;
@@ -152,6 +170,7 @@ interface WorkoutState {
     renameWorkout: (id: string, name: string) => { ok: boolean; error?: string };
     deleteWorkout: (id: string) => void;
     recordWorkoutUsed: (id: string) => void;
+    recordSessionUsed: (id: string) => void;
     exportSavedWorkouts: () => SavedWorkoutsExportV1;
     importSavedWorkouts: (payload: unknown) => SavedWorkoutsImportSummary;
     clearImportSummary: () => void;
@@ -182,6 +201,8 @@ interface WorkoutState {
     completeSessionNode: () => void;
     setSessionRestTimeLeft: (time: number) => void;
     setSessionLastTickSecond: (sec: number) => void;
+    clearCompletedSessionWorkoutNodeIds: () => void;
+    recordCompletedSessionWorkoutNode: (nodeId: string) => void;
     startWorkout: () => void;
     resetWorkout: () => void;
     setIsTimerRunning: (running: boolean) => void;
@@ -249,6 +270,7 @@ export const useWorkoutStore = create<WorkoutState>()(
             sessionNodeRuntimeType: null,
             sessionRestTimeLeft: 0,
             sessionLastTickSecond: -1,
+            completedSessionWorkoutNodeIds: [],
             showSettings: false,
             isSidebarCollapsed: false,
             theme: 'theme-default',
@@ -414,6 +436,29 @@ export const useWorkoutStore = create<WorkoutState>()(
                     )),
                 };
             }),
+            recordSessionUsed: (id) => set((state) => {
+                const nowIso = new Date().toISOString();
+                return {
+                    savedSessions: state.savedSessions.map((session) => (
+                        session.id === id
+                            ? {
+                                ...session,
+                                timesUsed: session.timesUsed + 1,
+                                lastUsedAt: nowIso,
+                                updatedAt: nowIso,
+                            }
+                            : session
+                    )),
+                    editingSessionDraft: state.editingSessionDraft?.id === id
+                        ? {
+                            ...state.editingSessionDraft,
+                            timesUsed: state.editingSessionDraft.timesUsed + 1,
+                            lastUsedAt: nowIso,
+                            updatedAt: nowIso,
+                        }
+                        : state.editingSessionDraft,
+                };
+            }),
             exportSavedWorkouts: () => {
                 return buildSavedWorkoutsExport(get().savedWorkouts, new Date().toISOString());
             },
@@ -429,6 +474,12 @@ export const useWorkoutStore = create<WorkoutState>()(
                 const normalizedName = name.trim();
                 if (!normalizedName) {
                     return { ok: false, error: 'Session name is required.' };
+                }
+
+                const state = get();
+                const exists = state.savedSessions.some((session) => session.name.toLowerCase() === normalizedName.toLowerCase());
+                if (exists) {
+                    return { ok: false, error: 'Session name already exists.' };
                 }
 
                 const nowIso = new Date().toISOString();
@@ -614,11 +665,31 @@ export const useWorkoutStore = create<WorkoutState>()(
                 const state = get();
                 const nowIso = new Date().toISOString();
                 const draft = state.editingSessionDraft ?? createEmptySessionDraft('Session', nowIso);
+                const nodeName = `Workout ${draft.nodes.filter((entry) => entry.type === 'workout').length + 1}`;
+                const currentConfig = sanitizeSavedWorkoutConfig(toWorkoutConfig(state));
+                if (!isValidWorkoutConfig(currentConfig)) {
+                    return { ok: false, error: 'Workout needs a valid config before it can be added to a session.' };
+                }
+
+                let sourceWorkoutId = state.selectedSavedWorkoutId
+                    ? state.savedWorkouts.find((workout) => workout.id === state.selectedSavedWorkoutId)?.id ?? null
+                    : null;
+                let nextSavedWorkouts = state.savedWorkouts;
+                let nextSelectedSavedWorkoutId = sourceWorkoutId;
+
+                if (!sourceWorkoutId) {
+                    const linkedWorkoutName = resolveUniqueWorkoutName(nodeName, state.savedWorkouts);
+                    const savedWorkout = createSavedWorkout(linkedWorkoutName, currentConfig, nowIso);
+                    nextSavedWorkouts = [...state.savedWorkouts, savedWorkout];
+                    nextSelectedSavedWorkoutId = savedWorkout.id;
+                    sourceWorkoutId = savedWorkout.id;
+                }
+
                 const node = createWorkoutSessionNode(
-                    `Workout ${draft.nodes.filter((entry) => entry.type === 'workout').length + 1}`,
-                    toWorkoutConfig(state),
+                    nodeName,
+                    currentConfig,
                     nowIso,
-                    state.selectedSavedWorkoutId,
+                    sourceWorkoutId,
                 );
                 const nextDraft = {
                     ...draft,
@@ -627,6 +698,8 @@ export const useWorkoutStore = create<WorkoutState>()(
                 };
                 set({
                     setupMode: 'session',
+                    savedWorkouts: nextSavedWorkouts,
+                    selectedSavedWorkoutId: nextSelectedSavedWorkoutId,
                     editingSessionDraft: nextDraft,
                     editingSessionId: nextDraft.id,
                 });
@@ -883,13 +956,7 @@ export const useWorkoutStore = create<WorkoutState>()(
                     return { ok: false, error: 'Session is invalid.' };
                 }
 
-                const nowIso = new Date().toISOString();
-                const nextSession = {
-                    ...session,
-                    timesUsed: session.timesUsed + 1,
-                    lastUsedAt: nowIso,
-                    updatedAt: nowIso,
-                };
+                const nextSession = cloneSavedSession(session);
                 const nextSessions = get().savedSessions.map((item) => (item.id === nextSession.id ? nextSession : item));
                 if (!get().savedSessions.some((item) => item.id === nextSession.id)) {
                     nextSessions.push(nextSession);
@@ -920,6 +987,7 @@ export const useWorkoutStore = create<WorkoutState>()(
                     sessionNodeRuntimeType: null,
                     sessionRestTimeLeft: 0,
                     sessionLastTickSecond: -1,
+                    completedSessionWorkoutNodeIds: [],
                 });
                 return { ok: true };
             },
@@ -941,6 +1009,7 @@ export const useWorkoutStore = create<WorkoutState>()(
                 sessionNodeRuntimeType: null,
                 sessionRestTimeLeft: 0,
                 sessionLastTickSecond: -1,
+                completedSessionWorkoutNodeIds: [],
                 isTimerRunning: false,
                 timeLeft: 0,
                 setElapsedTime: 0,
@@ -963,12 +1032,14 @@ export const useWorkoutStore = create<WorkoutState>()(
                         timeLeft: 0,
                         setElapsedTime: 0,
                         lastTickSecond: -1,
+                        completedSessionWorkoutNodeIds: [],
                     });
                     return;
                 }
 
                 const nextIndex = state.activeSessionNodeIndex + 1;
                 if (nextIndex >= session.nodes.length) {
+                    get().recordSessionUsed(session.id);
                     set({
                         sessionStatus: 'finished',
                         isRunningSession: false,
@@ -979,6 +1050,7 @@ export const useWorkoutStore = create<WorkoutState>()(
                         timeLeft: 0,
                         setElapsedTime: 0,
                         sessionRestTimeLeft: 0,
+                        completedSessionWorkoutNodeIds: [],
                     });
                     return;
                 }
@@ -989,7 +1061,12 @@ export const useWorkoutStore = create<WorkoutState>()(
                 const state = get();
                 const session = state.savedSessions.find((item) => item.id === state.activeSessionId) ?? state.editingSessionDraft;
                 if (!session || index < 0 || index >= session.nodes.length) {
-                    set({ sessionStatus: 'finished', isRunningSession: false, sessionNodeRuntimeType: null });
+                    set({
+                        sessionStatus: 'finished',
+                        isRunningSession: false,
+                        sessionNodeRuntimeType: null,
+                        completedSessionWorkoutNodeIds: [],
+                    });
                     return;
                 }
 
@@ -1048,6 +1125,29 @@ export const useWorkoutStore = create<WorkoutState>()(
             },
             setSessionRestTimeLeft: (time) => set({ sessionRestTimeLeft: time }),
             setSessionLastTickSecond: (sec) => set({ sessionLastTickSecond: sec }),
+            clearCompletedSessionWorkoutNodeIds: () => set({ completedSessionWorkoutNodeIds: [] }),
+            recordCompletedSessionWorkoutNode: (nodeId) => {
+                const state = get();
+                if (state.completedSessionWorkoutNodeIds.includes(nodeId)) {
+                    return;
+                }
+
+                const session = state.savedSessions.find((item) => item.id === state.activeSessionId) ?? state.editingSessionDraft;
+                const node = session?.nodes.find((entry) => entry.id === nodeId);
+                if (!node || node.type !== 'workout') {
+                    return;
+                }
+
+                if (node.sourceWorkoutId) {
+                    get().recordWorkoutUsed(node.sourceWorkoutId);
+                }
+
+                set((current) => ({
+                    completedSessionWorkoutNodeIds: current.completedSessionWorkoutNodeIds.includes(nodeId)
+                        ? current.completedSessionWorkoutNodeIds
+                        : [...current.completedSessionWorkoutNodeIds, nodeId],
+                }));
+            },
 
             startWorkout: () => {
                 const {
@@ -1059,7 +1159,6 @@ export const useWorkoutStore = create<WorkoutState>()(
                     myoWorkSecs,
                     settings,
                     selectedSavedWorkoutId,
-                    recordWorkoutUsed,
                 } = get();
 
                 const sanitizedConfig = sanitizeSavedWorkoutConfig({
@@ -1083,10 +1182,6 @@ export const useWorkoutStore = create<WorkoutState>()(
                 const hasClusterConfig = rst > 0 && mr > 0 && msec > 0;
 
                 if (hasBaseConfig && (isSingleSet || hasClusterConfig)) {
-                    if (selectedSavedWorkoutId) {
-                        recordWorkoutUsed(selectedSavedWorkoutId);
-                    }
-
                     set({
                         ...sanitizedConfig,
                         currentSet: 1,
@@ -1108,6 +1203,7 @@ export const useWorkoutStore = create<WorkoutState>()(
                         activeSessionNodeIndex: 0,
                         sessionRestTimeLeft: 0,
                         sessionLastTickSecond: -1,
+                        completedSessionWorkoutNodeIds: [],
                     });
                 }
             },
@@ -1124,6 +1220,7 @@ export const useWorkoutStore = create<WorkoutState>()(
                 activeSessionNodeIndex: 0,
                 sessionRestTimeLeft: 0,
                 sessionLastTickSecond: -1,
+                completedSessionWorkoutNodeIds: [],
             }),
 
             setIsTimerRunning: (running: boolean) => set((state) => ({
@@ -1186,6 +1283,11 @@ export const useWorkoutStore = create<WorkoutState>()(
                                 lastTickSecond: -1,
                             });
                         } else if (isSessionRunning) {
+                            const session = state.savedSessions.find((item) => item.id === state.activeSessionId) ?? state.editingSessionDraft;
+                            const activeNode = session?.nodes[state.activeSessionNodeIndex];
+                            if (activeNode?.type === 'workout') {
+                                get().recordCompletedSessionWorkoutNode(activeNode.id);
+                            }
                             set({
                                 isTimerRunning: false,
                                 lastTickSecond: -1,
@@ -1193,6 +1295,9 @@ export const useWorkoutStore = create<WorkoutState>()(
                             });
                             get().advanceSessionNode();
                         } else {
+                            if (state.selectedSavedWorkoutId) {
+                                get().recordWorkoutUsed(state.selectedSavedWorkoutId);
+                            }
                             set({
                                 isTimerRunning: false,
                                 timerStatus: 'Finished',
@@ -1209,24 +1314,32 @@ export const useWorkoutStore = create<WorkoutState>()(
                         });
                     } else if (state.currentSet < totalSets) {
                         set({
-                            isWorking: false,
-                            timeLeft: restSecs,
-                            timerStatus: 'Resting',
+                        isWorking: false,
+                        timeLeft: restSecs,
+                        timerStatus: 'Resting',
                             setTotalDuration: restSecs,
                             setElapsedTime: 0,
-                            lastTickSecond: -1,
-                        });
-                    } else if (isSessionRunning) {
-                        set({
-                            isTimerRunning: false,
-                            lastTickSecond: -1,
-                            sessionNodeRuntimeType: null,
-                        });
-                        get().advanceSessionNode();
-                    } else {
-                        set({
-                            isTimerRunning: false,
-                            timerStatus: 'Finished',
+                        lastTickSecond: -1,
+                    });
+                } else if (isSessionRunning) {
+                    const session = state.savedSessions.find((item) => item.id === state.activeSessionId) ?? state.editingSessionDraft;
+                    const activeNode = session?.nodes[state.activeSessionNodeIndex];
+                    if (activeNode?.type === 'workout') {
+                        get().recordCompletedSessionWorkoutNode(activeNode.id);
+                    }
+                    set({
+                        isTimerRunning: false,
+                        lastTickSecond: -1,
+                        sessionNodeRuntimeType: null,
+                    });
+                    get().advanceSessionNode();
+                } else {
+                    if (state.selectedSavedWorkoutId) {
+                        get().recordWorkoutUsed(state.selectedSavedWorkoutId);
+                    }
+                    set({
+                        isTimerRunning: false,
+                        timerStatus: 'Finished',
                             timeLeft: 0,
                             setElapsedTime: state.setTotalDuration,
                             lastTickSecond: -1,
@@ -1262,8 +1375,6 @@ export const useWorkoutStore = create<WorkoutState>()(
                 savedSessions: state.savedSessions,
                 selectedSavedSessionId: state.selectedSavedSessionId,
                 setupMode: state.setupMode,
-                editingSessionId: state.editingSessionId,
-                editingSessionDraft: state.editingSessionDraft,
             }),
         },
     ),

@@ -115,7 +115,7 @@ describe('App', () => {
     it('renders setup mode with sets min constraint and semantic version footer', () => {
         render(<App />);
 
-        expect(screen.getByText('SYSTEM SETUP')).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: /system setup/i })).toBeInTheDocument();
         const cycleInput = screen.getAllByRole('spinbutton')[0] as HTMLInputElement;
         expect(cycleInput.min).toBe('1');
         expect(screen.getByText(/MYOREP v9.9.9-test/i)).toBeInTheDocument();
@@ -139,7 +139,7 @@ describe('App', () => {
 
         render(<App />);
 
-        expect(screen.getByText(/Build a Session/i)).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: /build a session/i })).toBeInTheDocument();
         expect(screen.getByText(/Session Canvas/i)).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /workout setup/i })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /session builder/i })).toBeInTheDocument();
@@ -211,6 +211,56 @@ describe('App', () => {
         render(<App />);
 
         expect(audioEngine.speak).not.toHaveBeenCalledWith(1);
+    });
+
+    it('drives the prep ring from prepTime instead of rest time', () => {
+        useWorkoutStore.setState({
+            appPhase: 'timer',
+            timerStatus: 'Preparing',
+            isTimerRunning: true,
+            isWorking: false,
+            timeLeft: 5,
+            rest: '20',
+            settings: {
+                ...useWorkoutStore.getState().settings,
+                prepTime: 5,
+            },
+        });
+
+        render(<App />);
+
+        expect(concentricTimerMock).toHaveBeenCalled();
+        const props = vi.mocked(concentricTimerMock).mock.calls[0]?.[0] as {
+            outerValue: number;
+            outerMax: number;
+        };
+        expect(props.outerValue).toBe(5);
+        expect(props.outerMax).toBe(5);
+    });
+
+    it('drives the outer ring from remaining set time during active reps', () => {
+        useWorkoutStore.setState({
+            appPhase: 'timer',
+            timerStatus: 'Main Set',
+            isTimerRunning: true,
+            isWorking: true,
+            isMainRep: true,
+            timeLeft: 3,
+            setTotalDuration: 12,
+            setElapsedTime: 4,
+            settings: {
+                ...useWorkoutStore.getState().settings,
+            },
+        });
+
+        render(<App />);
+
+        const props = vi.mocked(concentricTimerMock).mock.calls[0]?.[0] as {
+            outerValue: number;
+            outerMax: number;
+        };
+        expect(props.outerValue).toBe(8);
+        expect(props.outerMax).toBe(12);
     });
 
     it('covers sidebar session handler cancellations and duplicate errors', () => {
@@ -296,7 +346,7 @@ describe('App', () => {
         expect(alertSpy).not.toHaveBeenCalled();
     });
 
-    it('opens a node editor modal with saved workout import controls', () => {
+    it('opens a node editor modal with legacy workout repair controls', () => {
         useWorkoutStore.setState({
             setupMode: 'session',
             editingSessionNodeId: 'node-1',
@@ -333,9 +383,61 @@ describe('App', () => {
 
         fireEvent.click(screen.getByRole('button', { name: /edit workout node/i }));
         expect(screen.getByRole('dialog')).toBeInTheDocument();
+        expect(screen.getByText(/old node/i)).toBeInTheDocument();
         expect(screen.getByText(/Import or Save Workout/i)).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /import workout/i })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /save workout/i })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: /export workout/i }));
+        expect(useWorkoutStore.getState().savedWorkouts).toHaveLength(2);
+        expect(useWorkoutStore.getState().editingSessionDraft?.nodes[0]).toMatchObject({
+            type: 'workout',
+        });
+        expect(useWorkoutStore.getState().editingSessionDraft?.nodes[0].type === 'workout'
+            ? useWorkoutStore.getState().editingSessionDraft?.nodes[0].sourceWorkoutId
+            : null).toBe(useWorkoutStore.getState().savedWorkouts[1].id);
+        expect(screen.getByRole('status')).toHaveTextContent(/saved and linked/i);
+    });
+
+    it('shows the missing-link warning for orphaned workout nodes and closes from the backdrop', () => {
+        useWorkoutStore.setState({
+            setupMode: 'session',
+            editingSessionNodeId: 'node-1',
+            editingSessionDraft: {
+                id: 'session-2',
+                name: 'Broken Session',
+                nodes: [
+                    {
+                        id: 'node-1',
+                        type: 'workout',
+                        name: 'Orphaned Workout',
+                        config: {
+                            sets: '2',
+                            reps: '8',
+                            seconds: '2',
+                            rest: '15',
+                            myoReps: '4',
+                            myoWorkSecs: '2',
+                        },
+                        sourceWorkoutId: 'missing-workout',
+                        createdAt: '2026-03-01T00:00:00.000Z',
+                        updatedAt: '2026-03-01T00:00:00.000Z',
+                    },
+                ],
+                timesUsed: 0,
+                lastUsedAt: null,
+                createdAt: '2026-03-01T00:00:00.000Z',
+                updatedAt: '2026-03-01T00:00:00.000Z',
+            },
+            savedWorkouts: [],
+        });
+
+        render(<App />);
+
+        fireEvent.click(screen.getByRole('button', { name: /edit orphaned workout/i }));
+        const dialog = screen.getByRole('dialog', { name: /workout node editor/i });
+        expect(screen.getByText(/missing workout link/i)).toBeInTheDocument();
+
+        fireEvent.pointerDown(dialog, { target: dialog });
+        expect(screen.queryByRole('dialog', { name: /workout node editor/i })).not.toBeInTheDocument();
     });
 
     it('uses the session rest duration for rest-node outer max display', () => {
@@ -741,7 +843,7 @@ describe('App', () => {
         expect(screen.getByRole('button', { name: /pause/i })).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: /pause/i }));
         expect(useWorkoutStore.getState().isTimerRunning).toBe(false);
-        expect(screen.getByRole('button', { name: /launch pip/i })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /launch pip/i })).not.toBeInTheDocument();
     });
 
     it('renders preparing, resting, and myo-rep branches', () => {
@@ -944,7 +1046,7 @@ describe('App', () => {
         expect(audioEngine.playTick).toHaveBeenCalledTimes(1);
     });
 
-    it('shows PIP active state when picture-in-picture is already open', () => {
+    it('does not render pip controls anymore', () => {
         useWorkoutStore.setState({
             appPhase: 'timer',
             timerStatus: 'Main Set',
@@ -965,13 +1067,9 @@ describe('App', () => {
                 floatingWindow: true,
             },
         });
-        Object.defineProperty(document, 'pictureInPictureElement', {
-            configurable: true,
-            value: {},
-        });
-
         render(<App />);
-        expect(screen.getByRole('button', { name: /pip active/i })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /launch pip/i })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /pip active/i })).not.toBeInTheDocument();
     });
 
     it('exports and imports saved workouts through sidebar controls', async () => {
@@ -1077,7 +1175,7 @@ describe('App', () => {
         fireEvent.click(screen.getAllByRole('button')[0]); // Sidebar collapse toggle
         expect(useWorkoutStore.getState().isSidebarCollapsed).toBe(true);
 
-        fireEvent.click(screen.getByRole('button', { name: /close settings/i }));
+        fireEvent.click(screen.getByText('Close Settings'));
         expect(useWorkoutStore.getState().showSettings).toBe(false);
     });
 

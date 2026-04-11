@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { X, Activity, Square, Zap, Upload, Save } from 'lucide-react';
+import { X, Activity, AlertTriangle, Square, Zap, Upload, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -29,7 +29,7 @@ const SessionNodeEditor = () => {
     const updateWorkoutNode = useWorkoutStore((state) => state.updateWorkoutNode);
     const updateRestNode = useWorkoutStore((state) => state.updateRestNode);
     const [selectedWorkoutId, setSelectedWorkoutId] = useState('__new__');
-    const [saveFeedback, setSaveFeedback] = useState<string | null>(null);
+    const [feedback, setFeedback] = useState<{ tone: 'success' | 'error'; message: string } | null>(null);
     const lastNodeIdRef = useRef<string | null>(null);
 
     const node = useMemo(() => {
@@ -42,16 +42,20 @@ const SessionNodeEditor = () => {
 
     useEffect(() => {
         if (!node || node.type !== 'workout') {
-            setSaveFeedback(null);
+            setFeedback(null);
             lastNodeIdRef.current = null;
             setSelectedWorkoutId('__new__');
             return;
         }
 
         if (lastNodeIdRef.current !== node.id) {
-            setSaveFeedback(null);
+            setFeedback(null);
             lastNodeIdRef.current = node.id;
-            setSelectedWorkoutId(node.sourceWorkoutId ?? savedWorkouts[0]?.id ?? '__new__');
+            const hasLinkedWorkout = Boolean(
+                node.sourceWorkoutId
+                && savedWorkouts.some((workout) => workout.id === node.sourceWorkoutId),
+            );
+            setSelectedWorkoutId(hasLinkedWorkout ? node.sourceWorkoutId! : '__new__');
             return;
         }
 
@@ -65,21 +69,25 @@ const SessionNodeEditor = () => {
                 return current;
             }
 
-            return node.sourceWorkoutId ?? savedWorkouts[0]?.id ?? '__new__';
+            const hasLinkedWorkout = Boolean(
+                node.sourceWorkoutId
+                && savedWorkouts.some((workout) => workout.id === node.sourceWorkoutId),
+            );
+            return hasLinkedWorkout ? node.sourceWorkoutId! : '__new__';
         });
-        }, [node, savedWorkouts]);
+    }, [node, savedWorkouts]);
 
     useEffect(() => {
-        if (!saveFeedback) {
+        if (!feedback) {
             return;
         }
 
         const timeoutId = window.setTimeout(() => {
-            setSaveFeedback(null);
+            setFeedback(null);
         }, 2500);
 
         return () => window.clearTimeout(timeoutId);
-    }, [saveFeedback]);
+    }, [feedback]);
 
     if (!node) {
         return null;
@@ -89,6 +97,11 @@ const SessionNodeEditor = () => {
     const workoutNode = isWorkout ? node : null;
     const restNode = node.type === 'rest' ? node : null;
     const isSingleCycle = workoutNode ? parseInt(workoutNode.config.sets || '0', 10) === 1 : false;
+    const linkedWorkout = workoutNode?.sourceWorkoutId
+        ? savedWorkouts.find((workout) => workout.id === workoutNode.sourceWorkoutId) ?? null
+        : null;
+    const isLegacyWorkoutNode = Boolean(workoutNode && !linkedWorkout);
+    const isMissingLinkedWorkout = Boolean(workoutNode?.sourceWorkoutId && !linkedWorkout);
 
     const handleClose = () => setEditingSessionNodeId(null);
 
@@ -109,13 +122,24 @@ const SessionNodeEditor = () => {
         const result = saveWorkoutFromConfig(workoutNode.name, workoutNode.config, targetWorkoutId);
 
         if (!result.ok) {
-            window.alert(result.error ?? 'Could not save workout.');
+            setFeedback({
+                tone: 'error',
+                message: result.error ?? 'Could not save workout.',
+            });
             return;
         }
 
-        setSaveFeedback(targetWorkoutId
-            ? 'Workout updated in your library.'
-            : 'Workout saved to your library.');
+        if (result.id) {
+            replaceWorkoutNodeWithSavedWorkout(workoutNode.id, result.id);
+            setSelectedWorkoutId(result.id);
+        }
+
+        setFeedback({
+            tone: 'success',
+            message: targetWorkoutId
+                ? 'Workout updated and linked.'
+                : 'Workout saved and linked.',
+        });
     };
 
     return (
@@ -127,10 +151,15 @@ const SessionNodeEditor = () => {
                 'fixed inset-y-0 right-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm',
                 isSidebarCollapsed ? 'left-16' : 'left-64',
             )}
+            onPointerDown={(event) => {
+                if (event.target === event.currentTarget) {
+                    handleClose();
+                }
+            }}
         >
             <Card
                 className="relative w-full max-w-[920px] min-w-0 max-h-[calc(100vh-2rem)] overflow-auto border-border/60 bg-background/95 shadow-[0_30px_120px_rgba(0,0,0,0.55)]"
-                onClick={(event) => event.stopPropagation()}
+                onPointerDown={(event) => event.stopPropagation()}
             >
                 <CardContent className="space-y-6 p-5 sm:p-6">
                     <div className="flex items-start justify-between gap-4">
@@ -142,7 +171,7 @@ const SessionNodeEditor = () => {
                                 <span className="text-sm font-black italic tracking-tight">{node.name}</span>
                             </div>
                             <p className="text-sm text-muted-foreground">
-                                Edit this node directly. Workout nodes can import from saved workouts.
+                                Edit this node directly. Workout nodes should stay linked to your saved workout library.
                             </p>
                         </div>
 
@@ -220,6 +249,46 @@ const SessionNodeEditor = () => {
                         <div className="space-y-4">
                             {workoutNode ? (
                                 <div className="space-y-3 rounded-[20px] border border-border/50 bg-muted/20 p-4">
+                                    {isLegacyWorkoutNode ? (
+                                        <div
+                                            role="alert"
+                                            className="space-y-2 rounded-[16px] border border-amber-500/30 bg-amber-500/10 px-3 py-3 text-sm text-amber-100"
+                                        >
+                                            <div className="flex items-start gap-2">
+                                                <AlertTriangle size={14} className="mt-0.5 shrink-0 text-amber-300" />
+                                                <div className="space-y-1">
+                                                    <div className="text-[10px] font-black uppercase tracking-[0.22em] text-amber-300">
+                                                        {isMissingLinkedWorkout ? 'Missing Workout Link' : 'Old Node'}
+                                                    </div>
+                                                    <p className="leading-relaxed text-amber-100/90">
+                                                        {isMissingLinkedWorkout
+                                                            ? 'This workout node points to a workout that is no longer in your library. Save or import a workout below to relink it.'
+                                                            : 'This workout node is not linked to a saved workout yet. Save or import a workout below to repair it.'}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ) : linkedWorkout ? (
+                                        <div className="rounded-xl border border-border/60 bg-background/70 px-3 py-3">
+                                            <div className="text-[11px] font-semibold text-foreground">
+                                                Linked workout
+                                            </div>
+                                            <div className="mt-2 flex items-center justify-between gap-3 border-t border-border/50 pt-2">
+                                                <div className="min-w-0">
+                                                    <div className="truncate text-sm font-medium text-foreground">
+                                                        {linkedWorkout.name}
+                                                    </div>
+                                                    <div className="text-xs text-muted-foreground">
+                                                        Library-backed session node
+                                                    </div>
+                                                </div>
+                                                <div className="shrink-0 text-[11px] text-muted-foreground">
+                                                    Saved
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ) : null}
+
                                     <div className="space-y-1">
                                         <div className="flex items-center gap-2">
                                             <Upload size={14} className="text-primary" />
@@ -272,17 +341,22 @@ const SessionNodeEditor = () => {
                                             onClick={handleSaveWorkout}
                                         >
                                             <Save size={14} />
-                                            Save Workout
+                                            {isLegacyWorkoutNode ? 'Export Workout' : 'Save Workout'}
                                         </Button>
                                     </div>
 
-                                    {saveFeedback && (
+                                    {feedback && (
                                         <div
                                             role="status"
                                             aria-live="polite"
-                                            className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-200"
+                                            className={cn(
+                                                'rounded-2xl px-3 py-2 text-xs font-semibold',
+                                                feedback.tone === 'success'
+                                                    ? 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
+                                                    : 'border border-destructive/30 bg-destructive/10 text-destructive',
+                                            )}
                                         >
-                                            {saveFeedback}
+                                            {feedback.message}
                                         </div>
                                     )}
                                 </div>

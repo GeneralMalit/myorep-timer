@@ -397,6 +397,34 @@ export const isValidSavedSession = (session: Pick<SavedSession, 'name' | 'nodes'
     });
 };
 
+export const hasLinkedWorkoutSource = (
+    node: SessionNode,
+    availableWorkoutIds: Iterable<string>,
+): boolean => {
+    if (node.type !== 'workout' || !node.sourceWorkoutId) {
+        return false;
+    }
+
+    const workoutIdSet = availableWorkoutIds instanceof Set
+        ? availableWorkoutIds
+        : new Set(availableWorkoutIds);
+
+    return workoutIdSet.has(node.sourceWorkoutId);
+};
+
+export const getLegacyWorkoutSessionNodes = (
+    session: Pick<SavedSession, 'nodes'>,
+    availableWorkoutIds: Iterable<string>,
+): WorkoutSessionNode[] => {
+    const workoutIdSet = availableWorkoutIds instanceof Set
+        ? availableWorkoutIds
+        : new Set(availableWorkoutIds);
+
+    return session.nodes.filter((node): node is WorkoutSessionNode => (
+        node.type === 'workout' && !hasLinkedWorkoutSource(node, workoutIdSet)
+    ));
+};
+
 export const createSavedSession = (
     name: string,
     nodesOrNowIso?: SessionNode[] | string,

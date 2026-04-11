@@ -4,17 +4,34 @@ export class AudioEngine {
     private selectedVoice: SpeechSynthesisVoice | null = null;
     private unlocked = false;
     private preferredPatterns = ['Google US English', 'Microsoft Aria Online', 'Natural', 'Samantha', 'Google', 'Microsoft'];
+    private readonly defaultLang = 'en-US';
+
+    private get speech(): SpeechSynthesis | null {
+        if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+            return null;
+        }
+
+        return window.speechSynthesis;
+    }
+
+    private get AudioContextCtor(): typeof AudioContext | null {
+        if (typeof window === 'undefined') {
+            return null;
+        }
+
+        return window.AudioContext ?? (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext ?? null;
+    }
 
     constructor() {
-        if (typeof window !== 'undefined' && window.speechSynthesis) {
+        if (this.speech) {
             const loadVoices = () => {
-                this.voices = window.speechSynthesis.getVoices();
+                this.voices = this.speech?.getVoices() ?? [];
                 console.log(`[AudioEngine] Voices loaded: ${this.voices.length}`);
                 this.findPreferredVoice();
             };
 
-            if (window.speechSynthesis.onvoiceschanged !== undefined) {
-                window.speechSynthesis.onvoiceschanged = loadVoices;
+            if (this.speech.onvoiceschanged !== undefined) {
+                this.speech.onvoiceschanged = loadVoices;
             }
             loadVoices();
         }
@@ -40,22 +57,51 @@ export class AudioEngine {
     }
 
     init() {
-        if (!this.audioCtx) {
-            this.audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-            console.log("[AudioEngine] AudioContext initialized");
-        }
-        if (this.audioCtx.state === 'suspended') {
-            this.audioCtx.resume();
+        const audioContextCtor = this.AudioContextCtor;
+        if (!this.audioCtx && audioContextCtor) {
+            try {
+                this.audioCtx = new audioContextCtor();
+                console.log("[AudioEngine] AudioContext initialized");
+            } catch (error) {
+                console.error("[AudioEngine] AudioContext failed to initialize:", error);
+            }
         }
 
-        if (!this.unlocked && window.speechSynthesis) {
+        if (this.audioCtx?.state === 'suspended') {
+            void this.audioCtx.resume().catch((error) => {
+                console.error("[AudioEngine] AudioContext resume failed:", error);
+            });
+        }
+
+        if (!this.unlocked && this.audioCtx) {
+            try {
+                // Warm the context with a near-silent buffer so iOS WebViews treat the
+                // gesture that called init() as real playback.
+                const buffer = this.audioCtx.createBuffer(1, 1, 22050);
+                const source = this.audioCtx.createBufferSource();
+                const gain = this.audioCtx.createGain();
+                gain.gain.value = 0.0001;
+                source.buffer = buffer;
+                source.connect(gain);
+                gain.connect(this.audioCtx.destination);
+                source.start(0);
+            } catch (error) {
+                console.error("[AudioEngine] Audio warmup failed:", error);
+            }
+        }
+
+        if (!this.unlocked && this.speech) {
             console.log("[AudioEngine] Unlocking SpeechSynthesis...");
             const silent = new SpeechSynthesisUtterance(' ');
+            silent.lang = this.defaultLang;
             silent.volume = 0.001; // Tiny volume to satisfy browser user activation checks
-            window.speechSynthesis.speak(silent);
+            this.speech.cancel();
+            this.speech.speak(silent);
             this.unlocked = true;
-            this.voices = window.speechSynthesis.getVoices();
+            this.voices = this.speech.getVoices();
             this.findPreferredVoice();
+        } else if (this.audioCtx) {
+            this.unlocked = true;
         }
     }
 
@@ -117,33 +163,37 @@ export class AudioEngine {
     }
 
     speak(text: string | number) {
-        if (!window.speechSynthesis) return;
+        if (!this.speech || (typeof document !== 'undefined' && document.visibilityState === 'hidden')) return;
+
+        this.init();
         const msg = text.toString();
 
         if (this.voices.length === 0) {
-            this.voices = window.speechSynthesis.getVoices();
+            this.voices = this.speech.getVoices();
             this.findPreferredVoice();
         }
 
         console.log(`[AudioEngine] Requesting speech: "${msg}"`);
 
-        if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
-            window.speechSynthesis.cancel();
+        if (this.speech.speaking || this.speech.pending) {
+            this.speech.cancel();
         }
 
         const utterance = new SpeechSynthesisUtterance(msg);
 
         // If still no voice, wait for onvoiceschanged or try one last time
         if (!this.selectedVoice) {
-            this.voices = window.speechSynthesis.getVoices();
+            this.voices = this.speech.getVoices();
             this.findPreferredVoice();
         }
 
         if (this.selectedVoice) {
             utterance.voice = this.selectedVoice;
+            utterance.lang = this.selectedVoice.lang || this.defaultLang;
         }
 
-        utterance.rate = 1.15;
+        utterance.lang = utterance.lang || this.defaultLang;
+        utterance.rate = /iP(hone|ad|od)/i.test(typeof navigator === 'undefined' ? '' : navigator.userAgent) ? 1.05 : 1.15;
         utterance.pitch = 1.0;
         utterance.volume = 1.0;
 
@@ -151,7 +201,11 @@ export class AudioEngine {
             console.error("[AudioEngine] Speech error:", e);
         };
 
-        window.speechSynthesis.speak(utterance);
+        try {
+            this.speech.speak(utterance);
+        } catch (error) {
+            console.error("[AudioEngine] Speech dispatch failed:", error);
+        }
     }
 
     speakWithTones(_text: string) {

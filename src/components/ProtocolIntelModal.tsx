@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { X, BrainCircuit, Clock3, Dumbbell, ExternalLink, ShieldAlert, Target } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -28,6 +28,21 @@ const sourceLinks = [
 ];
 
 const ProtocolIntelModal: React.FC<ProtocolIntelModalProps> = ({ isOpen, onClose }) => {
+    useEffect(() => {
+        if (!isOpen) {
+            return;
+        }
+
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                onClose();
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [isOpen, onClose]);
+
     if (!isOpen) return null;
 
     return (
@@ -36,7 +51,7 @@ const ProtocolIntelModal: React.FC<ProtocolIntelModalProps> = ({ isOpen, onClose
             role="dialog"
             aria-modal="true"
             aria-label="Protocol Intel"
-            onMouseDown={(event) => {
+            onPointerDown={(event) => {
                 if (event.target === event.currentTarget) {
                     onClose();
                 }

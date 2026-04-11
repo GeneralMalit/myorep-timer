@@ -1,24 +1,24 @@
-﻿import React, { useMemo, useRef } from 'react';
+import React, { useMemo, useRef } from 'react';
 import {
-    Settings,
     ChevronLeft,
     ChevronRight,
-    Palette,
-    Activity,
-    Save,
-    Upload,
     Download,
     FolderOpen,
+    Palette,
     Pencil,
+    Save,
+    Settings,
     Trash2,
+    Upload,
+    Activity,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { SavedWorkout, SavedWorkoutsImportSummary } from '@/types/savedWorkouts';
-import { SavedSession } from '@/types/savedSessions';
 import { APP_VERSION } from '@/constants/version';
 import { estimateSessionDurationSeconds, formatEstimatedSessionDuration } from '@/utils/savedSessions';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
+import { SavedWorkout, SavedWorkoutsImportSummary } from '@/types/savedWorkouts';
+import { SavedSession } from '@/types/savedSessions';
 
 interface SidebarProps {
     currentTheme: string;
@@ -47,6 +47,13 @@ interface SidebarProps {
     onDeleteSession: (id: string) => void;
 }
 
+const themes = [
+    { id: 'theme-default', name: 'Deep Purple', color: '#bb86fc' },
+    { id: 'theme-ocean', name: 'Ocean Blue', color: '#03dac6' },
+    { id: 'theme-fire', name: 'Crimson Fire', color: '#cf6679' },
+    { id: 'theme-forest', name: 'Neon Forest', color: '#00e676' },
+] as const;
+
 const Sidebar: React.FC<SidebarProps> = ({
     currentTheme,
     setTheme,
@@ -74,40 +81,21 @@ const Sidebar: React.FC<SidebarProps> = ({
     onDeleteSession,
 }) => {
     const fileInputRef = useRef<HTMLInputElement | null>(null);
-    const isSetupMode = appPhase === 'setup';
     const prepTime = useWorkoutStore((state) => state.settings.prepTime);
-
-    const themes = [
-        { id: 'theme-default', name: 'Deep Purple', color: '#bb86fc' },
-        { id: 'theme-ocean', name: 'Ocean Blue', color: '#03dac6' },
-        { id: 'theme-fire', name: 'Crimson Fire', color: '#cf6679' },
-        { id: 'theme-forest', name: 'Neon Forest', color: '#00e676' },
-    ];
-
-    const sortedWorkouts = useMemo(
-        () => [...savedWorkouts].sort((a, b) => a.name.localeCompare(b.name)),
-        [savedWorkouts],
-    );
+    const isSetupMode = appPhase === 'setup';
 
     const sessionDurations = useMemo(
         () => new Map(savedSessions.map((session) => [session.id, estimateSessionDurationSeconds(session, prepTime)])),
         [savedSessions, prepTime],
     );
 
-    const handleOpenImport = () => {
-        fileInputRef.current?.click();
-    };
-
     const handleFileSelected = async (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
-        if (!file) {
-            return;
-        }
+        if (!file) return;
 
         try {
             const text = await file.text();
-            const payload = JSON.parse(text);
-            onImportWorkouts(payload);
+            onImportWorkouts(JSON.parse(text));
         } catch {
             onImportWorkouts(null);
         } finally {
@@ -116,19 +104,22 @@ const Sidebar: React.FC<SidebarProps> = ({
     };
 
     return (
-        <div
+        <aside
+            aria-label="Sidebar"
             className={cn(
-                'fixed left-0 top-0 h-full bg-card border-r border-border transition-all duration-300 z-50 flex flex-col',
-                isCollapsed ? 'w-16' : 'w-64',
+                'fixed inset-y-0 left-0 z-50 flex flex-col border-r border-border/60 bg-background transition-all duration-300',
+                isCollapsed
+                    ? 'w-[4.5rem]'
+                    : 'w-[min(20rem,calc(100vw-1rem))] max-w-full',
             )}
         >
-            <div className="p-4 flex items-center justify-between h-16 border-b border-border/50">
+            <div className="flex h-20 items-center justify-between border-b border-border/50 px-4 pt-[calc(var(--safe-top)+0.5rem)] md:h-16 md:pt-0">
                 {!isCollapsed && (
-                    <div className="flex items-center gap-2 overflow-hidden">
-                        <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center shrink-0">
+                    <div className="flex min-w-0 items-center gap-2 overflow-hidden">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/20">
                             <Activity size={18} className="text-primary" />
                         </div>
-                        <h2 className="text-xl font-black italic tracking-tighter text-primary pr-2">MyoREP</h2>
+                        <h2 className="pr-2 text-xl font-black italic tracking-tighter text-primary">MyoREP</h2>
                     </div>
                 )}
                 <Button
@@ -136,16 +127,17 @@ const Sidebar: React.FC<SidebarProps> = ({
                     size="icon"
                     onClick={toggleSidebar}
                     className={cn('shrink-0', isCollapsed && 'mx-auto')}
+                    aria-label={isCollapsed ? 'Open Navigation' : 'Close Navigation'}
                 >
                     {isCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
                 </Button>
             </div>
 
-            <div className="flex-1 px-4 py-6 overflow-y-auto no-scrollbar space-y-8">
+            <div className="no-scrollbar flex-1 space-y-8 overflow-y-auto px-4 py-6 pb-[calc(var(--safe-bottom)+1rem)]">
                 {!isCollapsed && (
                     <>
                         <section>
-                            <div className="flex items-center gap-2 mb-4 text-xs font-bold uppercase tracking-widest text-muted-foreground/60 px-2">
+                            <div className="mb-4 flex items-center gap-2 px-2 text-xs font-bold uppercase tracking-widest text-muted-foreground/60">
                                 <Palette size={14} />
                                 <span>Themes</span>
                             </div>
@@ -155,18 +147,18 @@ const Sidebar: React.FC<SidebarProps> = ({
                                         key={theme.id}
                                         onClick={() => setTheme(theme.id)}
                                         className={cn(
-                                            'w-full flex items-center gap-3 p-2 rounded-lg transition-all duration-200 group text-left',
+                                            'group flex min-h-11 w-full items-center gap-3 rounded-lg p-2 text-left transition-all duration-200',
                                             currentTheme === theme.id
                                                 ? 'bg-primary/10 text-primary'
-                                                : 'hover:bg-accent text-muted-foreground',
+                                                : 'text-muted-foreground hover:bg-accent',
                                         )}
                                         title={theme.name}
                                     >
                                         <div
-                                            className="w-3 h-3 rounded-full shrink-0 group-hover:scale-125 transition-transform"
+                                            className="h-3 w-3 shrink-0 rounded-full transition-transform group-hover:scale-125"
                                             style={{ backgroundColor: theme.color, boxShadow: `0 0 8px ${theme.color}44` }}
                                         />
-                                        <span className="text-sm font-semibold truncate">{theme.name}</span>
+                                        <span className="truncate text-sm font-semibold">{theme.name}</span>
                                     </button>
                                 ))}
                             </div>
@@ -176,61 +168,61 @@ const Sidebar: React.FC<SidebarProps> = ({
                             <Button
                                 type="button"
                                 variant="link"
-                                className="h-auto p-0 text-left text-xs font-black uppercase tracking-[0.24em]"
+                                className="min-h-11 justify-start p-0 text-left text-xs font-black uppercase tracking-[0.24em]"
                                 onClick={onOpenProtocolIntel}
                             >
                                 What are "Myo-Reps"?
                             </Button>
-                            <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground/70 uppercase tracking-tight">
+                            <p className="mt-1 text-[10px] uppercase tracking-tight text-muted-foreground/70">
                                 What myo-reps are and how this timer interprets them.
                             </p>
                         </section>
 
-                        <section className="border border-border/50 rounded-xl p-3 space-y-3">
+                        <section className="space-y-3">
                             <div className="flex items-center justify-between gap-2">
                                 <div className="text-xs font-bold uppercase tracking-widest text-muted-foreground/70">Saved Sessions</div>
-                                <Button variant="outline" size="sm" onClick={onCreateSession} className="h-7 px-2 text-[10px]" disabled={!isSetupMode}>
+                                <Button variant="outline" size="sm" onClick={onCreateSession} className="min-h-10 px-3 text-[10px]" disabled={!isSetupMode}>
                                     New
                                 </Button>
                             </div>
 
-                            <div className="space-y-2 max-h-52 overflow-y-auto no-scrollbar pr-1">
+                            <div className="no-scrollbar max-h-52 space-y-3 overflow-y-auto pr-1">
                                 {savedSessions.length === 0 && (
-                                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground/60 p-2 border border-dashed border-border rounded-lg">
+                                    <div className="px-1 text-[10px] uppercase tracking-wider text-muted-foreground/60">
                                         No saved sessions yet
                                     </div>
                                 )}
 
-                                {savedSessions.map((session) => (
-                                    <div key={session.id} className="rounded-lg border border-border/50 bg-accent/20 p-2 space-y-2">
+                                {savedSessions.map((session, index) => (
+                                    <div key={session.id} className={cn('space-y-2 pb-3', index !== savedSessions.length - 1 && 'border-b border-border/50')}>
                                         <div className="flex items-start justify-between gap-3">
                                             <div className="min-w-0">
-                                                <div className="text-xs font-bold truncate">{session.name}</div>
-                                                <div className="text-[10px] text-muted-foreground uppercase tracking-tight">
+                                                <div className="truncate text-xs font-bold">{session.name}</div>
+                                                <div className="text-[10px] uppercase tracking-tight text-muted-foreground">
                                                     {session.nodes.length} nodes
-                                                    {session.lastUsedAt ? ` • Last ${new Date(session.lastUsedAt).toLocaleDateString()}` : ''}
+                                                    {session.lastUsedAt ? ` - Last ${new Date(session.lastUsedAt).toLocaleDateString()}` : ''}
                                                 </div>
                                             </div>
-                                            <div className="shrink-0 rounded-full bg-background/70 px-2 py-1 text-right">
+                                            <div className="shrink-0 text-right">
                                                 <div className="text-[9px] font-black uppercase tracking-[0.22em] text-muted-foreground">
                                                     Time
                                                 </div>
-                                                <div className="text-[10px] font-black italic tracking-tight text-foreground">
+                                                <div className="text-[10px] font-black tracking-tight text-foreground">
                                                     {formatEstimatedSessionDuration(sessionDurations.get(session.id) ?? null)}
                                                 </div>
                                             </div>
                                         </div>
                                         <div className="grid grid-cols-4 gap-1">
-                                            <Button variant="default" size="sm" className="h-6 px-1 text-[9px] font-bold" onClick={() => onLoadSession(session.id)} disabled={!isSetupMode} title="Load Session">
+                                            <Button variant="default" size="sm" className="min-h-10 px-1 text-[9px] font-bold" onClick={() => onLoadSession(session.id)} disabled={!isSetupMode} title="Load Session">
                                                 Load
                                             </Button>
-                                            <Button variant="secondary" size="sm" className="h-6 px-1 text-[9px] font-bold" onClick={() => onDuplicateSession(session.id)} disabled={!isSetupMode} title="Duplicate Session">
+                                            <Button variant="secondary" size="sm" className="min-h-10 px-1 text-[9px] font-bold" onClick={() => onDuplicateSession(session.id)} disabled={!isSetupMode} title="Duplicate Session">
                                                 Copy
                                             </Button>
-                                            <Button variant="secondary" size="sm" className="h-6 px-1 text-[9px] font-bold" onClick={() => onRenameSession(session.id)} disabled={!isSetupMode} title="Rename Session">
+                                            <Button variant="secondary" size="sm" className="min-h-10 px-1 text-[9px] font-bold" onClick={() => onRenameSession(session.id)} disabled={!isSetupMode} title="Rename Session">
                                                 Rename
                                             </Button>
-                                            <Button variant="ghost" size="sm" className="h-6 px-1 text-[9px] font-bold" onClick={() => onDeleteSession(session.id)} disabled={!isSetupMode} title="Delete Session">
+                                            <Button variant="ghost" size="sm" className="min-h-10 px-1 text-[9px] font-bold" onClick={() => onDeleteSession(session.id)} disabled={!isSetupMode} title="Delete Session">
                                                 Del
                                             </Button>
                                         </div>
@@ -239,51 +231,20 @@ const Sidebar: React.FC<SidebarProps> = ({
                             </div>
                         </section>
 
-                        <section className="border border-border/50 rounded-xl p-3 space-y-3">
+                        <section className="space-y-3">
                             <div className="text-xs font-bold uppercase tracking-widest text-muted-foreground/70">Saved Workouts</div>
 
                             <div className="grid grid-cols-4 gap-2">
-                                <Button
-                                    variant="secondary"
-                                    size="sm"
-                                    onClick={handleOpenImport}
-                                    disabled={!isSetupMode}
-                                    className="h-7 w-full px-0"
-                                    aria-label="Import"
-                                    title="Import"
-                                >
+                                <Button variant="secondary" size="sm" onClick={() => fileInputRef.current?.click()} disabled={!isSetupMode} className="min-h-10 w-full px-0" aria-label="Import" title="Import">
                                     <Upload size={12} />
                                 </Button>
-                                <Button
-                                    variant="secondary"
-                                    size="sm"
-                                    onClick={onExportWorkouts}
-                                    className="h-7 w-full px-0"
-                                    aria-label="Export"
-                                    title="Export"
-                                >
+                                <Button variant="secondary" size="sm" onClick={onExportWorkouts} className="min-h-10 w-full px-0" aria-label="Export" title="Export">
                                     <Download size={12} />
                                 </Button>
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={onSaveCurrent}
-                                    disabled={!isSetupMode}
-                                    className="h-7 w-full px-0"
-                                    aria-label="Save"
-                                    title="Save"
-                                >
+                                <Button variant="outline" size="sm" onClick={onSaveCurrent} disabled={!isSetupMode} className="min-h-10 w-full px-0" aria-label="Save" title="Save">
                                     <Save size={12} />
                                 </Button>
-                                <Button
-                                    variant="secondary"
-                                    size="sm"
-                                    onClick={onSaveAsCurrent}
-                                    disabled={!isSetupMode}
-                                    className="h-7 w-full px-0"
-                                    aria-label="Save As"
-                                    title="Save As"
-                                >
+                                <Button variant="secondary" size="sm" onClick={onSaveAsCurrent} disabled={!isSetupMode} className="min-h-10 w-full px-0" aria-label="Save As" title="Save As">
                                     <Save size={12} />
                                 </Button>
                             </div>
@@ -302,11 +263,11 @@ const Sidebar: React.FC<SidebarProps> = ({
                                         Imported {importSummary.imported}, Renamed {importSummary.renamed}, Skipped {importSummary.skipped}
                                     </div>
                                     {importSummary.errors.length > 0 && (
-                                        <div className="text-destructive mt-1">{importSummary.errors[0]}</div>
+                                        <div className="mt-1 text-destructive">{importSummary.errors[0]}</div>
                                     )}
                                     <button
                                         type="button"
-                                        className="mt-1 text-primary font-semibold"
+                                        className="mt-1 font-semibold text-primary"
                                         onClick={clearImportSummary}
                                     >
                                         Dismiss
@@ -314,52 +275,31 @@ const Sidebar: React.FC<SidebarProps> = ({
                                 </div>
                             )}
 
-                            <div className="space-y-2 max-h-52 overflow-y-auto no-scrollbar pr-1">
-                                {sortedWorkouts.length === 0 && (
-                                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground/60 p-2 border border-dashed border-border rounded-lg">
+                            <div className="no-scrollbar max-h-52 space-y-3 overflow-y-auto pr-1">
+                                {savedWorkouts.length === 0 && (
+                                    <div className="px-1 text-[10px] uppercase tracking-wider text-muted-foreground/60">
                                         No saved workouts yet
                                     </div>
                                 )}
 
-                                {sortedWorkouts.map((workout) => (
-                                    <div key={workout.id} className="rounded-lg border border-border/50 bg-accent/20 p-2 space-y-2">
-                                        <div className="text-xs font-bold truncate">{workout.name}</div>
-                                        <div className="text-[10px] text-muted-foreground uppercase tracking-tight">
+                                {savedWorkouts.map((workout, index) => (
+                                    <div key={workout.id} className={cn('space-y-2 pb-3', index !== savedWorkouts.length - 1 && 'border-b border-border/50')}>
+                                        <div className="truncate text-xs font-bold">{workout.name}</div>
+                                        <div className="text-[10px] uppercase tracking-tight text-muted-foreground">
                                             Used {workout.timesUsed}x
-                                            {workout.lastUsedAt ? ` • Last ${new Date(workout.lastUsedAt).toLocaleDateString()}` : ''}
+                                            {workout.lastUsedAt ? ` - Last ${new Date(workout.lastUsedAt).toLocaleDateString()}` : ''}
                                         </div>
                                         <div className="grid grid-cols-4 gap-1">
-                                            <Button
-                                                variant="default"
-                                                size="sm"
-                                                className="h-6 px-1 text-[9px] font-bold"
-                                                onClick={() => onLoadWorkout(workout.id)}
-                                                disabled={!isSetupMode}
-                                                title="Load"
-                                            >
+                                            <Button variant="default" size="sm" className="min-h-10 px-1 text-[9px] font-bold" onClick={() => onLoadWorkout(workout.id)} disabled={!isSetupMode} title="Load">
                                                 <FolderOpen size={11} />
                                             </Button>
-                                            <Button
-                                                variant="secondary"
-                                                size="sm"
-                                                className="h-6 px-1 text-[9px] font-bold"
-                                                onClick={() => onRenameWorkout(workout.id)}
-                                                disabled={!isSetupMode}
-                                                title="Rename"
-                                            >
+                                            <Button variant="secondary" size="sm" className="min-h-10 px-1 text-[9px] font-bold" onClick={() => onRenameWorkout(workout.id)} disabled={!isSetupMode} title="Rename">
                                                 <Pencil size={11} />
                                             </Button>
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                className="h-6 px-1 text-[9px] font-bold"
-                                                onClick={() => onDeleteWorkout(workout.id)}
-                                                disabled={!isSetupMode}
-                                                title="Delete"
-                                            >
+                                            <Button variant="ghost" size="sm" className="min-h-10 px-1 text-[9px] font-bold" onClick={() => onDeleteWorkout(workout.id)} disabled={!isSetupMode} title="Delete">
                                                 <Trash2 size={11} />
                                             </Button>
-                                            <div className="h-6 text-[9px] font-bold flex items-center justify-center rounded bg-background/60 border border-border/60">
+                                            <div className="flex min-h-10 items-center justify-center rounded border border-border/60 bg-background/60 text-[9px] font-bold">
                                                 {workout.sets}S
                                             </div>
                                         </div>
@@ -371,25 +311,25 @@ const Sidebar: React.FC<SidebarProps> = ({
                 )}
             </div>
 
-            <div className="p-4 border-t border-border">
+            <div className="border-t border-border p-4">
                 <Button
                     variant={showSettings ? 'default' : 'secondary'}
-                    className={cn('w-full gap-2 transition-all font-bold', isCollapsed && 'px-0 justify-center')}
+                    className={cn('min-h-11 w-full gap-2 font-bold transition-all', isCollapsed && 'justify-center px-0')}
                     onClick={() => setShowSettings(!showSettings)}
                     title="Settings"
+                    aria-label={showSettings ? 'Close Settings' : 'Open Settings'}
                 >
                     <Settings className={cn('shrink-0', showSettings && 'animate-spin-slow')} size={18} />
                     {!isCollapsed && <span>{showSettings ? 'Close' : 'Settings'}</span>}
                 </Button>
                 {!isCollapsed && (
-                    <div className="mt-4 text-[10px] text-center font-bold text-muted-foreground/40 uppercase tracking-[0.2em]">
+                    <div className="mt-4 text-center text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground/40">
                         v{APP_VERSION}
                     </div>
                 )}
             </div>
-        </div>
+        </aside>
     );
 };
 
 export default React.memo(Sidebar);
-

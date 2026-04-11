@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
 import { cn } from '@/lib/utils';
 
@@ -27,6 +27,14 @@ const ConcentricTimer: React.FC<ConcentricTimerProps> = ({
 }) => {
     const settings = useWorkoutStore((state: any) => state.settings);
     const currentRep = useWorkoutStore((state: any) => state.currentRep);
+    const phaseKey = isPreparing ? 'preparing' : (isFinished ? 'finished' : (isResting ? 'resting' : 'working'));
+    const hasMountedRef = useRef(false);
+    const lastPhaseKeyRef = useRef(phaseKey);
+
+    useEffect(() => {
+        hasMountedRef.current = true;
+        lastPhaseKeyRef.current = phaseKey;
+    }, [phaseKey]);
 
     // Size Conf
     const size = 450;
@@ -66,8 +74,9 @@ const ConcentricTimer: React.FC<ConcentricTimerProps> = ({
     }
 
     // Transitions
-    const outerTransition = settings.smoothAnimation ? 'stroke-dashoffset 0.5s ease-out' : 'none';
-    const innerTransition = settings.smoothAnimation ? 'stroke-dashoffset 0.05s linear, stroke 0.3s ease' : 'none';
+    const animateProgress = hasMountedRef.current && settings.smoothAnimation && lastPhaseKeyRef.current === phaseKey;
+    const outerTransition = animateProgress ? 'stroke-dashoffset 0.05s linear' : 'none';
+    const innerTransition = animateProgress ? 'stroke-dashoffset 0.05s linear, stroke 0.3s ease' : 'none';
 
     const upDownMode = settings.upDownMode;
     const isInfoVisible = settings.infoVisibility === 'always' || (settings.infoVisibility === 'resting' && isResting);
@@ -95,11 +104,21 @@ const ConcentricTimer: React.FC<ConcentricTimerProps> = ({
     const shouldPulse = settings.pulseEffect === 'always' || (settings.pulseEffect === 'resting' && (isResting || isPreparing || isFinished));
 
     return (
-        <div className={cn("relative flex items-center justify-center select-none", upDownMode && "h-64")}>
+        <div
+            className={cn(
+                "relative mx-auto flex w-full max-w-[28rem] items-center justify-center px-2 select-none sm:px-4",
+                upDownMode && "min-h-[12rem] sm:min-h-[16rem]"
+            )}
+        >
             {!upDownMode && (
-                <svg width={size} height={size} className="transform -rotate-90">
+                <svg
+                    viewBox={`0 0 ${size} ${size}`}
+                    className="aspect-square w-full max-w-[28rem] transform -rotate-90 overflow-visible"
+                    aria-hidden="true"
+                >
                     {/* Tracks */}
                     <circle
+                        key={phaseKey}
                         cx={center}
                         cy={center}
                         r={outerRadius}
@@ -153,7 +172,7 @@ const ConcentricTimer: React.FC<ConcentricTimerProps> = ({
                 {upDownMode && (
                     <div
                         className={cn(
-                            "text-6xl font-black tracking-tighter transition-all duration-300",
+                            "px-4 text-4xl font-black tracking-tighter transition-all duration-300 sm:text-6xl",
                             shouldPulse && "animate-pulse"
                         )}
                         style={{ color: upDownTextColor }}
@@ -163,14 +182,14 @@ const ConcentricTimer: React.FC<ConcentricTimerProps> = ({
                 )}
 
                 {isInfoVisible && (
-                    <div className="flex flex-col items-center">
+                    <div className="flex max-w-full flex-col items-center px-5 sm:px-8">
                         <div
-                            className="text-8xl font-black tabular-nums transition-colors duration-300"
+                            className="text-[clamp(3rem,15vw,6rem)] font-black tabular-nums leading-none transition-colors duration-300"
                             style={{ color: isFullScreen ? '#ffffff' : (isConcentricPhase ? settings.concentricColor : settings.activeColor) }}
                         >
                             {textMain}
                         </div>
-                        <div className="text-xl font-medium tracking-wide text-muted-foreground uppercase mt-2">
+                        <div className="mt-2 max-w-[18rem] text-sm font-medium uppercase tracking-[0.22em] text-muted-foreground sm:max-w-none sm:text-xl sm:tracking-wide">
                             {textSub}
                         </div>
                     </div>

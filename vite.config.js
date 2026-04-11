@@ -6,7 +6,13 @@ import pkg from './package.json';
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
+  const isCapacitorMode = mode === 'capacitor' || mode === 'capacitor-release';
+  const isCapacitorRelease = mode === 'capacitor-release';
+  const shouldObfuscate = mode === 'production' || isCapacitorRelease;
+
   return {
+    base: isCapacitorMode ? './' : '/',
+
     plugins: [
       react({
         babel: {
@@ -14,7 +20,7 @@ export default defineConfig(({ mode }) => {
         },
       }),
 
-      mode === 'production' ? obfuscator({
+      shouldObfuscate ? obfuscator({
         options: {
           controlFlowFlattening: true,
           controlFlowFlatteningThreshold: 0.75,
@@ -57,7 +63,7 @@ export default defineConfig(({ mode }) => {
     },
 
     build: {
-      sourcemap: false,
+      sourcemap: isCapacitorMode && !isCapacitorRelease,
     },
 
     define: {

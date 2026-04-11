@@ -9,6 +9,7 @@ interface SessionCanvasProps {
     activeNodeId: string | null;
     onEditNode: (nodeId: string) => void;
     onRemoveNode: (nodeId: string) => void;
+    onMoveNode: (nodeId: string, direction: 'left' | 'right') => void;
     onMoveNodeToIndex: (nodeId: string, targetIndex: number) => void;
 }
 
@@ -41,6 +42,7 @@ const SessionCanvas = ({
     activeNodeId,
     onEditNode,
     onRemoveNode,
+    onMoveNode,
     onMoveNodeToIndex,
 }: SessionCanvasProps) => {
     const [draggedNodeId, setDraggedNodeId] = useState<string | null>(null);
@@ -71,7 +73,7 @@ const SessionCanvas = ({
                         Session Canvas
                     </div>
                     <div className="text-sm text-muted-foreground">
-                        Drag tiles to reorder. Edit opens the node modal.
+                        Drag tiles or use the move buttons to reorder. Edit opens the node modal.
                     </div>
                 </div>
                 <div className="text-[10px] font-black uppercase tracking-[0.26em] text-muted-foreground">
@@ -119,9 +121,13 @@ const SessionCanvas = ({
                                                 node={node}
                                                 isActive={node.id === activeNodeId}
                                                 isDragging={draggedNodeId === node.id}
+                                                canMoveLeft={index > 0}
+                                                canMoveRight={index < nodes.length - 1}
                                                 onSelect={() => onEditNode(node.id)}
                                                 onEdit={() => onEditNode(node.id)}
                                                 onDelete={() => onRemoveNode(node.id)}
+                                                onMoveLeft={() => onMoveNode(node.id, 'left')}
+                                                onMoveRight={() => onMoveNode(node.id, 'right')}
                                                 onDragStart={() => setDraggedNodeId(node.id)}
                                                 onDragEnd={() => {
                                                     setDraggedNodeId(null);

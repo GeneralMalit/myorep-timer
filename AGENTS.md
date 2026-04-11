@@ -6,6 +6,8 @@
 - High-precision ticking is in [`src/utils/timerWorker.ts`](src/utils/timerWorker.ts) via Web Worker.
 - Audio behavior is in [`src/utils/audioEngine.ts`](src/utils/audioEngine.ts) and depends on browser user-gesture unlock.
 - If behavior changes touch timing/phase logic, update tests in `src/__tests__/`.
+- When using subagents, prefer small, disjoint tasks with clear file ownership so they can run in parallel without stepping on each other.
+- Strongest subagent model available here: `gpt-5.4-mini` with `medium` reasoning.
 
 ## 1) Project Overview
 - Purpose: orchestrate Myo-rep workout timing (prep, activation set, rest, myo reps) with strong timing stability.
@@ -118,3 +120,10 @@ Note: current logic does activation phase once at the start, then myo-rep phases
 - `npm run lint` currently fails on `__dirname` in `vite.config.js` and `vitest.config.js` (`no-undef`) unless lint config is adjusted for Node/ESM globals.
 - `components.json` references `tailwind.config.js`, but this project runs Tailwind v4 from `src/index.css` and may not require that config file.
 - `test_output.txt` appears to be an artifact, not source-of-truth behavior documentation.
+
+## 9) Subagents
+- Use subagents for bounded, parallel work such as file-by-file implementation, isolated test updates, or focused repo exploration.
+- Give each subagent a narrow scope and a non-overlapping write set.
+- Tell subagents not to revert or rework other agents' changes unless there is a direct conflict.
+- Use the main agent for coordination, integration, and any change that depends on the result of another agent.
+- If you need a quick follow-up check, ask for a concrete output instead of a broad investigation.
