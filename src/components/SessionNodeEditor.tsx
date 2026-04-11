@@ -22,6 +22,7 @@ const SessionNodeEditor = () => {
     const editingSessionDraft = useWorkoutStore((state) => state.editingSessionDraft);
     const editingSessionNodeId = useWorkoutStore((state) => state.editingSessionNodeId);
     const setEditingSessionNodeId = useWorkoutStore((state) => state.setEditingSessionNodeId);
+    const isSidebarCollapsed = useWorkoutStore((state) => state.isSidebarCollapsed);
     const savedWorkouts = useWorkoutStore((state) => state.savedWorkouts);
     const replaceWorkoutNodeWithSavedWorkout = useWorkoutStore((state) => state.replaceWorkoutNodeWithSavedWorkout);
     const saveWorkoutFromConfig = useWorkoutStore((state) => state.saveWorkoutFromConfig);
@@ -122,10 +123,13 @@ const SessionNodeEditor = () => {
             role="dialog"
             aria-modal="true"
             aria-label={`${node.type} node editor`}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+            className={cn(
+                'fixed inset-y-0 right-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm',
+                isSidebarCollapsed ? 'left-16' : 'left-64',
+            )}
         >
             <Card
-                className="relative w-[min(920px,calc(100vw-2rem))] max-h-[calc(100vh-2rem)] overflow-auto border-border/60 bg-background/95 shadow-[0_30px_120px_rgba(0,0,0,0.55)]"
+                className="relative w-full max-w-[920px] min-w-0 max-h-[calc(100vh-2rem)] overflow-auto border-border/60 bg-background/95 shadow-[0_30px_120px_rgba(0,0,0,0.55)]"
                 onClick={(event) => event.stopPropagation()}
             >
                 <CardContent className="space-y-6 p-5 sm:p-6">

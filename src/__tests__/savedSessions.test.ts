@@ -6,6 +6,8 @@ import {
     createRestSessionNode,
     createSavedSession,
     createWorkoutSessionNode,
+    estimateSessionDurationSeconds,
+    formatEstimatedSessionDuration,
     isValidRestNode,
     isValidSavedSession,
     mergeSavedSessionsFromImport,
@@ -134,6 +136,34 @@ describe('savedSessions utilities', () => {
         const imported = mergeSavedSessionsFromImport([], exportPayload);
         expect(imported.summary.imported).toBe(1);
         expect(imported.sessions).toHaveLength(1);
+    });
+
+    it('estimates session duration from prep time and node timing', () => {
+        const nowIso = '2026-01-01T00:00:00.000Z';
+        const session = createSavedSession(
+            'Session Timing',
+            [
+                createWorkoutSessionNode(
+                    'Workout Timing',
+                    {
+                        sets: '2',
+                        reps: '10',
+                        seconds: '3',
+                        rest: '20',
+                        myoReps: '4',
+                        myoWorkSecs: '2',
+                    },
+                    nowIso,
+                ),
+                createRestSessionNode('Between', '15', nowIso),
+            ],
+            nowIso,
+        );
+
+        const durationSeconds = estimateSessionDurationSeconds(session, 5);
+
+        expect(durationSeconds).toBe(78);
+        expect(formatEstimatedSessionDuration(durationSeconds)).toBe('1:18');
     });
 
     it('regenerates duplicate imported session ids within the same merge', () => {

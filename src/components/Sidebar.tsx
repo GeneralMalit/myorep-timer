@@ -17,6 +17,8 @@ import { cn } from '@/lib/utils';
 import { SavedWorkout, SavedWorkoutsImportSummary } from '@/types/savedWorkouts';
 import { SavedSession } from '@/types/savedSessions';
 import { APP_VERSION } from '@/constants/version';
+import { estimateSessionDurationSeconds, formatEstimatedSessionDuration } from '@/utils/savedSessions';
+import { useWorkoutStore } from '@/store/useWorkoutStore';
 
 interface SidebarProps {
     currentTheme: string;
@@ -73,6 +75,7 @@ const Sidebar: React.FC<SidebarProps> = ({
 }) => {
     const fileInputRef = useRef<HTMLInputElement | null>(null);
     const isSetupMode = appPhase === 'setup';
+    const prepTime = useWorkoutStore((state) => state.settings.prepTime);
 
     const themes = [
         { id: 'theme-default', name: 'Deep Purple', color: '#bb86fc' },
@@ -84,6 +87,11 @@ const Sidebar: React.FC<SidebarProps> = ({
     const sortedWorkouts = useMemo(
         () => [...savedWorkouts].sort((a, b) => a.name.localeCompare(b.name)),
         [savedWorkouts],
+    );
+
+    const sessionDurations = useMemo(
+        () => new Map(savedSessions.map((session) => [session.id, estimateSessionDurationSeconds(session, prepTime)])),
+        [savedSessions, prepTime],
     );
 
     const handleOpenImport = () => {
@@ -195,10 +203,22 @@ const Sidebar: React.FC<SidebarProps> = ({
 
                                 {savedSessions.map((session) => (
                                     <div key={session.id} className="rounded-lg border border-border/50 bg-accent/20 p-2 space-y-2">
-                                        <div className="text-xs font-bold truncate">{session.name}</div>
-                                        <div className="text-[10px] text-muted-foreground uppercase tracking-tight">
-                                            {session.nodes.length} nodes
-                                            {session.lastUsedAt ? ` • Last ${new Date(session.lastUsedAt).toLocaleDateString()}` : ''}
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div className="min-w-0">
+                                                <div className="text-xs font-bold truncate">{session.name}</div>
+                                                <div className="text-[10px] text-muted-foreground uppercase tracking-tight">
+                                                    {session.nodes.length} nodes
+                                                    {session.lastUsedAt ? ` • Last ${new Date(session.lastUsedAt).toLocaleDateString()}` : ''}
+                                                </div>
+                                            </div>
+                                            <div className="shrink-0 rounded-full border border-border/50 bg-background/70 px-2 py-1 text-right">
+                                                <div className="text-[9px] font-black uppercase tracking-[0.22em] text-muted-foreground">
+                                                    Time
+                                                </div>
+                                                <div className="text-[10px] font-black italic tracking-tight text-foreground">
+                                                    {formatEstimatedSessionDuration(sessionDurations.get(session.id) ?? null)}
+                                                </div>
+                                            </div>
                                         </div>
                                         <div className="grid grid-cols-4 gap-1">
                                             <Button variant="default" size="sm" className="h-6 px-1 text-[9px] font-bold" onClick={() => onLoadSession(session.id)} disabled={!isSetupMode} title="Load Session">

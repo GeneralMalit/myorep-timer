@@ -1,6 +1,7 @@
-import { describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import Sidebar from '@/components/Sidebar';
+import { useWorkoutStore } from '@/store/useWorkoutStore';
 import { SavedWorkout } from '@/types/savedWorkouts';
 import { SavedSession } from '@/types/savedSessions';
 
@@ -22,7 +23,24 @@ const baseWorkout: SavedWorkout = {
 const baseSession: SavedSession = {
     id: 's-1',
     name: 'Push Session',
-    nodes: [],
+    nodes: [
+        {
+            id: 'n-1',
+            type: 'workout',
+            name: 'Push Set',
+            config: {
+                sets: '2',
+                reps: '10',
+                seconds: '3',
+                rest: '20',
+                myoReps: '4',
+                myoWorkSecs: '2',
+            },
+            sourceWorkoutId: null,
+            createdAt: '2026-03-01T00:00:00.000Z',
+            updatedAt: '2026-03-01T00:00:00.000Z',
+        },
+    ],
     timesUsed: 0,
     lastUsedAt: null,
     createdAt: '2026-03-01T00:00:00.000Z',
@@ -57,6 +75,15 @@ const baseProps = {
 };
 
 describe('Sidebar', () => {
+    beforeEach(() => {
+        useWorkoutStore.setState((state) => ({
+            settings: {
+                ...state.settings,
+                prepTime: 5,
+            },
+        }));
+    });
+
     it('renders saved workouts and saved sessions and triggers actions', () => {
         render(<Sidebar {...baseProps} />);
 
@@ -64,6 +91,7 @@ describe('Sidebar', () => {
         expect(screen.getByText('Saved Sessions')).toBeInTheDocument();
         expect(screen.getByText('Push Day')).toBeInTheDocument();
         expect(screen.getByText('Push Session')).toBeInTheDocument();
+        expect(screen.getByText('1:03')).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
         fireEvent.click(screen.getByRole('button', { name: /^save as$/i }));

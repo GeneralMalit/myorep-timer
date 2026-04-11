@@ -31,6 +31,88 @@ const parsePositiveInt = (value: unknown): number | null => {
     return Math.floor(parsed);
 };
 
+const formatClockTime = (totalSeconds: number): string => {
+    const safeSeconds = Math.max(0, Math.floor(totalSeconds));
+    const hours = Math.floor(safeSeconds / 3600);
+    const minutes = Math.floor((safeSeconds % 3600) / 60);
+    const seconds = safeSeconds % 60;
+
+    if (hours > 0) {
+        return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    }
+
+    return `${minutes}:${String(seconds).padStart(2, '0')}`;
+};
+
+const estimateWorkoutNodeDurationSeconds = (node: WorkoutSessionNode): number | null => {
+    const sets = parsePositiveInt(node.config.sets);
+    const reps = parsePositiveInt(node.config.reps);
+    const seconds = parsePositiveInt(node.config.seconds);
+
+    if (sets === null || reps === null || seconds === null) {
+        return null;
+    }
+
+    if (sets === 1) {
+        return reps * seconds;
+    }
+
+    const rest = parsePositiveInt(node.config.rest);
+    const myoReps = parsePositiveInt(node.config.myoReps);
+    const myoWorkSecs = parsePositiveInt(node.config.myoWorkSecs);
+
+    if (rest === null || myoReps === null || myoWorkSecs === null) {
+        return null;
+    }
+
+    return (reps * seconds) + ((sets - 1) * (rest + (myoReps * myoWorkSecs)));
+};
+
+export const estimateSessionDurationSeconds = (
+    session: Pick<SavedSession, 'nodes'>,
+    prepTimeSeconds: number,
+): number | null => {
+    if (session.nodes.length === 0) {
+        return 0;
+    }
+
+    const prepTime = parsePositiveInt(prepTimeSeconds);
+    if (prepTime === null) {
+        return null;
+    }
+
+    let totalSeconds = prepTime;
+
+    for (const node of session.nodes) {
+        if (node.type === 'rest') {
+            const restSeconds = parsePositiveInt(node.seconds);
+            if (restSeconds === null) {
+                return null;
+            }
+
+            totalSeconds += restSeconds;
+            continue;
+        }
+
+        const workoutSeconds = estimateWorkoutNodeDurationSeconds(node);
+        if (workoutSeconds === null) {
+            return null;
+        }
+
+        totalSeconds += workoutSeconds;
+    }
+
+    return totalSeconds;
+};
+
+export const formatEstimatedSessionDuration = (totalSeconds: number | null): string => {
+    if (totalSeconds === null) {
+        return '--:--';
+    }
+
+    return formatClockTime(totalSeconds);
+};
+
 const createId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
 const normalizeName = (value: string) => value.trim();

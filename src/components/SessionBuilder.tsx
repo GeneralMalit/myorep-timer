@@ -5,11 +5,13 @@ import SessionCanvas from '@/components/SessionCanvas';
 import SessionNodeEditor from '@/components/SessionNodeEditor';
 import SetupModeToggle from '@/components/SetupModeToggle';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
+import { estimateSessionDurationSeconds, formatEstimatedSessionDuration } from '@/utils/savedSessions';
 
 const SessionBuilder = () => {
     const editingSessionDraft = useWorkoutStore((state) => state.editingSessionDraft);
     const editingSessionNodeId = useWorkoutStore((state) => state.editingSessionNodeId);
     const setEditingSessionNodeId = useWorkoutStore((state) => state.setEditingSessionNodeId);
+    const prepTime = useWorkoutStore((state) => state.settings.prepTime);
     const setupMode = useWorkoutStore((state) => state.setupMode);
     const setSetupMode = useWorkoutStore((state) => state.setSetupMode);
     const createSession = useWorkoutStore((state) => state.createSession);
@@ -29,6 +31,14 @@ const SessionBuilder = () => {
 
         return `${nodeCount} node${nodeCount === 1 ? '' : 's'} in the chain.`;
     }, [editingSessionDraft, nodeCount]);
+
+    const estimatedDuration = useMemo(() => {
+        if (!editingSessionDraft) {
+            return 0;
+        }
+
+        return estimateSessionDurationSeconds(editingSessionDraft, prepTime);
+    }, [editingSessionDraft, prepTime]);
 
     const handleNewSession = () => {
         const name = window.prompt('Session name:', editingSessionDraft?.name ?? 'New Session');
@@ -84,39 +94,49 @@ const SessionBuilder = () => {
                     </p>
                 </div>
 
-                <div className="flex flex-col items-start gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-                    <SetupModeToggle mode={setupMode} onChange={setSetupMode} />
-                    <div className="flex flex-wrap gap-2">
-                        <Button
-                            type="button"
-                            variant="secondary"
-                            onClick={() => addWorkoutNodeFromCurrentSetup()}
-                            className="gap-2 rounded-full px-4 font-black italic tracking-tighter"
-                        >
-                            <Plus size={16} /> Workout
-                        </Button>
-                        <Button
-                            type="button"
-                            variant="secondary"
-                            onClick={() => addRestNode()}
-                            className="gap-2 rounded-full px-4 font-black italic tracking-tighter"
-                        >
-                            <Plus size={16} /> Rest
-                        </Button>
+                <div className="flex flex-col items-start gap-3 sm:flex-row sm:flex-wrap sm:items-center xl:items-end xl:justify-end">
+                    <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-card px-3 py-1.5">
+                        <span className="text-[10px] font-black uppercase tracking-[0.26em] text-muted-foreground">
+                            Est. Time
+                        </span>
+                        <span className="text-sm font-black italic tracking-tight text-foreground">
+                            {formatEstimatedSessionDuration(estimatedDuration)}
+                        </span>
                     </div>
-                    <div className="flex flex-wrap gap-2">
-                        <Button type="button" variant="secondary" onClick={handleNewSession} className="gap-2 rounded-full px-4 font-black italic tracking-tighter">
-                            <Plus size={16} /> New
-                        </Button>
-                        <Button type="button" variant="secondary" onClick={handleSave} className="gap-2 rounded-full px-4 font-black italic tracking-tighter">
-                            <Save size={16} /> Save
-                        </Button>
-                        <Button type="button" variant="secondary" onClick={handleSaveAs} className="gap-2 rounded-full px-4 font-black italic tracking-tighter">
-                            <Save size={16} /> Save As
-                        </Button>
-                        <Button type="button" onClick={handleStart} className="gap-2 rounded-full px-4 font-black italic tracking-tighter">
-                            <Play size={16} /> Start
-                        </Button>
+                    <div className="flex flex-col items-start gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+                        <SetupModeToggle mode={setupMode} onChange={setSetupMode} />
+                        <div className="flex flex-wrap gap-2">
+                            <Button
+                                type="button"
+                                variant="secondary"
+                                onClick={() => addWorkoutNodeFromCurrentSetup()}
+                                className="gap-2 rounded-full px-4 font-black italic tracking-tighter"
+                            >
+                                <Plus size={16} /> Workout
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="secondary"
+                                onClick={() => addRestNode()}
+                                className="gap-2 rounded-full px-4 font-black italic tracking-tighter"
+                            >
+                                <Plus size={16} /> Rest
+                            </Button>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                            <Button type="button" variant="secondary" onClick={handleNewSession} className="gap-2 rounded-full px-4 font-black italic tracking-tighter">
+                                <Plus size={16} /> New
+                            </Button>
+                            <Button type="button" variant="secondary" onClick={handleSave} className="gap-2 rounded-full px-4 font-black italic tracking-tighter">
+                                <Save size={16} /> Save
+                            </Button>
+                            <Button type="button" variant="secondary" onClick={handleSaveAs} className="gap-2 rounded-full px-4 font-black italic tracking-tighter">
+                                <Save size={16} /> Save As
+                            </Button>
+                            <Button type="button" onClick={handleStart} className="gap-2 rounded-full px-4 font-black italic tracking-tighter">
+                                <Play size={16} /> Start
+                            </Button>
+                        </div>
                     </div>
                 </div>
             </header>

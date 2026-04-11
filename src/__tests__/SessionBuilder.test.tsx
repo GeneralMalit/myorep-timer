@@ -22,6 +22,10 @@ const resetStore = () => {
     const store = useWorkoutStore.getState();
 
     useWorkoutStore.setState({
+        settings: {
+            ...store.settings,
+            prepTime: 5,
+        },
         appPhase: 'setup',
         timerStatus: 'Ready',
         isTimerRunning: false,
@@ -90,6 +94,7 @@ describe('SessionBuilder', () => {
         fireEvent.click(screen.getByRole('button', { name: /^new$/i }));
         expect(promptSpy).toHaveBeenCalledWith('Session name:', 'New Session');
         expect(screen.getByText(/0 nodes in the chain/i)).toBeInTheDocument();
+        expect(screen.getByText('0:00')).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
         expect(alertSpy).toHaveBeenCalledWith('Session is invalid.');
@@ -112,6 +117,7 @@ describe('SessionBuilder', () => {
         expect(screen.getByText(/1 node in the chain/i)).toBeInTheDocument();
         expect(screen.getByText('Workout 1')).toBeInTheDocument();
         expect(screen.getByText('10 @ 3s + (1 * 4 @ 2s)')).toBeInTheDocument();
+        expect(screen.getByText('1:03')).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: /^Save$/i }));
         expect(useWorkoutStore.getState().savedSessions).toHaveLength(1);
