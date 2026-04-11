@@ -211,7 +211,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                                                     {session.lastUsedAt ? ` • Last ${new Date(session.lastUsedAt).toLocaleDateString()}` : ''}
                                                 </div>
                                             </div>
-                                            <div className="shrink-0 rounded-full border border-border/50 bg-background/70 px-2 py-1 text-right">
+                                            <div className="shrink-0 rounded-full bg-background/70 px-2 py-1 text-right">
                                                 <div className="text-[9px] font-black uppercase tracking-[0.22em] text-muted-foreground">
                                                     Time
                                                 </div>

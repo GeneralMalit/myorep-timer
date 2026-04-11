@@ -95,14 +95,6 @@ const SessionBuilder = () => {
                 </div>
 
                 <div className="flex flex-col items-start gap-3 sm:flex-row sm:flex-wrap sm:items-center xl:items-end xl:justify-end">
-                    <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-card px-3 py-1.5">
-                        <span className="text-[10px] font-black uppercase tracking-[0.26em] text-muted-foreground">
-                            Est. Time
-                        </span>
-                        <span className="text-sm font-black italic tracking-tight text-foreground">
-                            {formatEstimatedSessionDuration(estimatedDuration)}
-                        </span>
-                    </div>
                     <div className="flex flex-col items-start gap-3 sm:flex-row sm:flex-wrap sm:items-center">
                         <SetupModeToggle mode={setupMode} onChange={setSetupMode} />
                         <div className="flex flex-wrap gap-2">
@@ -140,6 +132,10 @@ const SessionBuilder = () => {
                     </div>
                 </div>
             </header>
+
+            <div className="flex justify-end px-1 text-[10px] font-black uppercase tracking-[0.28em] text-muted-foreground">
+                EST. TIME: <span className="ml-2 text-sm italic tracking-tight text-foreground normal-case">{formatEstimatedSessionDuration(estimatedDuration)}</span>
+            </div>
 
             <div className="flex min-h-0 flex-1">
                 <SessionCanvas
