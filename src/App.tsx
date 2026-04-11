@@ -35,6 +35,27 @@ const formatTime = (totalSeconds: number) => {
     return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 };
 
+const isBurnoutRepSet = (params: {
+    timerStatus: string;
+    isWorking: boolean;
+    seconds: string;
+    myoWorkSecs: string;
+}) => {
+    if (!params.isWorking) {
+        return false;
+    }
+
+    if (params.timerStatus !== 'Main Set' && params.timerStatus !== 'Myo Reps') {
+        return false;
+    }
+
+    const activeRepSeconds = params.timerStatus === 'Main Set'
+        ? parseInt(params.seconds || '0', 10)
+        : parseInt(params.myoWorkSecs || '0', 10);
+
+    return activeRepSeconds === 1;
+};
+
 export default function App() {
     const {
         settings,
@@ -143,7 +164,9 @@ export default function App() {
             const currentSecond = Math.ceil(timeLeft);
             if (currentSecond !== lastSpokenSecondRef.current && currentSecond >= 0) {
                 const activeRepTarget = isMainRep ? parseInt(reps || '0') : parseInt(myoReps || '0');
+                const suppressVoice = isBurnoutRepSet({ timerStatus, isWorking, seconds, myoWorkSecs });
                 const shouldSpeakCurrentSecond = settings.ttsEnabled
+                    && !suppressVoice
                     && currentSecond >= 1
                     && (currentSecond > 1 || activeRepTarget !== 1);
 

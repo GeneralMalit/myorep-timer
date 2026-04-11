@@ -823,6 +823,127 @@ describe('App', () => {
         expect(audioEngine.playTick).toHaveBeenCalledTimes(1);
     });
 
+    it('suppresses speech during a main-set burnout block', () => {
+        useWorkoutStore.setState({
+            appPhase: 'timer',
+            timerStatus: 'Main Set',
+            isTimerRunning: true,
+            currentSet: 1,
+            currentRep: 1,
+            isMainRep: true,
+            isWorking: true,
+            sets: '3',
+            reps: '12',
+            rest: '10',
+            myoReps: '4',
+            myoWorkSecs: '2',
+            seconds: '1',
+            timeLeft: 1,
+            lastTickSecond: -1,
+            settings: {
+                ...useWorkoutStore.getState().settings,
+                ttsEnabled: true,
+                metronomeEnabled: true,
+            },
+        });
+
+        render(<App />);
+
+        expect(audioEngine.speak).not.toHaveBeenCalled();
+        expect(audioEngine.playTick).toHaveBeenCalledTimes(1);
+    });
+
+    it('suppresses speech during a myo-rep burnout block', () => {
+        useWorkoutStore.setState({
+            appPhase: 'timer',
+            timerStatus: 'Myo Reps',
+            isTimerRunning: true,
+            currentSet: 2,
+            currentRep: 1,
+            isMainRep: false,
+            isWorking: true,
+            sets: '3',
+            reps: '12',
+            rest: '10',
+            myoReps: '5',
+            myoWorkSecs: '1',
+            seconds: '3',
+            timeLeft: 1,
+            lastTickSecond: -1,
+            settings: {
+                ...useWorkoutStore.getState().settings,
+                ttsEnabled: true,
+                metronomeEnabled: true,
+            },
+        });
+
+        render(<App />);
+
+        expect(audioEngine.speak).not.toHaveBeenCalled();
+        expect(audioEngine.playTick).toHaveBeenCalledTimes(1);
+    });
+
+    it('suppresses speech for session workout burnout nodes', () => {
+        useWorkoutStore.setState({
+            appPhase: 'timer',
+            timerStatus: 'Main Set',
+            isTimerRunning: true,
+            currentSet: 1,
+            currentRep: 1,
+            isMainRep: true,
+            isWorking: true,
+            seconds: '1',
+            reps: '12',
+            rest: '10',
+            myoReps: '4',
+            myoWorkSecs: '2',
+            timeLeft: 1,
+            activeSessionId: 'session-1',
+            activeSessionNodeIndex: 0,
+            sessionStatus: 'running',
+            isRunningSession: true,
+            sessionNodeRuntimeType: 'workout',
+            settings: {
+                ...useWorkoutStore.getState().settings,
+                ttsEnabled: true,
+                metronomeEnabled: true,
+            },
+            savedSessions: [
+                {
+                    id: 'session-1',
+                    name: 'Burnout Session',
+                    nodes: [
+                        {
+                            id: 'node-1',
+                            type: 'workout',
+                            name: 'Burnout Node',
+                            config: {
+                                sets: '2',
+                                reps: '12',
+                                seconds: '1',
+                                rest: '10',
+                                myoReps: '4',
+                                myoWorkSecs: '2',
+                            },
+                            sourceWorkoutId: null,
+                            createdAt: '2026-03-01T00:00:00.000Z',
+                            updatedAt: '2026-03-01T00:00:00.000Z',
+                        },
+                    ],
+                    timesUsed: 0,
+                    lastUsedAt: null,
+                    createdAt: '2026-03-01T00:00:00.000Z',
+                    updatedAt: '2026-03-01T00:00:00.000Z',
+                },
+            ],
+        });
+
+        render(<App />);
+
+        expect(audioEngine.speak).not.toHaveBeenCalled();
+        expect(audioEngine.playTick).toHaveBeenCalledTimes(1);
+    });
+
     it('shows PIP active state when picture-in-picture is already open', () => {
         useWorkoutStore.setState({
             appPhase: 'timer',
