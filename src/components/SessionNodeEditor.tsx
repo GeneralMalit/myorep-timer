@@ -269,23 +269,8 @@ const SessionNodeEditor = () => {
                                             </div>
                                         </div>
                                     ) : linkedWorkout ? (
-                                        <div className="rounded-xl border border-border/60 bg-background/70 px-3 py-3">
-                                            <div className="text-[11px] font-semibold text-foreground">
-                                                Linked workout
-                                            </div>
-                                            <div className="mt-2 flex items-center justify-between gap-3 border-t border-border/50 pt-2">
-                                                <div className="min-w-0">
-                                                    <div className="truncate text-sm font-medium text-foreground">
-                                                        {linkedWorkout.name}
-                                                    </div>
-                                                    <div className="text-xs text-muted-foreground">
-                                                        Library-backed session node
-                                                    </div>
-                                                </div>
-                                                <div className="shrink-0 text-[11px] text-muted-foreground">
-                                                    Saved
-                                                </div>
-                                            </div>
+                                        <div className="rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                                            Linked workout
                                         </div>
                                     ) : null}
 
