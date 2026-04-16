@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
 import { cn } from '@/lib/utils';
 
@@ -27,9 +27,30 @@ const ConcentricTimer: React.FC<ConcentricTimerProps> = ({
 }) => {
     const settings = useWorkoutStore((state: any) => state.settings);
     const currentRep = useWorkoutStore((state: any) => state.currentRep);
+    const [isMobileViewport, setIsMobileViewport] = useState(false);
     const phaseKey = isPreparing ? 'preparing' : (isFinished ? 'finished' : (isResting ? 'resting' : 'working'));
     const hasMountedRef = useRef(false);
     const lastPhaseKeyRef = useRef(phaseKey);
+
+    useEffect(() => {
+        if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+            return;
+        }
+
+        const mediaQuery = window.matchMedia('(max-width: 767px)');
+        const handleViewportChange = (event: MediaQueryListEvent | MediaQueryList) => {
+            setIsMobileViewport(event.matches);
+        };
+
+        handleViewportChange(mediaQuery);
+        if (typeof mediaQuery.addEventListener === 'function') {
+            mediaQuery.addEventListener('change', handleViewportChange);
+            return () => mediaQuery.removeEventListener('change', handleViewportChange);
+        }
+
+        mediaQuery.addListener(handleViewportChange);
+        return () => mediaQuery.removeListener(handleViewportChange);
+    }, []);
 
     useEffect(() => {
         hasMountedRef.current = true;
@@ -37,9 +58,9 @@ const ConcentricTimer: React.FC<ConcentricTimerProps> = ({
     }, [phaseKey]);
 
     // Size Conf
-    const size = 450;
+    const size = isMobileViewport ? 360 : 450;
     const center = size / 2;
-    const strokeWidth = 12;
+    const strokeWidth = isMobileViewport ? 10 : 12;
 
     // Radii
     const outerRadius = (size / 2) - 30;
@@ -106,14 +127,18 @@ const ConcentricTimer: React.FC<ConcentricTimerProps> = ({
     return (
         <div
             className={cn(
-                "relative mx-auto flex w-full max-w-[28rem] items-center justify-center px-2 select-none sm:px-4",
-                upDownMode && "min-h-[12rem] sm:min-h-[16rem]"
+                "relative mx-auto flex w-full items-center justify-center px-1 select-none sm:px-4",
+                isMobileViewport ? "max-w-[22rem]" : "max-w-[28rem]",
+                upDownMode && (isMobileViewport ? "min-h-[11rem]" : "min-h-[16rem]")
             )}
         >
             {!upDownMode && (
                 <svg
                     viewBox={`0 0 ${size} ${size}`}
-                    className="aspect-square w-full max-w-[28rem] transform -rotate-90 overflow-visible"
+                    className={cn(
+                        "aspect-square w-full transform -rotate-90 overflow-visible",
+                        isMobileViewport ? "max-w-[22rem]" : "max-w-[28rem]",
+                    )}
                     aria-hidden="true"
                 >
                     {/* Tracks */}
@@ -172,7 +197,9 @@ const ConcentricTimer: React.FC<ConcentricTimerProps> = ({
                 {upDownMode && (
                     <div
                         className={cn(
-                            "px-4 text-4xl font-black tracking-tighter transition-all duration-300 sm:text-6xl",
+                            isMobileViewport
+                                ? "px-3 text-3xl font-black tracking-tighter transition-all duration-300"
+                                : "px-4 text-4xl font-black tracking-tighter transition-all duration-300 sm:text-6xl",
                             shouldPulse && "animate-pulse"
                         )}
                         style={{ color: upDownTextColor }}
@@ -182,14 +209,19 @@ const ConcentricTimer: React.FC<ConcentricTimerProps> = ({
                 )}
 
                 {isInfoVisible && (
-                    <div className="flex max-w-full flex-col items-center px-5 sm:px-8">
+                    <div className={cn("flex max-w-full flex-col items-center", isMobileViewport ? "px-3" : "px-5 sm:px-8")}>
                         <div
                             className="text-[clamp(3rem,15vw,6rem)] font-black tabular-nums leading-none transition-colors duration-300"
                             style={{ color: isFullScreen ? '#ffffff' : (isConcentricPhase ? settings.concentricColor : settings.activeColor) }}
                         >
                             {textMain}
                         </div>
-                        <div className="mt-2 max-w-[18rem] text-sm font-medium uppercase tracking-[0.22em] text-muted-foreground sm:max-w-none sm:text-xl sm:tracking-wide">
+                        <div className={cn(
+                            "mt-2 font-medium uppercase text-muted-foreground",
+                            isMobileViewport
+                                ? "max-w-[16rem] text-xs tracking-[0.18em]"
+                                : "max-w-[18rem] text-sm tracking-[0.22em] sm:max-w-none sm:text-xl sm:tracking-wide",
+                        )}>
                             {textSub}
                         </div>
                     </div>

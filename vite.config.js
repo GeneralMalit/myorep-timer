@@ -8,7 +8,7 @@ import pkg from './package.json';
 export default defineConfig(({ mode }) => {
   const isCapacitorMode = mode === 'capacitor' || mode === 'capacitor-release';
   const isCapacitorRelease = mode === 'capacitor-release';
-  const shouldObfuscate = mode === 'production' || isCapacitorRelease;
+  const shouldObfuscate = isCapacitorRelease;
 
   return {
     base: isCapacitorMode ? './' : '/',

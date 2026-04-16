@@ -20,6 +20,9 @@
     "test:ui": "vitest --ui",
     "test:coverage": "vitest --coverage",
     "test:coverage:ci": "vitest --coverage --run && node scripts/check-coverage-thresholds.mjs",
+    "admin:grant-plus": "node scripts/entitlement-overrides.mjs grant",
+    "admin:revoke-plus": "node scripts/entitlement-overrides.mjs revoke",
+    "admin:list-overrides": "node scripts/entitlement-overrides.mjs list",
     "release": "semantic-release",
     "release:dry": "semantic-release --dry-run",
     "sync:readme-version": "node scripts/sync-readme-version.mjs"
@@ -28,9 +31,11 @@
     "@capacitor/app": "^8.1.0",
     "@capacitor/core": "^8.3.0",
     "@capacitor/preferences": "^8.0.1",
+    "@paddle/paddle-js": "^1.6.2",
     "@radix-ui/react-label": "^2.1.8",
     "@radix-ui/react-slot": "^1.2.4",
     "@radix-ui/react-switch": "^1.2.6",
+    "@supabase/supabase-js": "^2.103.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"
   },

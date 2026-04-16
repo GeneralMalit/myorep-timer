@@ -1,4 +1,8 @@
 import type { SavedWorkoutConfig } from '@/types/savedWorkouts';
+import type { SyncMetadata } from '@/types/sync';
+
+export const SAVED_SESSIONS_SCHEMA_VERSION = 1 as const;
+export type SavedSessionsSchemaVersion = typeof SAVED_SESSIONS_SCHEMA_VERSION;
 
 export type SessionNodeType = 'workout' | 'rest';
 export type SessionStatus = 'idle' | 'running' | 'paused' | 'finished';
@@ -14,6 +18,7 @@ export interface WorkoutSessionNode extends SessionNodeBase {
     type: 'workout';
     config: SavedWorkoutConfig;
     sourceWorkoutId: string | null;
+    notes?: string;
 }
 
 export interface RestSessionNode extends SessionNodeBase {
@@ -31,12 +36,17 @@ export interface SavedSession {
     lastUsedAt: string | null;
     createdAt: string;
     updatedAt: string;
+    sync?: SyncMetadata;
+}
+
+export interface SavedSessionExportRecordV1 extends SavedSession {
+    sync: SyncMetadata;
 }
 
 export interface SavedSessionsExportV1 {
-    schemaVersion: 1;
+    schemaVersion: SavedSessionsSchemaVersion;
     exportedAt: string;
-    sessions: SavedSession[];
+    sessions: SavedSessionExportRecordV1[];
 }
 
 export interface SavedSessionsImportSummary {

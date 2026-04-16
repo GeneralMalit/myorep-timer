@@ -15,6 +15,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { audioEngine } from '@/utils/audioEngine';
+import { cn } from '@/lib/utils';
 
 interface SettingsPanelProps {
     isOpen: boolean;
@@ -26,8 +27,6 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
     const setSettings = useWorkoutStore((state) => state.setSettings);
     const seconds = useWorkoutStore((state) => state.seconds);
     const myoWorkSecs = useWorkoutStore((state) => state.myoWorkSecs);
-
-    if (!isOpen) return null;
 
     const handleChange = <K extends keyof WorkoutSettings>(key: K, value: WorkoutSettings[K]) => {
         setSettings({ [key]: value });
@@ -43,37 +42,48 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
 
     return (
         <div
-            className="fixed inset-0 z-[100] flex items-end justify-center bg-background/80 backdrop-blur-sm animate-in fade-in duration-300 md:items-center md:justify-end"
-            onMouseDown={(event) => {
-                if (event.target === event.currentTarget) {
+            data-testid="settings-drawer-overlay"
+            aria-hidden={!isOpen}
+            className={cn(
+                "fixed inset-0 z-[100] flex items-stretch justify-end bg-background/80 backdrop-blur-sm transition-opacity duration-300",
+                isOpen ? "opacity-100" : "pointer-events-none opacity-0",
+            )}
+            onPointerDown={(event) => {
+                if (isOpen && event.target === event.currentTarget) {
                     onClose();
                 }
             }}
         >
-            <Card className="flex h-[min(90vh,48rem)] w-full max-w-2xl flex-col overflow-hidden rounded-t-[2rem] border border-border/70 shadow-2xl animate-in slide-in-from-bottom-4 duration-500 md:h-full md:max-w-md md:rounded-none md:border-y-0 md:border-r-0 md:border-l">
-                <CardHeader className="flex flex-row items-center justify-between border-b border-border/60 bg-muted/30 px-5 pb-4 pt-[calc(var(--safe-top)+1rem)] md:px-6 md:pt-6">
-                    <CardTitle className="flex items-center gap-2 text-xl font-black italic tracking-tight">
+            <Card
+                data-testid="settings-drawer-panel"
+                className={cn(
+                    "flex h-full w-[min(22rem,calc(100vw-1rem))] max-w-full flex-col overflow-hidden rounded-l-[2rem] border border-border/70 border-r-0 shadow-2xl transition-transform duration-300 ease-out md:w-full md:max-w-md md:rounded-none md:border-y-0 md:border-l",
+                    isOpen ? "translate-x-0" : "translate-x-[calc(100%+1rem)]",
+                )}
+            >
+                <CardHeader className="flex flex-row items-start justify-between gap-4 border-b border-border/60 bg-muted/25 px-5 pb-4 pt-[calc(var(--safe-top)+1rem)] md:px-6 md:pt-6">
+                    <CardTitle className="flex items-center gap-2 text-lg font-black italic tracking-tight sm:text-xl">
                         <Monitor className="text-primary" size={20} />
                         System Configuration
                     </CardTitle>
-                    <Button variant="ghost" size="icon" onClick={onClose} className="h-11 w-11 rounded-full" aria-label="Close Settings">
+                    <Button variant="ghost" size="icon" onClick={onClose} className="h-11 w-11 shrink-0 rounded-2xl" aria-label="Close Settings">
                         <X size={20} />
                     </Button>
                 </CardHeader>
 
-                <CardContent className="no-scrollbar flex-1 space-y-8 overflow-y-auto px-5 pb-[calc(var(--safe-bottom)+1.5rem)] pt-6 md:px-6 md:pb-10">
-                    <section className="space-y-4">
-                        <div className="flex items-center gap-2 px-1 text-xs font-black uppercase tracking-widest text-primary">
+                <CardContent className="no-scrollbar flex-1 space-y-6 overflow-y-auto px-5 pb-[calc(var(--safe-bottom)+1.5rem)] pt-5 md:px-6 md:pb-10">
+                    <section className="space-y-4 rounded-[24px] border border-border/60 bg-card/70 p-4">
+                        <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-primary">
                             <Palette size={16} />
                             <span>Visual Identity</span>
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid gap-3 sm:grid-cols-2">
                             {[
                                 { label: 'Active', key: 'activeColor' },
                                 { label: 'Resting', key: 'restColor' },
                                 { label: 'Concentric', key: 'concentricColor' },
                             ].map((item) => (
-                                <div key={item.key} className="space-y-2 rounded-xl border border-border/50 bg-accent/40 p-3">
+                                <div key={item.key} className="space-y-2 rounded-2xl border border-border/50 bg-accent/35 p-3">
                                     <Label className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
                                         {item.label}
                                     </Label>
@@ -94,8 +104,8 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                         </div>
                     </section>
 
-                    <section className="space-y-4">
-                        <div className="flex items-center gap-2 px-1 text-xs font-black uppercase tracking-widest text-primary">
+                    <section className="space-y-4 rounded-[24px] border border-border/60 bg-card/70 p-4">
+                        <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-primary">
                             <Zap size={16} />
                             <span>Logistics</span>
                         </div>
@@ -129,7 +139,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                             </div>
                         </div>
 
-                        <div className="flex items-center justify-between rounded-xl border border-border/50 bg-accent/40 p-4">
+                        <div className="flex items-center justify-between rounded-2xl border border-border/50 bg-accent/35 p-4">
                             <div className="space-y-0.5">
                                 <Label className="text-sm font-bold tracking-tight">Fluid Animation</Label>
                                 <p className="text-[10px] font-medium uppercase tracking-tighter text-muted-foreground">Enable high-frequency UI updates</p>
@@ -141,8 +151,8 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                         </div>
                     </section>
 
-                    <section className="space-y-4">
-                        <div className="flex items-center gap-2 px-1 text-xs font-black uppercase tracking-widest text-primary">
+                    <section className="space-y-4 rounded-[24px] border border-border/60 bg-card/70 p-4">
+                        <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-primary">
                             <Info size={16} />
                             <span>Core Display</span>
                         </div>
@@ -152,7 +162,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                                 { label: 'Full Screen Mode', key: 'fullScreenMode', desc: 'Active theme colors as background' },
                                 { label: 'Vertical Mode', key: 'upDownMode', desc: 'Large text ECCENTRIC/CONCENTRIC' },
                             ].map((item) => (
-                                <div key={item.key} className="flex items-center justify-between rounded-xl border border-border/50 bg-accent/40 p-4">
+                                <div key={item.key} className="flex items-center justify-between rounded-2xl border border-border/50 bg-accent/35 p-4">
                                     <div className="space-y-0.5">
                                         <Label className="text-sm font-bold tracking-tight">{item.label}</Label>
                                         <p className="text-[10px] font-medium uppercase tracking-tighter text-muted-foreground">{item.desc}</p>
@@ -166,14 +176,14 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                         </div>
                     </section>
 
-                    <section className="space-y-4">
-                        <div className="flex items-center gap-2 px-1 text-xs font-black uppercase tracking-widest text-primary">
+                    <section className="space-y-4 rounded-[24px] border border-border/60 bg-card/70 p-4">
+                        <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-primary">
                             <Volume2 size={16} />
                             <span>Sound Architecture</span>
                         </div>
 
                         <div className="space-y-3">
-                            <div className="flex items-center justify-between rounded-xl border border-border/50 bg-accent/40 p-4">
+                            <div className="flex items-center justify-between rounded-2xl border border-border/50 bg-accent/35 p-4">
                                 <div className="space-y-0.5">
                                     <Label className="text-sm font-bold tracking-tight">Metronome Ticks</Label>
                                     <p className="text-[10px] font-medium uppercase tracking-tighter text-muted-foreground">Audible rhythm during reps</p>
@@ -184,7 +194,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                                 />
                             </div>
 
-                            <div className="flex items-center justify-between rounded-xl border border-border/50 bg-accent/40 p-4">
+                            <div className="flex items-center justify-between rounded-2xl border border-border/50 bg-accent/35 p-4">
                                 <div className="space-y-0.5">
                                     <Label className="text-sm font-bold tracking-tight">Voice Feedback (TTS)</Label>
                                     <p className="text-[10px] font-medium uppercase tracking-tighter text-muted-foreground">Speak rep count and timings</p>
@@ -203,7 +213,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                                             <select
                                                 value={settings.metronomeSound}
                                                 onChange={(e) => handleChange('metronomeSound', e.target.value)}
-                                                className="h-11 w-full rounded-md border border-border/50 bg-accent/40 px-3 text-sm font-bold outline-none"
+                                                className="h-11 w-full rounded-2xl border border-border/50 bg-accent/35 px-3 text-sm font-bold outline-none"
                                             >
                                                 <option value="woodblock">Woodblock</option>
                                                 <option value="mechanical">Mechanical</option>
@@ -214,7 +224,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                                     )}
                                     {settings.ttsEnabled && (
                                         <div className="flex flex-col justify-end">
-                                            <Button onClick={testTTS} variant="outline" className="min-h-11 gap-2 font-black italic tracking-tighter">
+                                            <Button onClick={testTTS} variant="outline" className="min-h-11 gap-2 rounded-2xl font-black italic tracking-tighter">
                                                 <Play size={14} /> TEST VOICES
                                             </Button>
                                         </div>

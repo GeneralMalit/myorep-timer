@@ -1,9 +1,14 @@
-﻿import {
+import {
+    SAVED_WORKOUTS_SCHEMA_VERSION,
+} from '@/types/savedWorkouts';
+import type {
     SavedWorkout,
     SavedWorkoutConfig,
+    SavedWorkoutExportRecordV1,
     SavedWorkoutsExportV1,
     SavedWorkoutsImportSummary,
 } from '@/types/savedWorkouts';
+import { createSyncMetadata, normalizeSyncMetadata } from '@/utils/sync';
 
 const WORKOUT_CONFIG_KEYS: Array<keyof SavedWorkoutConfig> = [
     'sets',
@@ -30,6 +35,10 @@ const parsePositiveInt = (value: unknown): number | null => {
 const toNormalizedString = (value: unknown): string => {
     const parsed = parsePositiveInt(value);
     return parsed === null ? '' : String(parsed);
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> => {
+    return typeof value === 'object' && value !== null;
 };
 
 const hasValidBaseConfig = (config: SavedWorkoutConfig): boolean => {
@@ -78,23 +87,32 @@ export const isValidWorkoutConfig = (config: SavedWorkoutConfig): boolean => {
 };
 
 export const createSavedWorkout = (name: string, config: SavedWorkoutConfig, nowIso: string): SavedWorkout => {
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
     const normalizedName = name.trim();
     return {
-        id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+        id,
         name: normalizedName,
         ...config,
         timesUsed: 0,
         lastUsedAt: null,
         createdAt: nowIso,
         updatedAt: nowIso,
+        sync: createSyncMetadata(id, nowIso),
+    };
+};
+
+export const toSavedWorkoutExportRecord = (workout: SavedWorkout, nowIso: string): SavedWorkoutExportRecordV1 => {
+    return {
+        ...workout,
+        sync: normalizeSyncMetadata(workout.sync, workout.id, nowIso),
     };
 };
 
 export const buildSavedWorkoutsExport = (workouts: SavedWorkout[], exportedAt: string): SavedWorkoutsExportV1 => {
     return {
-        schemaVersion: 1,
+        schemaVersion: SAVED_WORKOUTS_SCHEMA_VERSION,
         exportedAt,
-        workouts,
+        workouts: workouts.map((workout) => toSavedWorkoutExportRecord(workout, exportedAt)),
     };
 };
 
@@ -119,6 +137,31 @@ const resolveImportedName = (name: string, usedNames: Set<string>): { name: stri
         }
         suffix += 1;
     }
+};
+
+const resolveWorkoutImportRecords = (payload: unknown): unknown[] | null => {
+    if (Array.isArray(payload)) {
+        return payload;
+    }
+
+    if (!isRecord(payload)) {
+        return null;
+    }
+
+    if (Array.isArray(payload.workouts)) {
+        return payload.workouts;
+    }
+
+    const nestedData = isRecord(payload.data) ? payload.data : null;
+    if (nestedData && Array.isArray(nestedData.workouts)) {
+        return nestedData.workouts;
+    }
+
+    if (Array.isArray(payload.items)) {
+        return payload.items;
+    }
+
+    return null;
 };
 
 const toSavedWorkoutRecord = (value: unknown): SavedWorkout | null => {
@@ -146,15 +189,19 @@ const toSavedWorkoutRecord = (value: unknown): SavedWorkout | null => {
     }
 
     const nowIso = new Date().toISOString();
+    const id = typeof record.id === 'string' && record.id.trim()
+        ? record.id
+        : `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
     return {
-        id: typeof record.id === 'string' && record.id.trim() ? record.id : `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+        id,
         name,
         ...sanitizedConfig,
         timesUsed: parsePositiveInt(record.timesUsed) ?? 0,
         lastUsedAt: typeof record.lastUsedAt === 'string' ? record.lastUsedAt : null,
         createdAt: typeof record.createdAt === 'string' ? record.createdAt : nowIso,
         updatedAt: typeof record.updatedAt === 'string' ? record.updatedAt : nowIso,
+        sync: normalizeSyncMetadata(record.sync, id, nowIso),
     };
 };
 
@@ -175,20 +222,20 @@ export const mergeSavedWorkoutsFromImport = (
     }
 
     const parsedPayload = payload as Record<string, unknown>;
-    if (parsedPayload.schemaVersion !== 1) {
-        summary.errors.push('Unsupported schema version.');
-        return { workouts: existing, summary };
-    }
-
-    if (!Array.isArray(parsedPayload.workouts)) {
-        summary.errors.push('Missing workouts array.');
+    const importedRecords = resolveWorkoutImportRecords(payload);
+    if (!importedRecords) {
+        if (typeof parsedPayload.schemaVersion === 'number' && parsedPayload.schemaVersion !== 1) {
+            summary.errors.push('Unsupported schema version.');
+        } else {
+            summary.errors.push('Missing workouts array.');
+        }
         return { workouts: existing, summary };
     }
 
     const nextWorkouts = [...existing];
     const usedNames = new Set(existing.map((workout) => normalizeName(workout.name)));
 
-    parsedPayload.workouts.forEach((workout, index) => {
+    importedRecords.forEach((workout, index) => {
         const parsedWorkout = toSavedWorkoutRecord(workout);
         if (!parsedWorkout) {
             summary.skipped += 1;
@@ -218,4 +265,3 @@ export const pickConfigFromState = (state: SavedWorkoutConfig): SavedWorkoutConf
     });
     return picked;
 };
-

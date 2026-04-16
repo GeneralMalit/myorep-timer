@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useWorkoutStore } from '../store/useWorkoutStore';
+import { useSyncStore } from '@/store/useSyncStore';
 import { act } from '@testing-library/react';
 
 describe('useWorkoutStore', () => {
@@ -30,14 +31,12 @@ describe('useWorkoutStore', () => {
                     fullScreenMode: false,
                     metronomeEnabled: true,
                     metronomeSound: 'woodblock',
-                    floatingWindow: false,
                     upDownMode: false,
                     infoVisibility: 'always',
                     soundMode: 'metronome',
                     ttsEnabled: true,
                     pulseEffect: 'always',
                     finishedColor: '#4caf50',
-                    pipShowInfo: true,
                 },
                 savedWorkouts: [],
                 selectedSavedWorkoutId: null,
@@ -56,6 +55,21 @@ describe('useWorkoutStore', () => {
                 sessionRestTimeLeft: 0,
                 sessionLastTickSecond: -1,
                 completedSessionWorkoutNodeIds: [],
+            });
+            useSyncStore.setState({
+                syncEnabled: false,
+                firstSyncState: 'idle',
+                currentUserId: null,
+                onboardingRemoteHasData: false,
+                recoveryBackup: null,
+                pendingChoice: null,
+                queuedOperations: [],
+                lastSyncedAt: null,
+                queueStatus: 'idle',
+                syncError: null,
+                authExpired: false,
+                pendingCounts: { total: 0, workouts: 0, sessions: 0, deletes: 0 },
+                hydrateComplete: true,
             });
         });
     });
@@ -217,13 +231,13 @@ describe('useWorkoutStore', () => {
             expect(state.savedSessions[0].nodes[1].type).toBe('rest');
             if (state.savedSessions[0].nodes[0].type === 'workout') {
                 expect(state.savedSessions[0].nodes[0].name).toBe('Workout 1');
-                expect(state.savedSessions[0].nodes[0].sourceWorkoutId).toBe(linkedWorkout.id);
+                expect(state.savedSessions[0].nodes[0].sourceWorkoutId).toBeNull();
             }
         });
 
         it('should load a saved session for editing with a cloned draft', () => {
             const store = useWorkoutStore.getState();
-            const linkedWorkout = seedSelectedWorkout({
+            seedSelectedWorkout({
                 sets: '1',
                 reps: '10',
                 seconds: '3',
@@ -254,11 +268,50 @@ describe('useWorkoutStore', () => {
             expect(state.editingSessionDraft?.nodes).toHaveLength(1);
             if (state.editingSessionDraft?.nodes[0]?.type === 'workout') {
                 expect(state.editingSessionDraft.nodes[0].name).toBe('Workout 1');
-                expect(state.editingSessionDraft.nodes[0].sourceWorkoutId).toBe(linkedWorkout.id);
+                expect(state.editingSessionDraft.nodes[0].sourceWorkoutId).toBeNull();
             }
         });
 
-        it('should auto-create and link a saved workout when adding a session workout node without one selected', () => {
+        it('preserves workout notes when relinking and saving a copy', () => {
+            const store = useWorkoutStore.getState();
+            const linkedWorkout = seedSelectedWorkout({
+                sets: '2',
+                reps: '12',
+                seconds: '4',
+                rest: '15',
+                myoReps: '4',
+                myoWorkSecs: '2',
+            }, 'Note Template');
+
+            act(() => {
+                store.createSession('Note Session');
+                store.addWorkoutNodeFromCurrentSetup();
+            });
+
+            const draftNode = useWorkoutStore.getState().editingSessionDraft?.nodes[0];
+            if (draftNode?.type === 'workout') {
+                act(() => {
+                    store.updateWorkoutNode(draftNode.id, draftNode.config, draftNode.name, 'Prev 60kg');
+                });
+                act(() => {
+                    store.replaceWorkoutNodeWithSavedWorkout(draftNode.id, linkedWorkout.id);
+                });
+            }
+
+            const relinkedNode = useWorkoutStore.getState().editingSessionDraft?.nodes[0];
+            if (relinkedNode?.type === 'workout') {
+                expect(relinkedNode.notes).toBe('Prev 60kg');
+                expect(relinkedNode.sourceWorkoutId).toBe(linkedWorkout.id);
+            }
+
+            const saveCopyResult = store.saveSessionDraftAs('Note Session Copy');
+            expect(saveCopyResult.ok).toBe(true);
+
+            const savedCopy = useWorkoutStore.getState().savedSessions.find((session) => session.name === 'Note Session Copy');
+            expect(savedCopy?.nodes[0].type === 'workout' ? savedCopy.nodes[0].notes : '').toBe('Prev 60kg');
+        });
+
+        it('should add a session-local workout node without creating a saved workout', () => {
             const store = useWorkoutStore.getState();
 
             act(() => {
@@ -280,19 +333,19 @@ describe('useWorkoutStore', () => {
 
             const state = useWorkoutStore.getState();
             expect(addResult).toMatchObject({ ok: true });
-            expect(state.savedWorkouts).toHaveLength(1);
+            expect(state.savedWorkouts).toHaveLength(0);
             expect(state.editingSessionDraft?.nodes).toHaveLength(1);
-            expect(state.selectedSavedWorkoutId).toBe(state.savedWorkouts[0].id);
+            expect(state.selectedSavedWorkoutId).toBeNull();
             if (state.editingSessionDraft?.nodes[0]?.type === 'workout') {
-                expect(state.editingSessionDraft.nodes[0].sourceWorkoutId).toBe(state.savedWorkouts[0].id);
+                expect(state.editingSessionDraft.nodes[0].sourceWorkoutId).toBeNull();
                 expect(state.editingSessionDraft.nodes[0].name).toBe('Workout 1');
             }
         });
 
-        it('should keep the selected workout link even when the current setup has unsaved edits', () => {
+        it('should create an unlinked session node even when a saved workout is selected', () => {
             const store = useWorkoutStore.getState();
 
-            const selectedWorkout = seedSelectedWorkout({
+            seedSelectedWorkout({
                 sets: '2',
                 reps: '8',
                 seconds: '4',
@@ -317,14 +370,51 @@ describe('useWorkoutStore', () => {
             expect(addResult).toMatchObject({ ok: true });
             expect(useWorkoutStore.getState().editingSessionDraft?.nodes).toHaveLength(1);
             if (useWorkoutStore.getState().editingSessionDraft?.nodes[0]?.type === 'workout') {
-                expect(useWorkoutStore.getState().editingSessionDraft!.nodes[0].sourceWorkoutId).toBe(selectedWorkout.id);
+                expect(useWorkoutStore.getState().editingSessionDraft!.nodes[0].sourceWorkoutId).toBeNull();
                 expect(useWorkoutStore.getState().editingSessionDraft!.nodes[0].config.sets).toBe('3');
             }
         });
 
+        it('should add an incomplete session-local workout node but still block invalid sessions from saving or starting', () => {
+            const store = useWorkoutStore.getState();
+
+            act(() => {
+                store.setWorkoutConfig({
+                    sets: '',
+                    reps: '',
+                    seconds: '',
+                    rest: '',
+                    myoReps: '',
+                    myoWorkSecs: '',
+                });
+                store.createSession('Draft Node Session');
+            });
+
+            const addResult = store.addWorkoutNodeFromCurrentSetup();
+            expect(addResult).toMatchObject({ ok: true });
+
+            const draftNode = useWorkoutStore.getState().editingSessionDraft?.nodes[0];
+            expect(draftNode?.type).toBe('workout');
+            if (draftNode?.type === 'workout') {
+                expect(draftNode.sourceWorkoutId).toBeNull();
+                expect(draftNode.config).toMatchObject({
+                    sets: '',
+                    reps: '',
+                    seconds: '',
+                    rest: '',
+                    myoReps: '',
+                    myoWorkSecs: '',
+                });
+            }
+
+            expect(useWorkoutStore.getState().savedWorkouts).toHaveLength(0);
+            expect(store.saveSessionDraft()).toMatchObject({ ok: false, error: 'Session is invalid.' });
+            expect(store.startSession(useWorkoutStore.getState().editingSessionDraft!.id)).toMatchObject({ ok: false, error: 'Session is invalid.' });
+        });
+
         it('should run a session through workout and rest nodes', () => {
             const store = useWorkoutStore.getState();
-            const linkedWorkout = seedSelectedWorkout({
+            seedSelectedWorkout({
                 sets: '1',
                 reps: '1',
                 seconds: '2',
@@ -374,7 +464,7 @@ describe('useWorkoutStore', () => {
             expect(useWorkoutStore.getState().editingSessionDraft?.nodes[0].name).toBe('Workout 1');
             expect(useWorkoutStore.getState().editingSessionDraft?.nodes[0].type === 'workout'
                 ? useWorkoutStore.getState().editingSessionDraft?.nodes[0].sourceWorkoutId
-                : null).toBe(linkedWorkout.id);
+                : null).toBeNull();
 
             act(() => {
                 store.advanceCycle();
@@ -1173,6 +1263,59 @@ describe('useWorkoutStore', () => {
             expect(remaining[0].name).toBe('B');
         });
 
+        it('tombstones synced workout deletes until the remote acknowledgement lands', () => {
+            const store = useWorkoutStore.getState();
+            act(() => {
+                useSyncStore.setState({ syncEnabled: true });
+                store.setWorkoutConfig(validConfig);
+            });
+
+            const saveResult = store.saveCurrentWorkout('Synced Workout');
+            expect(saveResult.ok).toBe(true);
+            const workout = useWorkoutStore.getState().savedWorkouts[0];
+
+            act(() => {
+                store.acknowledgeSyncedWorkout({
+                    ...workout,
+                    sync: {
+                        ...workout.sync!,
+                        remoteId: 'remote-workout-1',
+                        dirty: false,
+                        lastSyncedAt: '2026-04-10T00:00:00.000Z',
+                    },
+                });
+                useSyncStore.getState().acknowledgeUpsert({
+                    entityType: 'workout',
+                    localId: workout.id,
+                    syncedAt: '2026-04-10T00:00:00.000Z',
+                });
+            });
+
+            act(() => {
+                store.deleteWorkout(workout.id);
+            });
+
+            const deletedWorkout = useWorkoutStore.getState().savedWorkouts[0];
+            expect(deletedWorkout.sync?.pendingDelete).toBe(true);
+            expect(useSyncStore.getState().queuedOperations).toHaveLength(1);
+            expect(useSyncStore.getState().queuedOperations[0]).toMatchObject({
+                entityType: 'workout',
+                operation: 'delete',
+                localId: workout.id,
+            });
+
+            act(() => {
+                useSyncStore.getState().acknowledgeDelete({
+                    entityType: 'workout',
+                    localId: workout.id,
+                    syncedAt: '2026-04-11T00:00:00.000Z',
+                });
+                store.purgeDeletedWorkout(workout.id);
+            });
+
+            expect(useWorkoutStore.getState().savedWorkouts).toHaveLength(0);
+        });
+
         it('should only record workout usage when a loaded template finishes', () => {
             const store = useWorkoutStore.getState();
             act(() => {
@@ -1243,7 +1386,11 @@ describe('useWorkoutStore', () => {
             const store = useWorkoutStore.getState();
             const summary = store.importSavedWorkouts({ schemaVersion: 99, workouts: [] });
             expect(summary.imported).toBe(0);
-            expect(summary.errors[0]).toContain('Unsupported schema version');
+            expect(summary.errors).toEqual([]);
+
+            const malformedSummary = store.importSavedWorkouts({ schemaVersion: 1, workouts: {} });
+            expect(malformedSummary.imported).toBe(0);
+            expect(malformedSummary.errors[0]).toContain('Missing workouts array');
 
             act(() => {
                 store.clearImportSummary();
@@ -1401,6 +1548,99 @@ describe('useWorkoutStore', () => {
             });
 
             expect(useWorkoutStore.getState().timerStatus).toBe('Finished');
+        });
+
+        it('preserves the full workout transition sequence across prep, main reps, rest, myo reps, and finish', () => {
+            const store = useWorkoutStore.getState();
+
+            act(() => {
+                store.setWorkoutConfig({
+                    sets: '2',
+                    reps: '2',
+                    seconds: '3',
+                    rest: '5',
+                    myoReps: '2',
+                    myoWorkSecs: '2',
+                });
+                store.startWorkout();
+            });
+
+            let state = useWorkoutStore.getState();
+            expect(state.timerStatus).toBe('Preparing');
+            expect(state.isTimerRunning).toBe(true);
+            expect(state.currentSet).toBe(1);
+            expect(state.currentRep).toBe(1);
+            expect(state.isMainRep).toBe(true);
+            expect(state.isWorking).toBe(true);
+            expect(state.timeLeft).toBe(5);
+            expect(state.setTotalDuration).toBe(6);
+
+            act(() => {
+                store.advanceCycle();
+            });
+            state = useWorkoutStore.getState();
+            expect(state.timerStatus).toBe('Main Set');
+            expect(state.currentSet).toBe(1);
+            expect(state.currentRep).toBe(1);
+            expect(state.isMainRep).toBe(true);
+            expect(state.isWorking).toBe(true);
+            expect(state.timeLeft).toBe(3);
+            expect(state.setTotalDuration).toBe(6);
+            expect(state.setElapsedTime).toBe(0);
+
+            act(() => {
+                store.advanceCycle();
+            });
+            state = useWorkoutStore.getState();
+            expect(state.timerStatus).toBe('Main Set');
+            expect(state.currentSet).toBe(1);
+            expect(state.currentRep).toBe(2);
+            expect(state.timeLeft).toBe(3);
+
+            act(() => {
+                store.advanceCycle();
+            });
+            state = useWorkoutStore.getState();
+            expect(state.timerStatus).toBe('Resting');
+            expect(state.currentSet).toBe(1);
+            expect(state.currentRep).toBe(2);
+            expect(state.isWorking).toBe(false);
+            expect(state.isMainRep).toBe(true);
+            expect(state.timeLeft).toBe(5);
+            expect(state.setTotalDuration).toBe(5);
+            expect(state.setElapsedTime).toBe(0);
+
+            act(() => {
+                store.advanceCycle();
+            });
+            state = useWorkoutStore.getState();
+            expect(state.timerStatus).toBe('Myo Reps');
+            expect(state.currentSet).toBe(2);
+            expect(state.currentRep).toBe(1);
+            expect(state.isWorking).toBe(true);
+            expect(state.isMainRep).toBe(false);
+            expect(state.timeLeft).toBe(2);
+            expect(state.setTotalDuration).toBe(4);
+            expect(state.setElapsedTime).toBe(0);
+
+            act(() => {
+                store.advanceCycle();
+            });
+            state = useWorkoutStore.getState();
+            expect(state.timerStatus).toBe('Myo Reps');
+            expect(state.currentSet).toBe(2);
+            expect(state.currentRep).toBe(2);
+            expect(state.isMainRep).toBe(false);
+            expect(state.timeLeft).toBe(2);
+
+            act(() => {
+                store.advanceCycle();
+            });
+            state = useWorkoutStore.getState();
+            expect(state.timerStatus).toBe('Finished');
+            expect(state.isTimerRunning).toBe(false);
+            expect(state.timeLeft).toBe(0);
+            expect(state.setElapsedTime).toBe(4);
         });
     });
 });

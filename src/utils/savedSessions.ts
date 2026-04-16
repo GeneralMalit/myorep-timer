@@ -1,13 +1,18 @@
 import type { SavedWorkoutConfig } from '@/types/savedWorkouts';
+import {
+    SAVED_SESSIONS_SCHEMA_VERSION,
+} from '@/types/savedSessions';
 import type {
     RestSessionNode,
     SavedSession,
+    SavedSessionExportRecordV1,
     SavedSessionsExportV1,
     SavedSessionsImportSummary,
     SessionNode,
     WorkoutSessionNode,
 } from '@/types/savedSessions';
 import { isValidWorkoutConfig, sanitizeSavedWorkoutConfig } from '@/utils/savedWorkouts';
+import { createSyncMetadata, normalizeSyncMetadata } from '@/utils/sync';
 
 const SESSION_NODE_KEYS: Array<keyof SavedWorkoutConfig> = [
     'sets',
@@ -117,6 +122,14 @@ const createId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 
 const normalizeName = (value: string) => value.trim();
 
+const normalizeWorkoutNotes = (value: unknown): string => {
+    return typeof value === 'string' ? value : '';
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> => {
+    return typeof value === 'object' && value !== null;
+};
+
 const normalizeSessionNodeConfig = (config: Partial<SavedWorkoutConfig>): SavedWorkoutConfig => {
     const sanitized = sanitizeSavedWorkoutConfig(config);
     const picked = {} as SavedWorkoutConfig;
@@ -133,6 +146,7 @@ const cloneNodeIdentity = <T extends SessionNode>(node: T, nowIso?: string): T =
         return node.type === 'workout'
             ? {
                 ...node,
+                notes: normalizeWorkoutNotes(node.notes),
                 config: { ...node.config },
             } as T
             : {
@@ -145,6 +159,7 @@ const cloneNodeIdentity = <T extends SessionNode>(node: T, nowIso?: string): T =
         ? {
             ...node,
             id: nextId,
+            notes: normalizeWorkoutNotes(node.notes),
             config: { ...node.config },
             createdAt: nowIso,
             updatedAt: nowIso,
@@ -251,6 +266,7 @@ const toImportedSessionNode = (value: unknown): SessionNode | null => {
         sourceWorkoutId: typeof record.sourceWorkoutId === 'string' && record.sourceWorkoutId.trim()
             ? record.sourceWorkoutId
             : null,
+        notes: normalizeWorkoutNotes(record.notes),
         createdAt: nowIso,
         updatedAt: typeof record.updatedAt === 'string' && record.updatedAt ? record.updatedAt : nowIso,
     };
@@ -288,6 +304,7 @@ export const createWorkoutSessionNode = (
             name: normalizedName,
             config: sanitizedConfig,
             sourceWorkoutId: sourceWorkoutId ?? null,
+            notes: '',
             createdAt: nowIso,
             updatedAt: nowIso,
         };
@@ -301,6 +318,7 @@ export const createWorkoutSessionNode = (
         name: normalizedName,
         config: sanitizedConfig,
         sourceWorkoutId: typeof nowIsoOrSourceWorkoutId === 'string' ? nowIsoOrSourceWorkoutId : null,
+        notes: '',
         createdAt: nowIso,
         updatedAt: nowIso,
     };
@@ -356,12 +374,14 @@ export const cloneSavedSession = <T extends SavedSession>(session: T, nowIso?: s
         };
     }
 
+    const id = createId();
     return {
         ...session,
-        id: createId(),
+        id,
         nodes: session.nodes.map((node) => cloneSessionNode(node, nowIso)),
         createdAt: nowIso,
         updatedAt: nowIso,
+        sync: createSyncMetadata(id, nowIso),
     };
 };
 
@@ -433,15 +453,25 @@ export const createSavedSession = (
     const generatedNowIso = nowIso
         ?? (typeof nodesOrNowIso === 'string' ? nodesOrNowIso : new Date().toISOString());
     const nodes = Array.isArray(nodesOrNowIso) ? nodesOrNowIso : [];
+    const id = createId();
 
     return {
-        id: createId(),
+        id,
         name: normalizeName(name) || 'Saved Session',
         nodes: nodes.map((node) => cloneSessionNode(node, generatedNowIso)),
         timesUsed: 0,
         lastUsedAt: null,
         createdAt: generatedNowIso,
         updatedAt: generatedNowIso,
+        sync: createSyncMetadata(id, generatedNowIso),
+    };
+};
+
+export const toSavedSessionExportRecord = (session: SavedSession, nowIso: string): SavedSessionExportRecordV1 => {
+    return {
+        ...session,
+        nodes: session.nodes.map((node) => cloneSessionNode(node)),
+        sync: normalizeSyncMetadata(session.sync, session.id, nowIso),
     };
 };
 
@@ -450,10 +480,35 @@ export const buildSavedSessionsExport = (
     exportedAt: string,
 ): SavedSessionsExportV1 => {
     return {
-        schemaVersion: 1,
+        schemaVersion: SAVED_SESSIONS_SCHEMA_VERSION,
         exportedAt: resolveSessionExportedAt(exportedAt),
-        sessions,
+        sessions: sessions.map((session) => toSavedSessionExportRecord(session, exportedAt)),
     };
+};
+
+const resolveSessionImportRecords = (payload: unknown): unknown[] | null => {
+    if (Array.isArray(payload)) {
+        return payload;
+    }
+
+    if (!isRecord(payload)) {
+        return null;
+    }
+
+    if (Array.isArray(payload.sessions)) {
+        return payload.sessions;
+    }
+
+    const nestedData = isRecord(payload.data) ? payload.data : null;
+    if (nestedData && Array.isArray(nestedData.sessions)) {
+        return nestedData.sessions;
+    }
+
+    if (Array.isArray(payload.items)) {
+        return payload.items;
+    }
+
+    return null;
 };
 
 export const mergeSavedSessionsFromImport = (
@@ -473,13 +528,13 @@ export const mergeSavedSessionsFromImport = (
     }
 
     const record = payload as Record<string, unknown>;
-    if (record.schemaVersion !== 1) {
-        summary.errors.push('Unsupported schema version.');
-        return { sessions: existing, summary };
-    }
-
-    if (!Array.isArray(record.sessions)) {
-        summary.errors.push('Missing sessions array.');
+    const importedRecords = resolveSessionImportRecords(payload);
+    if (!importedRecords) {
+        if (typeof record.schemaVersion === 'number' && record.schemaVersion !== 1) {
+            summary.errors.push('Unsupported schema version.');
+        } else {
+            summary.errors.push('Missing sessions array.');
+        }
         return { sessions: existing, summary };
     }
 
@@ -487,7 +542,7 @@ export const mergeSavedSessionsFromImport = (
     const usedNames = new Set(existing.map((session) => normalizeName(session.name).toLowerCase()));
     const usedIds = new Set(existing.map((session) => session.id));
 
-    record.sessions.forEach((candidate, index) => {
+    importedRecords.forEach((candidate, index) => {
         if (!candidate || typeof candidate !== 'object') {
             summary.skipped += 1;
             summary.errors.push(`Skipped invalid session at index ${index}.`);
@@ -518,14 +573,17 @@ export const mergeSavedSessionsFromImport = (
         }
 
         const nowIso = new Date().toISOString();
+        const id = resolveImportedSessionId(sessionRecord.id, usedIds);
+
         nextSessions.push({
-            id: resolveImportedSessionId(sessionRecord.id, usedIds),
+            id,
             name: resolvedName.name,
             nodes: nodes.map((node) => cloneSessionNode(node, nowIso)),
             timesUsed: parsePositiveInt(sessionRecord.timesUsed) ?? 0,
             lastUsedAt: typeof sessionRecord.lastUsedAt === 'string' ? sessionRecord.lastUsedAt : null,
             createdAt: typeof sessionRecord.createdAt === 'string' && sessionRecord.createdAt ? sessionRecord.createdAt : nowIso,
             updatedAt: typeof sessionRecord.updatedAt === 'string' && sessionRecord.updatedAt ? sessionRecord.updatedAt : nowIso,
+            sync: normalizeSyncMetadata(sessionRecord.sync, id, nowIso),
         });
         summary.imported += 1;
     });

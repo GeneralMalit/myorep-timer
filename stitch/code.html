@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>MYOREP V3.4.0 | Session Builder</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Lexend:ital,wght@0,700;1,700;1,800;1,900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-primary-fixed-variant": "#370086",
+                        "surface-tint": "#ba9eff",
+                        "tertiary-dim": "#f0779d",
+                        "tertiary": "#ff97b5",
+                        "primary": "#ba9eff",
+                        "on-secondary": "#475800",
+                        "on-secondary-fixed-variant": "#506300",
+                        "outline": "#767576",
+                        "surface-bright": "#2c2c2d",
+                        "surface-container-low": "#131314",
+                        "secondary": "#c7f300",
+                        "primary-container": "#ae8dff",
+                        "on-background": "#ffffff",
+                        "surface": "#0e0e0f",
+                        "background": "#0e0e0f",
+                        "error": "#ff6e84",
+                        "on-primary-fixed": "#000000",
+                        "primary-dim": "#8455ef",
+                        "on-tertiary-fixed-variant": "#701039",
+                        "surface-dim": "#0e0e0f",
+                        "outline-variant": "#484849",
+                        "error-container": "#a70138",
+                        "surface-container-lowest": "#000000",
+                        "surface-container-high": "#201f21",
+                        "primary-fixed-dim": "#a27cff",
+                        "tertiary-fixed": "#ff8eb0",
+                        "surface-variant": "#262627",
+                        "on-tertiary": "#6a0934",
+                        "on-error-container": "#ffb2b9",
+                        "primary-fixed": "#ae8dff",
+                        "tertiary-container": "#fd81a8",
+                        "on-primary": "#39008c",
+                        "on-secondary-container": "#f0ffb9",
+                        "secondary-container": "#526600",
+                        "on-secondary-fixed": "#374500",
+                        "on-surface-variant": "#adaaab",
+                        "secondary-fixed": "#c7f300",
+                        "secondary-dim": "#bbe400",
+                        "surface-container": "#19191b",
+                        "surface-container-highest": "#262627",
+                        "inverse-surface": "#fcf8f9",
+                        "error-dim": "#d73357",
+                        "secondary-fixed-dim": "#bbe400",
+                        "on-tertiary-fixed": "#380018",
+                        "inverse-primary": "#6e3bd7",
+                        "on-error": "#490013",
+                        "on-tertiary-container": "#59002a",
+                        "on-primary-container": "#2b006e",
+                        "tertiary-fixed-dim": "#f67ca3",
+                        "on-surface": "#ffffff",
+                        "inverse-on-surface": "#565556"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "1.5rem",
+                        "full": "9999px"
+                    },
+                    "fontFamily": {
+                        "headline": ["Lexend"],
+                        "body": ["Inter"],
+                        "label": ["Lexend"]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0e0e0f;
+            color: #ffffff;
+            overflow: hidden;
+        }
+        .lexend-bold-italic {
+            font-family: 'Lexend', sans-serif;
+            font-weight: 700;
+            font-style: italic;
+        }
+        .lexend-uppercase {
+            font-family: 'Lexend', sans-serif;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .canvas-grid {
+            background-image: radial-gradient(circle, #262627 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+        .node-connector {
+            position: absolute;
+            height: 2px;
+            background: linear-gradient(90deg, #484849 0%, #484849 100%);
+            z-index: 0;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+</head>
+<body class="flex h-screen overflow-hidden">
+<!-- TopAppBar -->
+<header class="fixed top-0 left-0 w-full z-50 bg-[#0e0e0f] flex justify-between items-center px-6 py-3 border-none">
+<div class="flex items-center gap-8">
+<span class="text-xl font-bold italic tracking-tighter text-[#8B5CF6] lexend-bold-italic">MYOREP V3.4.0</span>
+<nav class="hidden md:flex items-center gap-6">
+<a class="text-[#c7f300] font-bold italic lexend-bold-italic hover:bg-[#262627] hover:text-[#ba9eff] transition-colors px-3 py-1 rounded" href="#">Build a Session</a>
+</nav>
+</div>
+<div class="flex items-center gap-3">
+<button class="lexend-uppercase text-xs font-medium text-gray-400 hover:bg-[#262627] hover:text-[#ba9eff] transition-colors px-3 py-2 rounded flex items-center gap-2 active:scale-95 duration-100">
+<span class="material-symbols-outlined text-sm">save_as</span>
+                Save
+            </button>
+<button class="lexend-bold-italic bg-gradient-to-r from-[#ba9eff] to-[#8455ef] text-[#39008c] px-6 py-2 rounded-xl flex items-center gap-2 hover:opacity-90 active:scale-95 duration-100">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">play_arrow</span>
+                Start
+            </button>
+</div>
+</header>
+<!-- SideNavBar (Toolbox) -->
+<aside class="fixed left-0 top-0 h-full w-64 bg-[#0e0e0f] flex flex-col pt-20 z-40 border-none">
+<div class="px-6 py-4">
+<h2 class="lexend-bold-italic text-lg text-[#8B5CF6]">TOOLBOX</h2>
+<p class="text-[10px] lexend-uppercase text-gray-500 mb-6">Drag elements to canvas</p>
+<div class="space-y-4">
+<!-- Workout Node Template -->
+<div class="group bg-[#131314] hover:bg-[#201f21] p-4 rounded-lg cursor-grab border-l-4 border-[#8B5CF6] transition-all active:opacity-50 active:scale-105">
+<div class="flex items-center gap-3 mb-1">
+<span class="material-symbols-outlined text-[#8B5CF6]">fitness_center</span>
+<span class="lexend-uppercase text-xs font-bold">Workout Node</span>
+</div>
+<p class="text-[10px] text-gray-500">Add strength or cardio set</p>
+</div>
+<!-- Rest Node Template -->
+<div class="group bg-[#131314] hover:bg-[#201f21] p-4 rounded-lg cursor-grab border-l-4 border-gray-600 transition-all active:opacity-50 active:scale-105">
+<div class="flex items-center gap-3 mb-1">
+<span class="material-symbols-outlined text-gray-400">timer</span>
+<span class="lexend-uppercase text-xs font-bold text-gray-400">Rest Node</span>
+</div>
+<p class="text-[10px] text-gray-500">Recovery interval</p>
+</div>
+</div>
+</div>
+<div class="mt-auto p-6">
+<button class="w-full bg-[#131314] text-[#8B5CF6] border border-[#8B5CF6]/30 py-3 rounded-xl lexend-uppercase text-xs font-bold hover:bg-[#8B5CF6] hover:text-[#0e0e0f] transition-all">
+                Initialize Protocol
+            </button>
+</div>
+</aside>
+<!-- Main Canvas -->
+<main class="flex-1 ml-64 mt-14 mb-8 canvas-grid relative overflow-auto bg-[#000000] p-20 flex flex-col items-center">
+<div class="flex flex-col md:flex-row items-center gap-16 relative">
+<!-- START Node -->
+<div class="relative z-10 flex flex-col items-center">
+<div class="w-16 h-16 rounded-full bg-[#c7f300] flex items-center justify-center shadow-[0_0_20px_rgba(199,243,0,0.3)]">
+<span class="material-symbols-outlined text-black font-bold">play_arrow</span>
+</div>
+<span class="lexend-uppercase text-[10px] mt-2 font-black text-[#c7f300]">START</span>
+</div>
+<!-- Connector 1 -->
+<div class="hidden md:block absolute left-16 top-8 w-16 h-[2px] bg-outline-variant/30"></div>
+<!-- Workout Node 1 -->
+<div class="relative z-10 w-64 bg-surface-container-high rounded-xl p-5 border-l-4 border-primary shadow-2xl">
+<div class="flex justify-between items-start mb-4">
+<div>
+<h3 class="lexend-bold-italic text-sm text-on-surface">BARBELL SQUAT</h3>
+<p class="lexend-uppercase text-[9px] text-primary">Compound / Strength</p>
+</div>
+<span class="material-symbols-outlined text-primary text-xl">fitness_center</span>
+</div>
+<div class="grid grid-cols-2 gap-4">
+<div>
+<p class="lexend-uppercase text-[8px] text-on-surface-variant">Sets</p>
+<p class="text-lg font-black text-on-surface">4</p>
+</div>
+<div>
+<p class="lexend-uppercase text-[8px] text-on-surface-variant">Reps</p>
+<p class="text-lg font-black text-on-surface">8-10</p>
+</div>
+</div>
+<div class="mt-4 pt-4 border-t border-outline-variant/20">
+<p class="lexend-uppercase text-[8px] text-on-surface-variant">Load Target</p>
+<p class="text-xs font-bold text-secondary">85% 1RM</p>
+</div>
+</div>
+<!-- Connector 2 -->
+<div class="hidden md:block absolute left-[384px] top-8 w-16 h-[2px] bg-outline-variant/30"></div>
+<!-- Rest Node 1 -->
+<div class="relative z-10 w-48 bg-surface-container-high rounded-xl p-5 border-l-4 border-outline-variant">
+<div class="flex justify-between items-start mb-2">
+<h3 class="lexend-bold-italic text-sm text-on-surface-variant italic">RECOVERY</h3>
+<span class="material-symbols-outlined text-on-surface-variant text-xl">timer</span>
+</div>
+<div>
+<p class="lexend-uppercase text-[8px] text-on-surface-variant">Interval</p>
+<p class="text-2xl font-black text-on-surface tracking-tighter italic">02:30</p>
+</div>
+</div>
+<!-- Connector 3 -->
+<div class="hidden md:block absolute left-[640px] top-8 w-16 h-[2px] bg-outline-variant/30"></div>
+<!-- Workout Node 2 -->
+<div class="relative z-10 w-64 bg-surface-container-high rounded-xl p-5 border-l-4 border-primary shadow-2xl">
+<div class="flex justify-between items-start mb-4">
+<div>
+<h3 class="lexend-bold-italic text-sm text-on-surface">LEG PRESS</h3>
+<p class="lexend-uppercase text-[9px] text-primary">Isolation / Volume</p>
+</div>
+<span class="material-symbols-outlined text-primary text-xl">fitness_center</span>
+</div>
+<div class="grid grid-cols-2 gap-4">
+<div>
+<p class="lexend-uppercase text-[8px] text-on-surface-variant">Sets</p>
+<p class="text-lg font-black text-on-surface">3</p>
+</div>
+<div>
+<p class="lexend-uppercase text-[8px] text-on-surface-variant">Reps</p>
+<p class="text-lg font-black text-on-surface">15</p>
+</div>
+</div>
+</div>
+<!-- Connector 4 -->
+<div class="hidden md:block absolute left-[896px] top-8 w-16 h-[2px] bg-outline-variant/30"></div>
+<!-- END Node -->
+<div class="relative z-10 flex flex-col items-center">
+<div class="w-16 h-16 rounded-full bg-error flex items-center justify-center shadow-[0_0_20px_rgba(255,110,132,0.3)]">
+<span class="material-symbols-outlined text-black font-bold">stop</span>
+</div>
+<span class="lexend-uppercase text-[10px] mt-2 font-black text-error">END</span>
+</div>
+</div>
+<!-- Add Node Floating Button -->
+<button class="fixed bottom-10 right-10 w-14 h-14 bg-primary text-on-primary rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all z-50">
+<span class="material-symbols-outlined text-3xl">add</span>
+</button>
+</main>
+<!-- Footer Status Bar -->
+<footer class="fixed bottom-0 w-full px-4 py-1 bg-black flex justify-between items-center z-50 border-t border-[#262627]/15">
+<span class="lexend-uppercase text-[10px] tracking-widest text-[#c7f300]">SYSTEM STATUS: OPTIMAL | V3.4.0</span>
+<div class="flex gap-4">
+<a class="lexend-uppercase text-[10px] tracking-widest text-gray-600 hover:text-[#8B5CF6]" href="#">Documentation</a>
+<a class="lexend-uppercase text-[10px] tracking-widest text-gray-600 hover:text-[#8B5CF6]" href="#">Support</a>
+</div>
+</footer>
+</body></html>

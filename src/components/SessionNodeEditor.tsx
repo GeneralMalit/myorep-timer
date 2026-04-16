@@ -19,6 +19,7 @@ const workoutFields: Array<{ key: keyof SavedWorkoutConfig; label: string; icon:
 ];
 
 const SessionNodeEditor = () => {
+    const [isMobileViewport, setIsMobileViewport] = useState(false);
     const editingSessionDraft = useWorkoutStore((state) => state.editingSessionDraft);
     const editingSessionNodeId = useWorkoutStore((state) => state.editingSessionNodeId);
     const setEditingSessionNodeId = useWorkoutStore((state) => state.setEditingSessionNodeId);
@@ -89,6 +90,26 @@ const SessionNodeEditor = () => {
         return () => window.clearTimeout(timeoutId);
     }, [feedback]);
 
+    useEffect(() => {
+        if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+            return;
+        }
+
+        const mediaQuery = window.matchMedia('(max-width: 767px)');
+        const handleViewportChange = (event: MediaQueryListEvent | MediaQueryList) => {
+            setIsMobileViewport(event.matches);
+        };
+
+        handleViewportChange(mediaQuery);
+        if (typeof mediaQuery.addEventListener === 'function') {
+            mediaQuery.addEventListener('change', handleViewportChange);
+            return () => mediaQuery.removeEventListener('change', handleViewportChange);
+        }
+
+        mediaQuery.addListener(handleViewportChange);
+        return () => mediaQuery.removeListener(handleViewportChange);
+    }, []);
+
     if (!node) {
         return null;
     }
@@ -100,7 +121,7 @@ const SessionNodeEditor = () => {
     const linkedWorkout = workoutNode?.sourceWorkoutId
         ? savedWorkouts.find((workout) => workout.id === workoutNode.sourceWorkoutId) ?? null
         : null;
-    const isLegacyWorkoutNode = Boolean(workoutNode && !linkedWorkout);
+    const isUnsavedWorkoutNode = Boolean(workoutNode && !workoutNode.sourceWorkoutId);
     const isMissingLinkedWorkout = Boolean(workoutNode?.sourceWorkoutId && !linkedWorkout);
 
     const handleClose = () => setEditingSessionNodeId(null);
@@ -148,8 +169,10 @@ const SessionNodeEditor = () => {
             aria-modal="true"
             aria-label={`${node.type} node editor`}
             className={cn(
-                'fixed inset-y-0 right-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm',
-                isSidebarCollapsed ? 'left-16' : 'left-64',
+                'fixed inset-y-0 right-0 z-50 flex bg-black/70 backdrop-blur-sm',
+                isMobileViewport
+                    ? 'left-0 items-end justify-center px-[max(0.5rem,var(--safe-left))] pb-[max(0.5rem,var(--safe-bottom))] pt-[max(0.5rem,var(--safe-top))]'
+                    : cn('items-center justify-center p-4', isSidebarCollapsed ? 'left-16' : 'left-64'),
             )}
             onPointerDown={(event) => {
                 if (event.target === event.currentTarget) {
@@ -158,20 +181,31 @@ const SessionNodeEditor = () => {
             }}
         >
             <Card
-                className="relative w-full max-w-[920px] min-w-0 max-h-[calc(100vh-2rem)] overflow-auto border-border/60 bg-background/95 shadow-[0_30px_120px_rgba(0,0,0,0.55)]"
+                className={cn(
+                    'relative min-w-0 overflow-auto border-border/60 bg-background/95 shadow-[0_30px_120px_rgba(0,0,0,0.55)] scroll-contain-y',
+                    isMobileViewport
+                        ? 'max-h-[calc(var(--viewport-dynamic)-var(--safe-top)-var(--safe-bottom)-1rem)] h-full w-full max-w-none rounded-[28px]'
+                        : 'max-h-[calc(100vh-2rem)] w-full max-w-[920px] rounded-[28px]',
+                )}
                 onPointerDown={(event) => event.stopPropagation()}
             >
-                <CardContent className="space-y-6 p-5 sm:p-6">
+                <CardContent className={cn('space-y-6', isMobileViewport ? 'p-4 sm:p-6' : 'p-5 sm:p-6')}>
+                    {isMobileViewport && <div className="mx-auto -mt-1 mb-2 h-1.5 w-12 rounded-full bg-muted/50" />}
                     <div className="flex items-start justify-between gap-4">
                         <div className="space-y-1">
                             <div className="flex items-center gap-2">
                                 <span className="rounded-full border border-border/50 bg-muted px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.22em]">
                                     {node.type}
                                 </span>
+                                {workoutNode && !linkedWorkout && !isMissingLinkedWorkout && (
+                                    <span className="rounded-full border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.22em] text-amber-200">
+                                        Unsaved
+                                    </span>
+                                )}
                                 <span className="text-sm font-black italic tracking-tight">{node.name}</span>
                             </div>
                             <p className="text-sm text-muted-foreground">
-                                Edit this node directly. Workout nodes should stay linked to your saved workout library.
+                                Edit this node directly. Save it to your workout library only if you want to reuse it later.
                             </p>
                         </div>
 
@@ -200,37 +234,62 @@ const SessionNodeEditor = () => {
                             </div>
 
                             {workoutNode ? (
-                                <div className="grid gap-3 sm:grid-cols-2">
-                                    {workoutFields.map((field) => {
-                                        const Icon = field.icon;
-                                        const isDisabled = isSingleCycle && field.key !== 'sets' && field.key !== 'reps' && field.key !== 'seconds';
-                                        const shouldGrayOut = isSingleCycle && field.key !== 'sets' && field.key !== 'reps' && field.key !== 'seconds';
-                                        return (
-                                            <div key={field.key} className={cn('space-y-2', shouldGrayOut && 'opacity-45')}>
-                                                <div className="flex items-center gap-2">
-                                                    <Icon size={12} className="text-primary" />
-                                                    <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                                                        {field.label}
-                                                    </Label>
+                                <>
+                                    <div className="grid gap-3 sm:grid-cols-2">
+                                        {workoutFields.map((field) => {
+                                            const Icon = field.icon;
+                                            const isDisabled = isSingleCycle && field.key !== 'sets' && field.key !== 'reps' && field.key !== 'seconds';
+                                            const shouldGrayOut = isSingleCycle && field.key !== 'sets' && field.key !== 'reps' && field.key !== 'seconds';
+                                            return (
+                                                <div key={field.key} className={cn('space-y-2', shouldGrayOut && 'opacity-45')}>
+                                                    <div className="flex items-center gap-2">
+                                                        <Icon size={12} className="text-primary" />
+                                                        <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                                                            {field.label}
+                                                        </Label>
+                                                    </div>
+                                                    <Input
+                                                        type="number"
+                                                        value={workoutNode.config[field.key]}
+                                                        disabled={isDisabled}
+                                                        onChange={(event) => {
+                                                            const nextValue = field.key === 'sets'
+                                                                ? normalizeSetsInput(event.target.value)
+                                                                : event.target.value;
+                                                            updateWorkoutNode(workoutNode.id, {
+                                                                ...workoutNode.config,
+                                                                [field.key]: nextValue,
+                                                            }, workoutNode.name);
+                                                        }}
+                                                    />
                                                 </div>
-                                                <Input
-                                                    type="number"
-                                                    value={workoutNode.config[field.key]}
-                                                    disabled={isDisabled}
-                                                    onChange={(event) => {
-                                                        const nextValue = field.key === 'sets'
-                                                            ? normalizeSetsInput(event.target.value)
-                                                            : event.target.value;
-                                                        updateWorkoutNode(workoutNode.id, {
-                                                            ...workoutNode.config,
-                                                            [field.key]: nextValue,
-                                                        }, workoutNode.name);
-                                                    }}
-                                                />
-                                            </div>
-                                        );
-                                    })}
-                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                    <div className="space-y-2">
+                                        <div className="flex items-center gap-2">
+                                            <Label htmlFor="session-node-notes" className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                                                Notes
+                                            </Label>
+                                            <span className="text-[10px] text-muted-foreground">
+                                                Previous weight or short reminder
+                                            </span>
+                                        </div>
+                                        <Input
+                                            id="session-node-notes"
+                                            value={workoutNode.notes ?? ''}
+                                            placeholder="e.g. 60kg last set"
+                                            onChange={(event) => {
+                                                updateWorkoutNode(
+                                                    workoutNode.id,
+                                                    workoutNode.config,
+                                                    workoutNode.name,
+                                                    event.target.value,
+                                                );
+                                            }}
+                                        />
+                                    </div>
+                                </>
                             ) : (
                                 <div className="space-y-2">
                                     <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
@@ -249,7 +308,7 @@ const SessionNodeEditor = () => {
                         <div className="space-y-4">
                             {workoutNode ? (
                                 <div className="space-y-3 rounded-[20px] border border-border/50 bg-muted/20 p-4">
-                                    {isLegacyWorkoutNode ? (
+                                    {(isUnsavedWorkoutNode || isMissingLinkedWorkout) ? (
                                         <div
                                             role="alert"
                                             className="space-y-2 rounded-[16px] border border-amber-500/30 bg-amber-500/10 px-3 py-3 text-sm text-amber-100"
@@ -258,12 +317,12 @@ const SessionNodeEditor = () => {
                                                 <AlertTriangle size={14} className="mt-0.5 shrink-0 text-amber-300" />
                                                 <div className="space-y-1">
                                                     <div className="text-[10px] font-black uppercase tracking-[0.22em] text-amber-300">
-                                                        {isMissingLinkedWorkout ? 'Missing Workout Link' : 'Old Node'}
+                                                        {isMissingLinkedWorkout ? 'Missing Workout Link' : 'Unsaved'}
                                                     </div>
                                                     <p className="leading-relaxed text-amber-100/90">
                                                         {isMissingLinkedWorkout
                                                             ? 'This workout node points to a workout that is no longer in your library. Save or import a workout below to relink it.'
-                                                            : 'This workout node is not linked to a saved workout yet. Save or import a workout below to repair it.'}
+                                                            : 'This workout node only exists inside this session right now. Save it below if you want it added to your workout library.'}
                                                     </p>
                                                 </div>
                                             </div>
@@ -326,7 +385,7 @@ const SessionNodeEditor = () => {
                                             onClick={handleSaveWorkout}
                                         >
                                             <Save size={14} />
-                                            {isLegacyWorkoutNode ? 'Export Workout' : 'Save Workout'}
+                                            {(isUnsavedWorkoutNode || isMissingLinkedWorkout) ? 'Export Workout' : 'Save Workout'}
                                         </Button>
                                     </div>
 

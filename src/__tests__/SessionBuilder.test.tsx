@@ -64,8 +64,25 @@ const resetStore = () => {
     });
 };
 
+const setMobileViewport = (matches: boolean) => {
+    Object.defineProperty(window, 'matchMedia', {
+        writable: true,
+        value: () => ({
+            matches,
+            media: '(max-width: 767px)',
+            onchange: null,
+            addListener: () => {},
+            removeListener: () => {},
+            addEventListener: () => {},
+            removeEventListener: () => {},
+            dispatchEvent: () => false,
+        }),
+    });
+};
+
 describe('SessionBuilder', () => {
     beforeEach(() => {
+        setMobileViewport(false);
         resetStore();
     });
 
@@ -109,7 +126,23 @@ describe('SessionBuilder', () => {
         expect(within(dialog).getByText(/Session is invalid/i)).toBeInTheDocument();
     });
 
-    it('warns when a session contains legacy workout nodes', () => {
+    it('uses a centered desktop shell so builder content stays aligned in web view', () => {
+        render(<SessionBuilder />);
+
+        expect(screen.getByTestId('session-builder-shell')).toHaveClass('mx-auto', 'max-w-[1100px]');
+        expect(screen.getByTestId('session-canvas-frame')).toHaveClass('flex-1', 'min-h-[420px]');
+        expect(screen.getByText(/Est. Time:/i)).toBeInTheDocument();
+    });
+
+    it('keeps the session actions centered in the desktop layout', () => {
+        render(<SessionBuilder />);
+
+        expect(screen.getByRole('button', { name: /workout setup/i }).closest('div')).toHaveClass('max-w-md');
+        expect(screen.getByRole('button', { name: /save as/i }).parentElement).toHaveClass('max-w-[920px]');
+        expect(screen.queryByText(/^End$/i)).not.toBeInTheDocument();
+    });
+
+    it('shows only node-level unsaved status when a session contains unlinked workout nodes', () => {
         useWorkoutStore.setState({
             editingSessionId: 'legacy-session',
             editingSessionDraft: {
@@ -138,7 +171,8 @@ describe('SessionBuilder', () => {
 
         render(<SessionBuilder />);
 
-        expect(screen.getByRole('alert')).toHaveTextContent(/not linked to a saved workout/i);
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+        expect(screen.getByText(/^unsaved$/i)).toBeInTheDocument();
     });
 
     it('shows a builder dialog error when creating a session without a name', () => {
@@ -153,6 +187,72 @@ describe('SessionBuilder', () => {
         expect(within(messageDialog).getByText(/session name is required/i)).toBeInTheDocument();
     });
 
+    it('lets mobile canvas panning start from the visible board surface', () => {
+        setMobileViewport(true);
+        resetStore();
+
+        useWorkoutStore.setState({
+            editingSessionId: 'mobile-pan-session',
+            editingSessionDraft: {
+                id: 'mobile-pan-session',
+                name: 'Mobile Pan Session',
+                nodes: [
+                    {
+                        id: 'mobile-pan-node',
+                        type: 'workout',
+                        name: 'Workout 1',
+                        config: {
+                            sets: '2',
+                            reps: '10',
+                            seconds: '3',
+                            rest: '20',
+                            myoReps: '4',
+                            myoWorkSecs: '2',
+                        },
+                        sourceWorkoutId: null,
+                        createdAt: '2026-03-01T00:00:00.000Z',
+                        updatedAt: '2026-03-01T00:00:00.000Z',
+                    },
+                ],
+                timesUsed: 0,
+                lastUsedAt: null,
+                createdAt: '2026-03-01T00:00:00.000Z',
+                updatedAt: '2026-03-01T00:00:00.000Z',
+            },
+        });
+
+        render(<SessionBuilder />);
+
+        const viewport = screen.getByTestId('session-canvas-viewport');
+        const board = screen.getByTestId('session-canvas-board');
+        const editButton = screen.getByRole('button', { name: /edit workout 1/i });
+
+        expect(board).toHaveStyle({ transform: 'translate3d(28px, 28px, 0)' });
+
+        fireEvent.pointerDown(board, { pointerId: 1, clientX: 120, clientY: 120 });
+        fireEvent.pointerMove(viewport, { pointerId: 1, clientX: 164, clientY: 150 });
+        fireEvent.pointerUp(viewport, { pointerId: 1, clientX: 164, clientY: 150 });
+
+        expect(board).toHaveStyle({ transform: 'translate3d(72px, 58px, 0)' });
+
+        fireEvent.pointerDown(editButton, { pointerId: 2, clientX: 90, clientY: 90 });
+        fireEvent.pointerMove(viewport, { pointerId: 2, clientX: 140, clientY: 140 });
+        fireEvent.pointerUp(viewport, { pointerId: 2, clientX: 140, clientY: 140 });
+
+        expect(board).toHaveStyle({ transform: 'translate3d(72px, 58px, 0)' });
+    });
+
+    it('keeps the mobile empty canvas clean without instructional copy', () => {
+        setMobileViewport(true);
+        resetStore();
+
+        render(<SessionBuilder />);
+
+        expect(screen.getByTestId('session-canvas-frame')).toBeInTheDocument();
+        expect(screen.queryByText(/empty canvas/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/add workout and rest nodes from the builder actions/i)).not.toBeInTheDocument();
+    });
+
     it('closes builder dialogs from the backdrop', () => {
         render(<SessionBuilder />);
 
@@ -163,7 +263,7 @@ describe('SessionBuilder', () => {
         expect(screen.queryByRole('dialog', { name: /create a new session/i })).not.toBeInTheDocument();
     });
 
-    it('auto-creates and links a saved workout when adding a workout node without one selected', () => {
+    it('adds a session-local workout node without creating or linking a saved workout', () => {
         useWorkoutStore.setState({
             selectedSavedWorkoutId: null,
             savedWorkouts: [baseWorkout],
@@ -178,15 +278,15 @@ describe('SessionBuilder', () => {
 
         fireEvent.click(screen.getByRole('button', { name: /^workout$/i }));
         expect(useWorkoutStore.getState().editingSessionDraft?.nodes).toHaveLength(1);
-        expect(useWorkoutStore.getState().savedWorkouts).toHaveLength(2);
+        expect(useWorkoutStore.getState().savedWorkouts).toHaveLength(1);
         const node = useWorkoutStore.getState().editingSessionDraft?.nodes[0];
         expect(node?.type).toBe('workout');
         if (node?.type === 'workout') {
-            expect(node.sourceWorkoutId).toBe(useWorkoutStore.getState().savedWorkouts[1].id);
+            expect(node.sourceWorkoutId).toBeNull();
         }
     });
 
-    it('shows an add-workout error when the current workout config is invalid', () => {
+    it('adds an incomplete session-local workout node when the current workout config is invalid', () => {
         useWorkoutStore.setState({
             selectedSavedWorkoutId: null,
             savedWorkouts: [],
@@ -207,8 +307,21 @@ describe('SessionBuilder', () => {
 
         fireEvent.click(screen.getByRole('button', { name: /^workout$/i }));
 
-        const errorDialog = screen.getByRole('dialog', { name: /could not add this workout node/i });
-        expect(within(errorDialog).getByText(/needs a valid config before it can be added/i)).toBeInTheDocument();
+        expect(screen.queryByRole('dialog', { name: /could not add this workout node/i })).not.toBeInTheDocument();
+        expect(useWorkoutStore.getState().editingSessionDraft?.nodes).toHaveLength(1);
+        const node = useWorkoutStore.getState().editingSessionDraft?.nodes[0];
+        expect(node?.type).toBe('workout');
+        if (node?.type === 'workout') {
+            expect(node.sourceWorkoutId).toBeNull();
+            expect(node.config).toMatchObject({
+                sets: '',
+                reps: '',
+                seconds: '',
+                rest: '',
+                myoReps: '',
+                myoWorkSecs: '',
+            });
+        }
     });
 
     it('shows a create-session error when the dialog is submitted without a valid name', () => {
@@ -263,6 +376,53 @@ describe('SessionBuilder', () => {
         expect(within(dialog).getByRole('button', { name: /save workout/i })).toBeInTheDocument();
     });
 
+    it('shows workout notes in the editor and on the canvas card', () => {
+        useWorkoutStore.setState({
+            setupMode: 'session',
+            editingSessionNodeId: 'notes-node',
+            editingSessionDraft: {
+                id: 'session-notes',
+                name: 'Notes Session',
+                nodes: [
+                    {
+                        id: 'notes-node',
+                        type: 'workout',
+                        name: 'Workout 1',
+                        config: {
+                            sets: '2',
+                            reps: '10',
+                            seconds: '3',
+                            rest: '20',
+                            myoReps: '4',
+                            myoWorkSecs: '2',
+                        },
+                        notes: '',
+                        sourceWorkoutId: baseWorkout.id,
+                        createdAt: '2026-03-01T00:00:00.000Z',
+                        updatedAt: '2026-03-01T00:00:00.000Z',
+                    },
+                ],
+                timesUsed: 0,
+                lastUsedAt: null,
+                createdAt: '2026-03-01T00:00:00.000Z',
+                updatedAt: '2026-03-01T00:00:00.000Z',
+            },
+            savedWorkouts: [baseWorkout],
+        });
+
+        render(<SessionBuilder />);
+
+        const dialog = screen.getByRole('dialog', { name: /workout node editor/i });
+        const notesInput = within(dialog).getByLabelText(/notes/i);
+        fireEvent.change(notesInput, { target: { value: 'Prev 60kg' } });
+
+        expect(useWorkoutStore.getState().editingSessionDraft?.nodes[0].type === 'workout'
+            ? useWorkoutStore.getState().editingSessionDraft?.nodes[0].notes
+            : '').toBe('Prev 60kg');
+        expect(screen.getByRole('button', { name: /edit workout 1/i }).closest('[draggable="true"]'))
+            .toHaveTextContent(/prev 60kg/i);
+    });
+
     it('shows a missing-link warning when a node points to a deleted workout', () => {
         useWorkoutStore.setState({
             setupMode: 'session',
@@ -301,7 +461,7 @@ describe('SessionBuilder', () => {
         expect(screen.getByText(/no longer in your library/i)).toBeInTheDocument();
     });
 
-    it('shows a clear message when workout config is invalid for a new session node', () => {
+    it('adds an incomplete session-local workout node when workout config is invalid', () => {
         useWorkoutStore.setState({
             selectedSavedWorkoutId: null,
             savedWorkouts: [],
@@ -323,8 +483,20 @@ describe('SessionBuilder', () => {
         fireEvent.click(within(dialog).getByRole('button', { name: /create session/i }));
 
         fireEvent.click(screen.getByRole('button', { name: /^workout$/i }));
-        const messageDialog = screen.getByRole('dialog', { name: /could not add this workout node/i });
-        expect(within(messageDialog).getByText(/workout needs a valid config/i)).toBeInTheDocument();
+        expect(screen.queryByRole('dialog', { name: /could not add this workout node/i })).not.toBeInTheDocument();
+        const createdNode = useWorkoutStore.getState().editingSessionDraft?.nodes.find((node) => node.type === 'workout');
+        expect(createdNode?.type).toBe('workout');
+        if (createdNode?.type === 'workout') {
+            expect(createdNode.sourceWorkoutId).toBeNull();
+            expect(createdNode.config).toMatchObject({
+                sets: '',
+                reps: '',
+                seconds: '',
+                rest: '',
+                myoReps: '',
+                myoWorkSecs: '',
+            });
+        }
     });
 
     it('builds, edits, saves, and starts a valid session', () => {
@@ -342,7 +514,7 @@ describe('SessionBuilder', () => {
         expect(screen.getByText('1:03')).toBeInTheDocument();
         const initialWorkoutNode = useWorkoutStore.getState().editingSessionDraft?.nodes.find((node) => node.type === 'workout');
         if (initialWorkoutNode?.type === 'workout') {
-            expect(initialWorkoutNode.sourceWorkoutId).toBe(baseWorkout.id);
+            expect(initialWorkoutNode.sourceWorkoutId).toBeNull();
         }
 
         fireEvent.click(screen.getByRole('button', { name: /^Save$/i }));
@@ -369,6 +541,8 @@ describe('SessionBuilder', () => {
         expect(workoutInputs[4]).toBeDisabled();
         expect(workoutInputs[5]).toBeDisabled();
 
+        const workoutTargetSelect = within(workoutDialog).getByLabelText(/workout target/i) as HTMLSelectElement;
+        fireEvent.change(workoutTargetSelect, { target: { value: baseWorkout.id } });
         fireEvent.click(within(workoutDialog).getByRole('button', { name: /import workout/i }));
 
         const draftAfterImport = useWorkoutStore.getState().editingSessionDraft;
@@ -378,8 +552,6 @@ describe('SessionBuilder', () => {
             expect(importedWorkoutNode.config.reps).toBe(baseWorkout.reps);
             expect(importedWorkoutNode.sourceWorkoutId).toBe(baseWorkout.id);
         }
-
-        const workoutTargetSelect = within(workoutDialog).getByLabelText(/workout target/i) as HTMLSelectElement;
 
         fireEvent.change(workoutNameInput, { target: { value: 'Push Day Updated' } });
         fireEvent.click(within(workoutDialog).getByRole('button', { name: /save workout/i }));
@@ -435,7 +607,7 @@ describe('SessionBuilder', () => {
         expect(useWorkoutStore.getState().timeLeft).toBe(3);
     });
 
-    it('warns about legacy workout nodes and relinks them when saved', () => {
+    it('shows unsaved workout messaging and links the node when it is saved', () => {
         useWorkoutStore.setState({
             setupMode: 'session',
             editingSessionNodeId: 'legacy-node',
@@ -469,8 +641,8 @@ describe('SessionBuilder', () => {
 
         render(<SessionBuilder />);
 
-        expect(screen.getByText(/legacy workout node/i)).toBeInTheDocument();
-        expect(screen.getByText(/old node/i)).toBeInTheDocument();
+        expect(screen.getAllByText(/^unsaved$/i).length).toBeGreaterThan(0);
+        expect(screen.getByText(/only exists inside this session right now/i)).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /export workout/i })).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: /export workout/i }));
@@ -481,6 +653,59 @@ describe('SessionBuilder', () => {
             expect(legacyNode.sourceWorkoutId).toBeTruthy();
         }
         expect(screen.getByRole('status')).toHaveTextContent(/saved and linked/i);
+    });
+
+    it('supports a pannable mobile canvas and keeps the builder scroll-friendly', () => {
+        setMobileViewport(true);
+        useWorkoutStore.setState({
+            setupMode: 'session',
+            editingSessionDraft: {
+                id: 'mobile-session',
+                name: 'Mobile Session',
+                nodes: [
+                    {
+                        id: 'mobile-node',
+                        type: 'workout',
+                        name: 'Workout 1',
+                        config: {
+                            sets: '2',
+                            reps: '10',
+                            seconds: '3',
+                            rest: '20',
+                            myoReps: '4',
+                            myoWorkSecs: '2',
+                        },
+                        sourceWorkoutId: null,
+                        createdAt: '2026-03-01T00:00:00.000Z',
+                        updatedAt: '2026-03-01T00:00:00.000Z',
+                    },
+                ],
+                timesUsed: 0,
+                lastUsedAt: null,
+                createdAt: '2026-03-01T00:00:00.000Z',
+                updatedAt: '2026-03-01T00:00:00.000Z',
+            },
+        });
+
+        render(<SessionBuilder />);
+
+        const viewport = screen.getByTestId('session-canvas-viewport');
+        const board = screen.getByTestId('session-canvas-board');
+        const shell = screen.getByTestId('session-builder-shell');
+        const card = screen.getByRole('button', { name: /edit workout 1/i }).closest('[draggable="false"]');
+        const initialStyle = board.getAttribute('style') ?? '';
+
+        expect(shell.className).toContain('max-w-none');
+        expect(card).toHaveClass('w-[min(14.5rem,66vw)]', 'min-h-[132px]');
+        expect(screen.queryByText(/^End$/i)).not.toBeInTheDocument();
+
+        fireEvent.pointerDown(viewport, { clientX: 220, clientY: 260, target: viewport });
+        fireEvent.pointerMove(viewport, { clientX: 170, clientY: 210 });
+        fireEvent.pointerUp(viewport);
+
+        expect(board.getAttribute('style') ?? '').not.toBe(initialStyle);
+        expect(screen.getByRole('button', { name: /move workout 1 left/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /move workout 1 right/i })).toBeInTheDocument();
     });
 
     it('reorders nodes when dropping a dragged node onto a middle node', () => {

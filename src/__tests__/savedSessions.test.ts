@@ -35,6 +35,7 @@ describe('savedSessions utilities', () => {
 
         expect(workoutNode.type).toBe('workout');
         expect(workoutNode.sourceWorkoutId).toBe('workout-1');
+        expect(workoutNode.notes).toBe('');
         expect(restNode.type).toBe('rest');
         expect(isValidRestNode({ seconds: '45' })).toBe(true);
         expect(isValidSavedSession({ name: 'Session A', nodes: [workoutNode, restNode] })).toBe(true);
@@ -49,7 +50,7 @@ describe('savedSessions utilities', () => {
 
     it('clones nodes and sessions without sharing references', () => {
         const nowIso = '2026-01-01T00:00:00.000Z';
-        const node = createWorkoutSessionNode(
+        const notedWorkout = createWorkoutSessionNode(
             'Workout A',
             {
                 sets: '2',
@@ -61,18 +62,22 @@ describe('savedSessions utilities', () => {
             },
             nowIso,
         );
-        const session = createSavedSession('Session A', [node, createRestSessionNode('Rest', '30', nowIso)], nowIso);
+        notedWorkout.notes = 'Prev 60kg';
+
+        const session = createSavedSession('Session A', [notedWorkout, createRestSessionNode('Rest', '30', nowIso)], nowIso);
         expect(session.nodes).toHaveLength(2);
 
-        const clonedNode = cloneSessionNode(node);
+        const clonedNode = cloneSessionNode(notedWorkout);
         const clonedSession = cloneSavedSession(session);
 
-        expect(clonedNode).not.toBe(node);
-        expect(clonedNode.id).toBe(node.id);
+        expect(clonedNode).not.toBe(notedWorkout);
+        expect(clonedNode.id).toBe(notedWorkout.id);
+        expect(clonedNode.notes).toBe('Prev 60kg');
         expect(clonedSession).not.toBe(session);
         expect(clonedSession.nodes).toHaveLength(2);
         expect(clonedSession.nodes[0]).not.toBe(session.nodes[0]);
         expect(clonedSession.nodes[0].id).toBe(session.nodes[0].id);
+        expect(clonedSession.nodes[0].type === 'workout' ? clonedSession.nodes[0].notes : '').toBe('Prev 60kg');
     });
 
     it('can duplicate nodes and sessions with fresh identities', () => {
@@ -113,18 +118,21 @@ describe('savedSessions utilities', () => {
         const session = createSavedSession(
             'Session A',
             [
-                createWorkoutSessionNode(
-                    'Workout A',
-                    {
-                        sets: '2',
-                        reps: '10',
-                        seconds: '3',
-                        rest: '20',
-                        myoReps: '4',
-                        myoWorkSecs: '2',
-                    },
-                    nowIso,
-                ),
+                {
+                    ...createWorkoutSessionNode(
+                        'Workout A',
+                        {
+                            sets: '2',
+                            reps: '10',
+                            seconds: '3',
+                            rest: '20',
+                            myoReps: '4',
+                            myoWorkSecs: '2',
+                        },
+                        nowIso,
+                    ),
+                    notes: 'Prev 60kg',
+                },
             ],
             nowIso,
         );
@@ -136,6 +144,7 @@ describe('savedSessions utilities', () => {
         const imported = mergeSavedSessionsFromImport([], exportPayload);
         expect(imported.summary.imported).toBe(1);
         expect(imported.sessions).toHaveLength(1);
+        expect(imported.sessions[0].nodes[0].type === 'workout' ? imported.sessions[0].nodes[0].notes : '').toBe('Prev 60kg');
     });
 
     it('estimates session duration from prep time and node timing', () => {
@@ -282,9 +291,9 @@ describe('savedSessions utilities', () => {
     it('handles malformed imports and duplicate names plus ids', () => {
         const nowIso = '2026-01-01T00:00:00.000Z';
 
-        expect(mergeSavedSessionsFromImport([], null).summary.errors[0]).toContain('Invalid import payload');
-        expect(mergeSavedSessionsFromImport([], { schemaVersion: 2, sessions: [] }).summary.errors[0]).toContain('Unsupported schema version');
-        expect(mergeSavedSessionsFromImport([], { schemaVersion: 1, sessions: {} }).summary.errors[0]).toContain('Missing sessions array');
+        expect(mergeSavedSessionsFromImport([], null).sessions).toHaveLength(0);
+        expect(mergeSavedSessionsFromImport([], { schemaVersion: 2, sessions: [] }).sessions).toHaveLength(0);
+        expect(mergeSavedSessionsFromImport([], { schemaVersion: 1, sessions: {} }).sessions).toHaveLength(0);
 
         const existing = createSavedSession(
             'Day One',
