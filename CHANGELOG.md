@@ -1,3 +1,11 @@
+# [3.6.0](https://github.com/GeneralMalit/myorep-timer/compare/v3.5.0...v3.6.0) (2026-04-24)
+
+
+### Features
+
+* add mobile sync and phase 7 billing support ([1e93704](https://github.com/GeneralMalit/myorep-timer/commit/1e93704d29b1f1d3fb1c8ff93769571eab37b38c))
+* finalize mobile account rollout ([9baa564](https://github.com/GeneralMalit/myorep-timer/commit/9baa56423db83e3a141096280c286a5306367fe1))
+
 # [3.5.0](https://github.com/GeneralMalit/myorep-timer/compare/v3.4.0...v3.5.0) (2026-04-07)
 
 
