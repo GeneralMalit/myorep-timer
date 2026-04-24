@@ -60,10 +60,6 @@ vi.mock('@/components/SupabaseBootstrap', () => ({
     default: () => null,
 }));
 
-vi.mock('@/components/SupabaseStatusPill', () => ({
-    default: () => <div>Supabase Status</div>,
-}));
-
 vi.mock('@/lib/supabase', () => ({
     getSupabaseClient: getSupabaseClientMock,
     getSupabaseEnvironment: getSupabaseEnvironmentMock,

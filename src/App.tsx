@@ -10,7 +10,6 @@ import ConcentricTimer from '@/components/ConcentricTimer';
 import SessionBuilder from '@/components/SessionBuilder';
 import SetupModeToggle from '@/components/SetupModeToggle';
 import SupabaseBootstrap from '@/components/SupabaseBootstrap';
-import SupabaseStatusPill from '@/components/SupabaseStatusPill';
 import { getResponsiveLayout } from '@/layout';
 import { appShellMobile } from '@/layout/appShell.mobile';
 import { appShellDesktop } from '@/layout/appShell.desktop';
@@ -1070,9 +1069,6 @@ export default function App() {
                     {!isSessionSetup && (
                         <footer className={appShellLayout.footerShell}>
                             <div className="text-[10px] font-black uppercase tracking-[0.5em] text-muted-foreground">MYOREP v{APP_VERSION}</div>
-                            <div className={appShellLayout.footerStatusRow}>
-                                <SupabaseStatusPill />
-                            </div>
                             <div className="mt-2 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/60">Engineered by General Malit</div>
                         </footer>
                     )}
