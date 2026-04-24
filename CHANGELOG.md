@@ -1,3 +1,10 @@
+## [3.6.1](https://github.com/GeneralMalit/myorep-timer/compare/v3.6.0...v3.6.1) (2026-04-24)
+
+
+### Bug Fixes
+
+* adapt api routes for vercel runtime ([900326e](https://github.com/GeneralMalit/myorep-timer/commit/900326e5b55dabb1fc9bc51616cea952746bbec9))
+
 # [3.6.0](https://github.com/GeneralMalit/myorep-timer/compare/v3.5.0...v3.6.0) (2026-04-24)
 
 
