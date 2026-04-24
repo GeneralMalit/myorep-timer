@@ -1,5 +1,6 @@
-import { handlePaddleWebhookRequest } from '../../src/server/billingHandlers';
+import { handlePaddleWebhookRequest } from '../../src/server/billingHandlers.ts';
+import { withWebHandler } from '../_utils/webHandler.ts';
 
-export default async function handler(request: Request): Promise<Response> {
-    return handlePaddleWebhookRequest(request);
-}
+export const config = { api: { bodyParser: false } };
+
+export default withWebHandler(handlePaddleWebhookRequest);

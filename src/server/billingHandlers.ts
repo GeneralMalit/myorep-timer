@@ -1,4 +1,4 @@
-import { getBillingEnvironment } from '@/server/billingEnv';
+import { getBillingEnvironment } from './billingEnv.ts';
 import {
     authenticateSupabaseUser,
     createSupabaseAdminClient,
@@ -6,8 +6,8 @@ import {
     getBillingAccountByPaddleCustomerId,
     getBillingAccountByUserId,
     upsertBillingAccount,
-} from '@/server/billingData';
-import { syncResolvedEntitlement } from '@/server/entitlements';
+} from './billingData.ts';
+import { syncResolvedEntitlement } from './entitlements.ts';
 import {
     buildEntitlementProjectionFromPaddleSubscription,
     buildPaddleHostedCheckoutUrl,
@@ -17,7 +17,7 @@ import {
     type PaddleSubscription,
     type PaddleWebhookEvent,
     verifyAndParsePaddleWebhookEvent,
-} from '@/server/paddleBilling';
+} from './paddleBilling.ts';
 
 const jsonResponse = (status: number, body: Record<string, unknown>): Response => {
     return new Response(JSON.stringify(body), {

@@ -1,11 +1,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { SupabaseEntitlementRow } from '@/types/sync';
+import type { SupabaseEntitlementRow } from '../types/sync.ts';
 import {
     getBillingAccountByUserId,
     type BillingAccountRow,
     type EntitlementOverrideRow,
-} from './billingData';
-import { isPaddleSubscriptionActive } from './paddleBilling';
+} from './billingData.ts';
+import { isPaddleSubscriptionActive } from './paddleBilling.ts';
 
 export interface EffectiveEntitlementInput {
     userId: string;

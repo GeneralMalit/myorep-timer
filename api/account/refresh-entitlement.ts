@@ -1,5 +1,4 @@
-import { handleEntitlementRefreshRequest } from '../../src/server/accountHandlers';
+import { handleEntitlementRefreshRequest } from '../../src/server/accountHandlers.ts';
+import { withWebHandler } from '../_utils/webHandler.ts';
 
-export default async function handler(request: Request): Promise<Response> {
-    return handleEntitlementRefreshRequest(request);
-}
+export default withWebHandler(handleEntitlementRefreshRequest);

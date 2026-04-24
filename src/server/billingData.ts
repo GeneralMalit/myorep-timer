@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient, type User } from '@supabase/supabase-js';
-import type { SupabaseServerEnvironment } from './billingEnv';
+import type { SupabaseServerEnvironment } from './billingEnv.ts';
 
 export interface BillingAccountRow {
     user_id: string;

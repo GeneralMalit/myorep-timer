@@ -1,4 +1,4 @@
-import { getSupabaseServerEnvironment } from './billingEnv';
+import { getSupabaseServerEnvironment } from './billingEnv.ts';
 import {
     AccountProvisionError,
     authenticateSupabaseUser,
@@ -6,9 +6,9 @@ import {
     createSupabaseAdminClient,
     createSupabaseAuthClient,
     updateSupabaseUsername,
-} from './billingData';
-import { syncResolvedEntitlement } from './entitlements';
-import { isValidUsername, normalizeUsername } from '../lib/accountIdentity';
+} from './billingData.ts';
+import { syncResolvedEntitlement } from './entitlements.ts';
+import { isValidUsername, normalizeUsername } from '../lib/accountIdentity.ts';
 
 const jsonResponse = (status: number, body: Record<string, unknown>): Response => {
     return new Response(JSON.stringify(body), {

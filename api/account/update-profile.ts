@@ -1,5 +1,4 @@
-import { handleProfileUpdateRequest } from '../../src/server/accountHandlers';
+import { handleProfileUpdateRequest } from '../../src/server/accountHandlers.ts';
+import { withWebHandler } from '../_utils/webHandler.ts';
 
-export default async function handler(request: Request): Promise<Response> {
-    return handleProfileUpdateRequest(request);
-}
+export default withWebHandler(handleProfileUpdateRequest);

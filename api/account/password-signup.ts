@@ -1,5 +1,4 @@
-import { handlePasswordSignUpRequest } from '../../src/server/accountHandlers';
+import { handlePasswordSignUpRequest } from '../../src/server/accountHandlers.ts';
+import { withWebHandler } from '../_utils/webHandler.ts';
 
-export default async function handler(request: Request): Promise<Response> {
-    return handlePasswordSignUpRequest(request);
-}
+export default withWebHandler(handlePasswordSignUpRequest);

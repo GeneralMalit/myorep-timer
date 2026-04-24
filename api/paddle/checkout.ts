@@ -1,5 +1,4 @@
-import { handlePaddleCheckoutRequest } from '../../src/server/billingHandlers';
+import { handlePaddleCheckoutRequest } from '../../src/server/billingHandlers.ts';
+import { withWebHandler } from '../_utils/webHandler.ts';
 
-export default async function handler(request: Request): Promise<Response> {
-    return handlePaddleCheckoutRequest(request);
-}
+export default withWebHandler(handlePaddleCheckoutRequest);
