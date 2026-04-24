@@ -1,3 +1,10 @@
+## [3.6.2](https://github.com/GeneralMalit/myorep-timer/compare/v3.6.1...v3.6.2) (2026-04-24)
+
+
+### Bug Fixes
+
+* bundle entitlement refresh route ([588a17e](https://github.com/GeneralMalit/myorep-timer/commit/588a17eb8f56ee7cc23d064dbbdd96da7c832559))
+
 ## [3.6.1](https://github.com/GeneralMalit/myorep-timer/compare/v3.6.0...v3.6.1) (2026-04-24)
 
 
