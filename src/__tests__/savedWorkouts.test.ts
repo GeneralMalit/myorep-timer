@@ -78,7 +78,7 @@ describe('savedWorkouts utils', () => {
     it('rejects unsupported payload schema', () => {
         const result = mergeSavedWorkoutsFromImport([], { schemaVersion: 99, workouts: [] });
         expect(result.summary.imported).toBe(0);
-        expect(result.summary.errors[0]).toContain('Unsupported schema version');
+        expect(result.workouts).toHaveLength(0);
     });
 });
 

@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { AlertTriangle, Plus, Play, Save } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Plus, Play, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -7,7 +7,10 @@ import SessionCanvas from '@/components/SessionCanvas';
 import SessionNodeEditor from '@/components/SessionNodeEditor';
 import SetupModeToggle from '@/components/SetupModeToggle';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
-import { estimateSessionDurationSeconds, formatEstimatedSessionDuration, getLegacyWorkoutSessionNodes } from '@/utils/savedSessions';
+import { getResponsiveLayout } from '@/layout';
+import { sessionBuilderDesktopLayout } from '@/layout/sessionBuilder.desktop';
+import { sessionBuilderMobileLayout } from '@/layout/sessionBuilder.mobile';
+import { estimateSessionDurationSeconds, formatEstimatedSessionDuration } from '@/utils/savedSessions';
 import { cn } from '@/lib/utils';
 
 type SessionBuilderDialogState =
@@ -28,15 +31,20 @@ interface BuilderDialogProps {
 }
 
 const BuilderDialog = ({ state, onChangeValue, onClose, onConfirm }: BuilderDialogProps) => {
+    const isMobileViewport = useMobileViewport();
+
     if (!state) {
         return null;
     }
 
     const isPrompt = state.type === 'new-session' || state.type === 'save-session-as';
+    const layout = getResponsiveLayout(isMobileViewport, sessionBuilderMobileLayout.dialog, sessionBuilderDesktopLayout.dialog);
 
     return (
         <div
-            className="fixed inset-0 z-[115] flex items-center justify-center bg-black/70 px-4 py-6 backdrop-blur-sm"
+            className={cn(
+                layout.backdrop,
+            )}
             role="dialog"
             aria-modal="true"
             aria-label={state.title}
@@ -46,7 +54,8 @@ const BuilderDialog = ({ state, onChangeValue, onClose, onConfirm }: BuilderDial
                 }
             }}
         >
-            <div className="w-full max-w-md rounded-[28px] border border-border/60 bg-background/95 p-5 shadow-[0_24px_90px_rgba(0,0,0,0.45)]">
+            <div className={layout.panel}>
+                {isMobileViewport && layout.handle && <div className={layout.handle} />}
                 <div className="space-y-2">
                     <div className="text-[11px] font-black uppercase tracking-[0.32em] text-primary">
                         Session Action
@@ -73,7 +82,7 @@ const BuilderDialog = ({ state, onChangeValue, onClose, onConfirm }: BuilderDial
                     </div>
                 )}
 
-                <div className={cn('mt-6 grid gap-2', isPrompt ? 'grid-cols-2' : 'grid-cols-1 sm:grid-cols-2')}>
+                <div className={layout.actions}>
                     <Button type="button" variant="secondary" onClick={onClose} className="rounded-2xl font-black italic tracking-tighter">
                         {isPrompt ? 'Cancel' : 'Close'}
                     </Button>
@@ -90,12 +99,39 @@ const BuilderDialog = ({ state, onChangeValue, onClose, onConfirm }: BuilderDial
     );
 };
 
+function useMobileViewport() {
+    const [isMobileViewport, setIsMobileViewport] = useState(false);
+
+    useEffect(() => {
+        if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+            return;
+        }
+
+        const mediaQuery = window.matchMedia('(max-width: 767px)');
+        const handleViewportChange = (event: MediaQueryListEvent | MediaQueryList) => {
+            setIsMobileViewport(event.matches);
+        };
+
+        handleViewportChange(mediaQuery);
+        if (typeof mediaQuery.addEventListener === 'function') {
+            mediaQuery.addEventListener('change', handleViewportChange);
+            return () => mediaQuery.removeEventListener('change', handleViewportChange);
+        }
+
+        mediaQuery.addListener(handleViewportChange);
+        return () => mediaQuery.removeListener(handleViewportChange);
+    }, []);
+
+    return isMobileViewport;
+}
+
 const SessionBuilder = () => {
+    const isMobileViewport = useMobileViewport();
     const editingSessionDraft = useWorkoutStore((state) => state.editingSessionDraft);
+    const savedSessions = useWorkoutStore((state) => state.savedSessions);
     const editingSessionNodeId = useWorkoutStore((state) => state.editingSessionNodeId);
     const setEditingSessionNodeId = useWorkoutStore((state) => state.setEditingSessionNodeId);
     const prepTime = useWorkoutStore((state) => state.settings.prepTime);
-    const savedWorkouts = useWorkoutStore((state) => state.savedWorkouts);
     const setupMode = useWorkoutStore((state) => state.setupMode);
     const setSetupMode = useWorkoutStore((state) => state.setSetupMode);
     const createSession = useWorkoutStore((state) => state.createSession);
@@ -126,16 +162,27 @@ const SessionBuilder = () => {
         return estimateSessionDurationSeconds(editingSessionDraft, prepTime);
     }, [editingSessionDraft, prepTime]);
 
-    const legacyWorkoutNodes = useMemo(() => {
+    const sessionDraftStatus = useMemo<'unsaved changes' | 'none'>(() => {
         if (!editingSessionDraft) {
-            return [];
+            return 'none';
         }
 
-        return getLegacyWorkoutSessionNodes(
-            editingSessionDraft,
-            savedWorkouts.map((workout) => workout.id),
-        );
-    }, [editingSessionDraft, savedWorkouts]);
+        const savedSession = savedSessions.find((session) => session.id === editingSessionDraft.id);
+        if (!savedSession) {
+            return 'unsaved changes';
+        }
+
+        const draftComparable = JSON.stringify({
+            name: editingSessionDraft.name,
+            nodes: editingSessionDraft.nodes,
+        });
+        const savedComparable = JSON.stringify({
+            name: savedSession.name,
+            nodes: savedSession.nodes,
+        });
+
+        return draftComparable === savedComparable ? 'none' : 'unsaved changes';
+    }, [editingSessionDraft, savedSessions]);
 
     const handleNewSession = () => {
         setDialogState({
@@ -242,99 +289,95 @@ const SessionBuilder = () => {
 
         setDialogState(null);
     };
+    const layout = getResponsiveLayout(isMobileViewport, sessionBuilderMobileLayout, sessionBuilderDesktopLayout);
 
     return (
         <>
-            <section className="flex h-full min-h-0 w-full flex-col gap-5 px-4 py-4 sm:px-6 sm:py-6 xl:px-8 xl:py-8">
-                <header className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-                    <div className="space-y-2">
-                        <div className="text-[11px] font-black uppercase tracking-[0.35em] text-primary">
-                            Session Workspace
-                        </div>
-                        <h1 className="text-5xl font-black italic tracking-tighter text-transparent bg-clip-text bg-gradient-to-br from-foreground to-foreground/50 sm:text-6xl">
-                            Build a Session
-                        </h1>
-                        <p className="max-w-2xl text-sm font-medium leading-relaxed text-muted-foreground">
-                            {summary}
-                        </p>
-                    </div>
-
-                    <div className="flex flex-col items-start gap-3 sm:flex-row sm:flex-wrap sm:items-center xl:items-end xl:justify-end">
-                        <div className="flex flex-col items-start gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-                            <SetupModeToggle mode={setupMode} onChange={setSetupMode} />
-                            <div className="flex flex-wrap gap-2">
-                                <Button
-                                    type="button"
-                                    variant="secondary"
-                                    onClick={handleAddWorkout}
-                                    className="gap-2 rounded-full px-4 font-black italic tracking-tighter"
-                                >
-                                    <Plus size={16} /> Workout
-                                </Button>
-                                <Button
-                                    type="button"
-                                    variant="secondary"
-                                    onClick={() => addRestNode()}
-                                    className="gap-2 rounded-full px-4 font-black italic tracking-tighter"
-                                >
-                                    <Plus size={16} /> Rest
-                                </Button>
-                            </div>
-                            <div className="flex flex-wrap gap-2">
-                                <Button type="button" variant="secondary" onClick={handleNewSession} className="gap-2 rounded-full px-4 font-black italic tracking-tighter">
-                                    <Plus size={16} /> New
-                                </Button>
-                                <Button type="button" variant="secondary" onClick={handleSave} className="gap-2 rounded-full px-4 font-black italic tracking-tighter">
-                                    <Save size={16} /> Save
-                                </Button>
-                                <Button type="button" variant="secondary" onClick={handleSaveAs} className="gap-2 rounded-full px-4 font-black italic tracking-tighter">
-                                    <Save size={16} /> Save As
-                                </Button>
-                                <Button type="button" onClick={handleStart} className="gap-2 rounded-full px-4 font-black italic tracking-tighter">
-                                    <Play size={16} /> Start
-                                </Button>
-                            </div>
-                        </div>
-                    </div>
-                </header>
-
-                {legacyWorkoutNodes.length > 0 && (
-                    <div
-                        role="alert"
-                        className="flex items-start gap-3 rounded-[20px] border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100"
-                    >
-                        <AlertTriangle size={16} className="mt-0.5 shrink-0 text-amber-300" />
-                        <div className="space-y-1">
-                            <div className="text-[11px] font-black uppercase tracking-[0.24em] text-amber-300">
-                                Legacy Workout Node{legacyWorkoutNodes.length === 1 ? '' : 's'}
-                            </div>
-                            <p className="leading-relaxed text-amber-100/90">
-                                {legacyWorkoutNodes.length} workout node{legacyWorkoutNodes.length === 1 ? '' : 's'} in this session {legacyWorkoutNodes.length === 1 ? 'is' : 'are'} not linked to a saved workout.
-                                Open the node editor and save or import a workout to repair the link.
+            <section className={layout.shell}>
+                <div
+                    data-testid="session-builder-shell"
+                    className={layout.shellInner}
+                >
+                    <header className={layout.header}>
+                        <div className={layout.titleBlock}>
+                            <h1 className="bg-gradient-to-br from-foreground to-foreground/50 bg-clip-text text-[clamp(2.6rem,11vw,5rem)] font-black italic leading-[1.05] tracking-tighter text-transparent pb-1">
+                                Build a Session
+                            </h1>
+                            <p className={layout.summary}>
+                                {summary}
                             </p>
                         </div>
+
+                        <div className={layout.controls}>
+                            <SetupModeToggle
+                                mode={setupMode}
+                                onChange={setSetupMode}
+                                className={layout.toggle}
+                            />
+                            <div className={layout.actionsWrap}>
+                                <div className={layout.actionsGrid}>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={handleNewSession}
+                                        className="shrink-0 gap-2 rounded-full border-primary/60 bg-background px-4 font-black italic tracking-tighter text-primary hover:bg-primary/10"
+                                    >
+                                        <Plus size={16} /> New Session
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant="secondary"
+                                        onClick={handleAddWorkout}
+                                        className="shrink-0 gap-2 rounded-full px-4 font-black italic tracking-tighter"
+                                    >
+                                        <Plus size={16} /> Workout
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant="secondary"
+                                        onClick={() => addRestNode()}
+                                        className="shrink-0 gap-2 rounded-full px-4 font-black italic tracking-tighter"
+                                    >
+                                        <Plus size={16} /> Rest
+                                    </Button>
+                                    <Button type="button" variant="secondary" onClick={handleSave} className="shrink-0 gap-2 rounded-full px-4 font-black italic tracking-tighter">
+                                        <Save size={16} /> Save
+                                    </Button>
+                                    <Button type="button" variant="secondary" onClick={handleSaveAs} className="shrink-0 gap-2 rounded-full px-4 font-black italic tracking-tighter">
+                                        <Save size={16} /> Save As
+                                    </Button>
+                                    <Button type="button" onClick={handleStart} className="shrink-0 gap-2 rounded-full px-4 font-black italic tracking-tighter">
+                                        <Play size={16} /> Start
+                                    </Button>
+                                </div>
+                            </div>
+                            <div className={layout.estimatedTime}>
+                                <span>Est. Time:</span>
+                                <span className="text-xl font-black tracking-tight text-foreground normal-case">
+                                    {formatEstimatedSessionDuration(estimatedDuration)}
+                                </span>
+                            </div>
+                        </div>
+                    </header>
+
+                    <div className={layout.canvasWrap}>
+                        <div className={layout.canvasInner}>
+                            <SessionCanvas
+                                nodes={editingSessionDraft?.nodes ?? []}
+                                activeNodeId={editingSessionNodeId}
+                                sessionId={editingSessionDraft?.id ?? null}
+                                sessionName={editingSessionDraft?.name ?? null}
+                                sessionDraftStatus={sessionDraftStatus}
+                                onEditNode={setEditingSessionNodeId}
+                                onRemoveNode={removeSessionNode}
+                                onMoveNode={moveSessionNode}
+                                onMoveNodeToIndex={(nodeId, targetIndex) => moveSessionNodeToIndex(nodeId, targetIndex)}
+                            />
+                        </div>
                     </div>
-                )}
 
-                <div className="flex items-baseline justify-end gap-2 px-1 text-[12px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
-                    <span>EST. TIME:</span>
-                    <span className="text-xl font-black tracking-tight text-foreground normal-case">
-                        {formatEstimatedSessionDuration(estimatedDuration)}
-                    </span>
+                    <SessionNodeEditor />
                 </div>
-
-                <div className="flex min-h-0 flex-1">
-                    <SessionCanvas
-                        nodes={editingSessionDraft?.nodes ?? []}
-                        activeNodeId={editingSessionNodeId}
-                        onEditNode={setEditingSessionNodeId}
-                        onRemoveNode={removeSessionNode}
-                        onMoveNode={moveSessionNode}
-                        onMoveNodeToIndex={(nodeId, targetIndex) => moveSessionNodeToIndex(nodeId, targetIndex)}
-                    />
-                </div>
-
-                <SessionNodeEditor />
             </section>
 
             <BuilderDialog

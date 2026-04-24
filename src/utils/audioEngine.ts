@@ -22,6 +22,14 @@ export class AudioEngine {
         return window.AudioContext ?? (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext ?? null;
     }
 
+    private isDocumentHidden(): boolean {
+        if (typeof document === 'undefined') {
+            return false;
+        }
+
+        return document.hidden || document.visibilityState === 'hidden';
+    }
+
     constructor() {
         if (this.speech) {
             const loadVoices = () => {
@@ -57,6 +65,10 @@ export class AudioEngine {
     }
 
     init() {
+        if (this.isDocumentHidden()) {
+            return;
+        }
+
         const audioContextCtor = this.AudioContextCtor;
         if (!this.audioCtx && audioContextCtor) {
             try {
@@ -106,6 +118,8 @@ export class AudioEngine {
     }
 
     playTick(type: string = 'woodblock') {
+        if (this.isDocumentHidden()) return;
+
         this.init();
         if (!this.audioCtx) return;
 
@@ -163,7 +177,7 @@ export class AudioEngine {
     }
 
     speak(text: string | number) {
-        if (!this.speech || (typeof document !== 'undefined' && document.visibilityState === 'hidden')) return;
+        if (!this.speech || this.isDocumentHidden()) return;
 
         this.init();
         const msg = text.toString();

@@ -8,6 +8,8 @@
 - If behavior changes touch timing/phase logic, update tests in `src/__tests__/`.
 - When using subagents, prefer small, disjoint tasks with clear file ownership so they can run in parallel without stepping on each other.
 - Strongest subagent model available here: `gpt-5.4-mini` with `medium` reasoning.
+- Release flow: every commit intended for `main` should be pushed to `main` so the GitHub Actions `Release` workflow can run semantic-release.
+- Keep commit messages semantic-release friendly (`feat:`, `fix:`, `chore:`, etc.) so the release job can detect version-worthy changes.
 
 ## 1) Project Overview
 - Purpose: orchestrate Myo-rep workout timing (prep, activation set, rest, myo reps) with strong timing stability.
@@ -114,6 +116,7 @@ Note: current logic does activation phase once at the start, then myo-rep phases
 2. Update tests in `src/__tests__/useWorkoutStore.test.ts` and/or `src/__tests__/timerWorker.test.ts`.
 3. Run `npm run test -- --run` and `npm run build` before handoff.
 4. If touching lint-sensitive files, run `npm run lint`.
+5. If the work corresponds to a roadmap item or checklist entry, update that roadmap/checklist immediately after the work is complete so the docs stay in sync with the code.
 
 ## 8) Known Caveats
 - ESLint config currently targets `**/*.{js,jsx}` only; TS/TSX lint coverage is limited.

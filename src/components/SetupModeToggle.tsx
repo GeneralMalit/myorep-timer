@@ -5,9 +5,10 @@ interface SetupModeToggleProps {
     mode: 'workout' | 'session';
     onChange: (mode: 'workout' | 'session') => void;
     className?: string;
+    sessionLocked?: boolean;
 }
 
-const SetupModeToggle = ({ mode, onChange, className }: SetupModeToggleProps) => {
+const SetupModeToggle = ({ mode, onChange, className, sessionLocked = false }: SetupModeToggleProps) => {
     return (
         <div className={cn('inline-flex w-full max-w-xl flex-wrap rounded-[1.25rem] bg-muted/40 p-1 sm:w-auto sm:flex-nowrap', className)}>
             <Button
@@ -22,9 +23,10 @@ const SetupModeToggle = ({ mode, onChange, className }: SetupModeToggleProps) =>
                 type="button"
                 variant={mode === 'session' ? 'default' : 'ghost'}
                 onClick={() => onChange('session')}
+                title={sessionLocked ? 'Session Builder requires Plus' : undefined}
                 className="min-h-11 flex-1 rounded-2xl px-4 text-[11px] font-black uppercase tracking-[0.22em] sm:flex-none"
             >
-                Session Builder
+                {sessionLocked ? 'Session Builder (Plus)' : 'Session Builder'}
             </Button>
         </div>
     );

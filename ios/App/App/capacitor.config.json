@@ -1,0 +1,10 @@
+{
+	"appId": "com.generalmalit.myoreptimer",
+	"appName": "MyoRep Timer",
+	"webDir": "dist",
+	"bundledWebRuntime": false,
+	"packageClassList": [
+		"AppPlugin",
+		"PreferencesPlugin"
+	]
+}
