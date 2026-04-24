@@ -1,3 +1,10 @@
+## [3.6.3](https://github.com/GeneralMalit/myorep-timer/compare/v3.6.2...v3.6.3) (2026-04-24)
+
+
+### Bug Fixes
+
+* hide supabase status from app footer ([bef2349](https://github.com/GeneralMalit/myorep-timer/commit/bef23490fe31e570453f802da3a618a13e6a581a))
+
 ## [3.6.2](https://github.com/GeneralMalit/myorep-timer/compare/v3.6.1...v3.6.2) (2026-04-24)
 
 
