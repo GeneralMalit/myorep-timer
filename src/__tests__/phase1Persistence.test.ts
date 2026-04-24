@@ -275,11 +275,19 @@ describe('phase 1 persistence redesign coverage', () => {
             sessionLastTickSecond: 8,
             completedSessionWorkoutNodeIds: ['node-a'],
             lastImportSummary: {
-                imported: 1,
-                renamed: 0,
-                skipped: 0,
+                workouts: {
+                    imported: 1,
+                    renamed: 0,
+                    skipped: 0,
+                },
+                sessions: {
+                    imported: 1,
+                    renamed: 0,
+                    skipped: 0,
+                },
                 errors: [],
             },
+            isAccountCardCollapsed: true,
         });
 
         const persisted = (useWorkoutStore as unknown as {
@@ -299,6 +307,7 @@ describe('phase 1 persistence redesign coverage', () => {
             selectedSavedWorkoutId: null,
             selectedSavedSessionId: 'session-1',
             setupMode: 'session',
+            isAccountCardCollapsed: true,
             theme: 'theme-default',
         });
         expect(persisted.savedSessions[0].nodes[0].type === 'workout' ? persisted.savedSessions[0].nodes[0].notes : '').toBe('Prev 60kg');

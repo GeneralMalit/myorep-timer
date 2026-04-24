@@ -13,15 +13,18 @@ import {
     Activity,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { getResponsiveLayout } from '@/layout';
 import { cn } from '@/lib/utils';
 import { APP_VERSION } from '@/constants/version';
 import AccountCard from '@/components/AccountCard';
 import { estimateSessionDurationSeconds, formatEstimatedSessionDuration } from '@/utils/savedSessions';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
-import type { AccountActionResult, AccountSnapshot, AccountSyncActions, AccountSyncSnapshot } from '@/types/account';
-import { SavedWorkout, SavedWorkoutsImportSummary } from '@/types/savedWorkouts';
+import type { AccountActionResult, AccountSignUpResult, AccountSnapshot, AccountSyncActions, AccountSyncSnapshot } from '@/types/account';
+import { SavedWorkout } from '@/types/savedWorkouts';
 import { SavedSession } from '@/types/savedSessions';
+import { SavedLibraryImportSummary } from '@/types/savedLibrary';
+import { sidebarDesktopLayout } from '@/layout/sidebar.desktop';
+import { sidebarMobileLayout } from '@/layout/sidebar.mobile';
 
 export interface SidebarProps {
     currentTheme: string;
@@ -39,9 +42,9 @@ export interface SidebarProps {
     onLoadWorkout: (id: string) => void;
     onRenameWorkout: (id: string) => void;
     onDeleteWorkout: (id: string) => void;
-    onExportWorkouts: () => void;
-    onImportWorkouts: (payload: unknown) => void;
-    importSummary: SavedWorkoutsImportSummary | null;
+    onExportLibrary: () => void;
+    onImportLibrary: (payload: unknown) => void;
+    importSummary: SavedLibraryImportSummary | null;
     clearImportSummary: () => void;
     savedSessions: SavedSession[];
     onCreateSession: () => void;
@@ -52,7 +55,14 @@ export interface SidebarProps {
     account?: AccountSnapshot;
     syncSnapshot?: AccountSyncSnapshot;
     syncActions?: AccountSyncActions;
-    onSendMagicLink?: (email: string) => Promise<AccountActionResult>;
+    isAccountCardCollapsed?: boolean;
+    onToggleAccountCardCollapsed?: () => void;
+    onSignInWithPassword?: (email: string, password: string) => Promise<AccountActionResult>;
+    onSignUpWithPassword?: (username: string, email: string, password: string) => Promise<AccountSignUpResult>;
+    onResendSignUpConfirmation?: (email: string) => Promise<AccountActionResult>;
+    onUpdateUsername?: (username: string) => Promise<AccountActionResult>;
+    onSendPasswordReset?: (email: string) => Promise<AccountActionResult>;
+    onUpdatePassword?: (password: string) => Promise<AccountActionResult>;
     onSignOut?: () => Promise<AccountActionResult>;
     canAccessSessionBuilder?: boolean;
     onUpgradeToPlus?: () => Promise<AccountActionResult>;
@@ -82,8 +92,8 @@ const Sidebar: React.FC<SidebarProps> = ({
     onLoadWorkout,
     onRenameWorkout,
     onDeleteWorkout,
-    onExportWorkouts,
-    onImportWorkouts,
+    onExportLibrary,
+    onImportLibrary,
     importSummary,
     clearImportSummary,
     savedSessions,
@@ -95,7 +105,14 @@ const Sidebar: React.FC<SidebarProps> = ({
     account,
     syncSnapshot,
     syncActions,
-    onSendMagicLink,
+    isAccountCardCollapsed = false,
+    onToggleAccountCardCollapsed,
+    onSignInWithPassword,
+    onSignUpWithPassword,
+    onResendSignUpConfirmation,
+    onUpdateUsername,
+    onSendPasswordReset,
+    onUpdatePassword,
     onSignOut,
     canAccessSessionBuilder = true,
     onUpgradeToPlus,
@@ -104,6 +121,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     const fileInputRef = useRef<HTMLInputElement | null>(null);
     const prepTime = useWorkoutStore((state) => state.settings.prepTime);
     const isSetupMode = appPhase === 'setup';
+    const layout = getResponsiveLayout(isMobileViewport, sidebarMobileLayout, sidebarDesktopLayout);
     const isHiddenOnMobile = isMobileViewport && isCollapsed;
     const isDrawerOpenOnMobile = isMobileViewport && !isCollapsed;
 
@@ -118,9 +136,9 @@ const Sidebar: React.FC<SidebarProps> = ({
 
         try {
             const text = await file.text();
-            onImportWorkouts(JSON.parse(text));
+            onImportLibrary(JSON.parse(text));
         } catch {
-            onImportWorkouts(null);
+            onImportLibrary(null);
         } finally {
             event.target.value = '';
         }
@@ -130,24 +148,20 @@ const Sidebar: React.FC<SidebarProps> = ({
         <aside
             aria-label="Sidebar"
             className={cn(
-                'fixed inset-y-0 left-0 z-50 flex flex-col border-r border-border/60 bg-background shadow-2xl transition-all duration-300 md:rounded-r-[2rem]',
+                layout.asideBase,
                 isMobileViewport
-                    ? 'w-[min(22rem,calc(100vw-1rem))] max-w-full rounded-r-[2rem] border-r'
-                    : isCollapsed
-                        ? 'w-[4.5rem]'
-                        : 'w-[min(22rem,calc(100vw-1rem))] max-w-full',
-                isMobileViewport && (isDrawerOpenOnMobile ? 'translate-x-0' : '-translate-x-[calc(100%+1rem)]'),
+                    ? (isDrawerOpenOnMobile ? layout.asideOpen : layout.asideClosed)
+                    : (isCollapsed ? layout.asideCollapsed : layout.asideExpanded),
             )}
         >
-            <div className="flex h-20 items-center justify-between border-b border-border/50 px-4 pt-[calc(var(--safe-top)+0.5rem)] md:h-16 md:pt-0">
+            <div className={layout.header}>
                 {(!isCollapsed || isMobileViewport) && (
-                    <div className="flex min-w-0 items-center gap-3 overflow-hidden">
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-primary/20">
+                    <div className={layout.headerBrand}>
+                        <div className={layout.headerBrandIcon}>
                             <Activity size={18} className="text-primary" />
                         </div>
-                        <div className="min-w-0">
-                            <h2 className="truncate pr-2 text-xl font-black italic tracking-tighter text-primary">MyoREP</h2>
-                            <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-muted-foreground/60">Library / mobile drawer</p>
+                        <div className={layout.headerBrandText}>
+                            <h2 className={layout.headerTitle}>MyoREP</h2>
                         </div>
                     </div>
                 )}
@@ -155,14 +169,14 @@ const Sidebar: React.FC<SidebarProps> = ({
                     variant="ghost"
                     size="icon"
                     onClick={toggleSidebar}
-                    className={cn('shrink-0', isCollapsed && !isMobileViewport && 'mx-auto')}
+                    className={cn(layout.headerButton, isCollapsed && !isMobileViewport && 'mx-auto')}
                     aria-label={isHiddenOnMobile || isCollapsed ? 'Open Navigation' : 'Close Navigation'}
                 >
                     {isHiddenOnMobile || isCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
                 </Button>
             </div>
 
-            <div className="no-scrollbar flex-1 space-y-5 overflow-y-auto px-4 py-5 pb-[calc(var(--safe-bottom)+1rem)]">
+            <div className={layout.content}>
                 {(!isCollapsed || isMobileViewport) && (
                     <>
                         {account && (
@@ -171,7 +185,14 @@ const Sidebar: React.FC<SidebarProps> = ({
                                     account={account}
                                     syncSnapshot={syncSnapshot}
                                     syncActions={syncActions}
-                                    onSendMagicLink={onSendMagicLink}
+                                    isCollapsed={isAccountCardCollapsed}
+                                    onToggleCollapsed={onToggleAccountCardCollapsed}
+                                    onSignInWithPassword={onSignInWithPassword}
+                                    onSignUpWithPassword={onSignUpWithPassword}
+                                    onResendSignUpConfirmation={onResendSignUpConfirmation}
+                                    onUpdateUsername={onUpdateUsername}
+                                    onSendPasswordReset={onSendPasswordReset}
+                                    onUpdatePassword={onUpdatePassword}
                                     onSignOut={onSignOut}
                                     onUpgradeToPlus={onUpgradeToPlus}
                                     onManageSubscription={onManageSubscription}
@@ -179,26 +200,26 @@ const Sidebar: React.FC<SidebarProps> = ({
                             </section>
                         )}
 
-                        <section className="rounded-[24px] border border-border/60 bg-card/70 p-4">
-                            <div className="mb-4 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-muted-foreground/60">
+                        <section className={layout.sectionCard}>
+                            <div className={layout.sectionTitle}>
                                 <Palette size={14} />
                                 <span>Themes</span>
                             </div>
-                            <div className="grid gap-2 sm:grid-cols-2">
+                            <div className={layout.themeGrid}>
                                 {themes.map((theme) => (
                                     <button
                                         key={theme.id}
                                         onClick={() => setTheme(theme.id)}
                                         className={cn(
-                                            'group flex min-h-11 items-center gap-3 rounded-2xl border border-border/50 px-3 py-2 text-left transition-all duration-200',
+                                            layout.themeButtonBase,
                                             currentTheme === theme.id
-                                                ? 'bg-primary/10 text-primary'
-                                                : 'bg-background/50 text-muted-foreground hover:bg-accent',
+                                                ? layout.themeButtonActive
+                                                : layout.themeButtonInactive,
                                         )}
                                         title={theme.name}
                                     >
                                         <div
-                                            className="h-3 w-3 shrink-0 rounded-full transition-transform group-hover:scale-125"
+                                            className={layout.themeDot}
                                             style={{ backgroundColor: theme.color, boxShadow: `0 0 8px ${theme.color}44` }}
                                         />
                                         <span className="truncate text-sm font-semibold">{theme.name}</span>
@@ -207,39 +228,45 @@ const Sidebar: React.FC<SidebarProps> = ({
                             </div>
                         </section>
 
-                        <section className="rounded-[24px] border border-border/60 bg-card/70 p-4">
-                            <Button
-                                type="button"
-                                variant="link"
-                                className="min-h-11 justify-start p-0 text-left text-xs font-black uppercase tracking-[0.24em]"
-                                onClick={onOpenProtocolIntel}
-                            >
-                                What are "Myo-Reps"?
-                            </Button>
-                            <p className="mt-1 text-[10px] uppercase tracking-tight text-muted-foreground/70">
-                                What myo-reps are and how this timer interprets them.
-                            </p>
+                        <section className={layout.infoCard}>
+                            <div className="space-y-1.5">
+                                <div className={layout.infoEyebrow}>Information</div>
+                                <Button
+                                    type="button"
+                                    variant="link"
+                                    className={layout.infoButton}
+                                    onClick={onOpenProtocolIntel}
+                                >
+                                    What are "Myo-Reps"?
+                                </Button>
+                                <p className={layout.infoText}>
+                                    What myo-reps are and how this timer interprets them.
+                                </p>
+                            </div>
                         </section>
 
-                        <section className="space-y-3 rounded-[24px] border border-border/60 bg-card/70 p-4">
-                            <div className="flex items-center justify-between gap-2">
-                                <div className="text-xs font-bold uppercase tracking-widest text-muted-foreground/70">Saved Sessions</div>
-                                <Button variant="outline" size="sm" onClick={onCreateSession} className="min-h-11 px-3 text-[10px] font-bold" disabled={!isSetupMode || !canAccessSessionBuilder}>
+                        <section className={layout.sessionsSection}>
+                            <div className={layout.sessionsHeader}>
+                                <div className="space-y-1">
+                                    <div className={layout.sectionEyebrow}>Library</div>
+                                    <div className={layout.sessionsTitle}>Saved Sessions</div>
+                                </div>
+                                <Button variant="outline" size="sm" onClick={onCreateSession} className={layout.sessionsNewButton} disabled={!isSetupMode || !canAccessSessionBuilder}>
                                     New
                                 </Button>
                             </div>
 
                             {!canAccessSessionBuilder ? (
-                                <div className="rounded-2xl border border-border/60 bg-background/60 p-4 text-left">
-                                    <div className="text-[10px] font-black uppercase tracking-[0.24em] text-primary">Plus Feature</div>
-                                    <div className="mt-2 text-sm font-bold text-foreground">Session Builder is part of Plus.</div>
-                                    <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+                                <div className={layout.plusCard}>
+                                    <div className={layout.plusTitle}>Plus Feature</div>
+                                    <div className={layout.plusDescription}>Session Builder is part of Plus.</div>
+                                    <p className={layout.plusCopy}>
                                         Build and save multi-node sessions after upgrading to Plus. Free mode keeps the timer local-first without session editing.
                                     </p>
                                     {onUpgradeToPlus && (
                                         <Button
                                             type="button"
-                                            className="mt-4 min-h-11 w-full justify-center rounded-xl font-bold"
+                                            className={layout.plusButton}
                                             onClick={() => {
                                                 void onUpgradeToPlus();
                                             }}
@@ -249,43 +276,43 @@ const Sidebar: React.FC<SidebarProps> = ({
                                     )}
                                 </div>
                             ) : (
-                                <div className="no-scrollbar max-h-56 space-y-3 overflow-y-auto pr-1">
+                                <div className={layout.sessionsList}>
                                     {savedSessions.length === 0 && (
-                                        <div className="px-1 text-[10px] uppercase tracking-wider text-muted-foreground/60">
+                                        <div className={layout.sessionsEmpty}>
                                             No saved sessions yet
                                         </div>
                                     )}
 
                                     {savedSessions.map((session, index) => (
-                                        <div key={session.id} className={cn('space-y-2 pb-3', index !== savedSessions.length - 1 && 'border-b border-border/50')}>
-                                            <div className="flex items-start justify-between gap-3">
+                                        <div key={session.id} className={cn(layout.sessionItem, index !== savedSessions.length - 1 && layout.sessionItemDivider)}>
+                                            <div className={layout.sessionItemHeader}>
                                                 <div className="min-w-0">
-                                                    <div className="truncate text-xs font-bold">{session.name}</div>
-                                                    <div className="text-[10px] uppercase tracking-tight text-muted-foreground">
+                                                    <div className={layout.sessionItemTitle}>{session.name}</div>
+                                                    <div className={layout.sessionItemMeta}>
                                                         {session.nodes.length} nodes
                                                         {session.lastUsedAt ? ` - Last ${new Date(session.lastUsedAt).toLocaleDateString()}` : ''}
                                                     </div>
                                                 </div>
-                                                <div className="shrink-0 text-right">
-                                                    <div className="text-[9px] font-black uppercase tracking-[0.22em] text-muted-foreground">
+                                                <div className={layout.sessionItemTimeWrap}>
+                                                    <div className={layout.sessionItemTimeLabel}>
                                                         Time
                                                     </div>
-                                                    <div className="text-[10px] font-black tracking-tight text-foreground">
+                                                    <div className={layout.sessionItemTimeValue}>
                                                         {formatEstimatedSessionDuration(sessionDurations.get(session.id) ?? null)}
                                                     </div>
                                                 </div>
                                             </div>
-                                            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                                                <Button variant="default" size="sm" className="min-h-11 px-2 text-[10px] font-bold" onClick={() => onLoadSession(session.id)} disabled={!isSetupMode} title="Load Session">
+                                            <div className={layout.sessionActionsGrid}>
+                                                <Button variant="default" size="sm" className={layout.sessionActionButton} onClick={() => onLoadSession(session.id)} disabled={!isSetupMode} title="Load Session">
                                                     Load
                                                 </Button>
-                                                <Button variant="secondary" size="sm" className="min-h-11 px-2 text-[10px] font-bold" onClick={() => onDuplicateSession(session.id)} disabled={!isSetupMode} title="Duplicate Session">
+                                                <Button variant="secondary" size="sm" className={layout.sessionActionButton} onClick={() => onDuplicateSession(session.id)} disabled={!isSetupMode} title="Duplicate Session">
                                                     Copy
                                                 </Button>
-                                                <Button variant="secondary" size="sm" className="min-h-11 px-2 text-[10px] font-bold" onClick={() => onRenameSession(session.id)} disabled={!isSetupMode} title="Rename Session">
+                                                <Button variant="secondary" size="sm" className={layout.sessionActionButton} onClick={() => onRenameSession(session.id)} disabled={!isSetupMode} title="Rename Session">
                                                     Rename
                                                 </Button>
-                                                <Button variant="ghost" size="sm" className="min-h-11 px-2 text-[10px] font-bold" onClick={() => onDeleteSession(session.id)} disabled={!isSetupMode} title="Delete Session">
+                                                <Button variant="ghost" size="sm" className={layout.sessionActionButton} onClick={() => onDeleteSession(session.id)} disabled={!isSetupMode} title="Delete Session">
                                                     Del
                                                 </Button>
                                             </div>
@@ -295,22 +322,29 @@ const Sidebar: React.FC<SidebarProps> = ({
                             )}
                         </section>
 
-                        <section className="space-y-3 rounded-[24px] border border-border/60 bg-card/70 p-4">
-                            <div className="text-xs font-bold uppercase tracking-widest text-muted-foreground/70">Saved Workouts</div>
+                        <section className={layout.workoutsSection}>
+                            <div className="space-y-1">
+                                <div className={layout.sectionEyebrow}>Library</div>
+                                <div className={layout.workoutsTitle}>Saved Workouts</div>
+                            </div>
 
-                            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                                <Button variant="secondary" size="sm" onClick={() => fileInputRef.current?.click()} disabled={!isSetupMode} className="min-h-11 w-full px-0 font-bold" aria-label="Import" title="Import">
+                            <div className={layout.workoutsActionsGrid}>
+                                <Button variant="secondary" size="sm" onClick={() => fileInputRef.current?.click()} disabled={!isSetupMode} className={layout.workoutsButton} aria-label="Import library" title="Import library">
                                     <Upload size={12} />
                                 </Button>
-                                <Button variant="secondary" size="sm" onClick={onExportWorkouts} className="min-h-11 w-full px-0 font-bold" aria-label="Export" title="Export">
+                                <Button variant="secondary" size="sm" onClick={onExportLibrary} className={layout.workoutsButton} aria-label="Export library" title="Export library">
                                     <Download size={12} />
                                 </Button>
-                                <Button variant="outline" size="sm" onClick={onSaveCurrent} disabled={!isSetupMode} className="min-h-11 w-full px-0 font-bold" aria-label="Save" title="Save">
+                                <Button variant="outline" size="sm" onClick={onSaveCurrent} disabled={!isSetupMode} className={layout.workoutsButton} aria-label="Save" title="Save">
                                     <Save size={12} />
                                 </Button>
-                                <Button variant="secondary" size="sm" onClick={onSaveAsCurrent} disabled={!isSetupMode} className="min-h-11 w-full px-0 font-bold" aria-label="Save As" title="Save As">
+                                <Button variant="secondary" size="sm" onClick={onSaveAsCurrent} disabled={!isSetupMode} className={layout.workoutsButton} aria-label="Save As" title="Save As">
                                     <Save size={12} />
                                 </Button>
+                            </div>
+
+                            <div className="text-[10px] leading-relaxed text-muted-foreground">
+                                To rescue data from deployed main, save the raw <code>myorep-workout-storage</code> localStorage value as JSON and import it here.
                             </div>
 
                             <input
@@ -322,16 +356,23 @@ const Sidebar: React.FC<SidebarProps> = ({
                             />
 
                             {importSummary && (
-                                <div className="rounded-lg border border-border/50 bg-accent/20 p-2 text-[10px] leading-relaxed">
-                                    <div className="font-bold uppercase tracking-wider text-muted-foreground">
-                                        Imported {importSummary.imported}, Renamed {importSummary.renamed}, Skipped {importSummary.skipped}
+                                <div className={layout.workoutsImportSummary}>
+                                    <div className={layout.workoutsImportSummaryTitle}>
+                                        Workouts: {importSummary.workouts.imported} imported, {importSummary.workouts.renamed} renamed, {importSummary.workouts.skipped} skipped
                                     </div>
-                                    {importSummary.errors.length > 0 && (
-                                        <div className="mt-1 text-destructive">{importSummary.errors[0]}</div>
+                                    <div className={layout.workoutsImportSummaryTitle}>
+                                        Sessions: {importSummary.sessions.imported} imported, {importSummary.sessions.renamed} renamed, {importSummary.sessions.skipped} skipped
+                                    </div>
+                                    {importSummary.errors.length > 0 ? (
+                                        <div className={layout.workoutsImportSummaryError}>{importSummary.errors[0]}</div>
+                                    ) : (
+                                        <div className={layout.workoutsImportSummaryError}>
+                                            Tip: you can also import a raw <code>myorep-workout-storage</code> browser snapshot from the deployed main branch.
+                                        </div>
                                     )}
                                     <button
                                         type="button"
-                                        className="mt-1 font-semibold text-primary"
+                                        className={layout.workoutsImportSummaryDismiss}
                                         onClick={clearImportSummary}
                                     >
                                         Dismiss
@@ -339,31 +380,31 @@ const Sidebar: React.FC<SidebarProps> = ({
                                 </div>
                             )}
 
-                            <div className="no-scrollbar max-h-56 space-y-3 overflow-y-auto pr-1">
+                            <div className={layout.workoutsList}>
                                 {savedWorkouts.length === 0 && (
-                                    <div className="px-1 text-[10px] uppercase tracking-wider text-muted-foreground/60">
+                                    <div className={layout.sessionsEmpty}>
                                         No saved workouts yet
                                     </div>
                                 )}
 
                                 {savedWorkouts.map((workout, index) => (
-                                    <div key={workout.id} className={cn('space-y-2 pb-3', index !== savedWorkouts.length - 1 && 'border-b border-border/50')}>
-                                        <div className="truncate text-xs font-bold">{workout.name}</div>
-                                        <div className="text-[10px] uppercase tracking-tight text-muted-foreground">
+                                    <div key={workout.id} className={cn(layout.workoutItem, index !== savedWorkouts.length - 1 && layout.sessionItemDivider)}>
+                                        <div className={layout.workoutItemTitle}>{workout.name}</div>
+                                        <div className={layout.workoutItemMeta}>
                                             Used {workout.timesUsed}x
                                             {workout.lastUsedAt ? ` - Last ${new Date(workout.lastUsedAt).toLocaleDateString()}` : ''}
                                         </div>
-                                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                                            <Button variant="default" size="sm" className="min-h-11 px-2 text-[10px] font-bold" onClick={() => onLoadWorkout(workout.id)} disabled={!isSetupMode} title="Load">
+                                        <div className={layout.workoutItemActionsGrid}>
+                                            <Button variant="default" size="sm" className={layout.workoutActionButton} onClick={() => onLoadWorkout(workout.id)} disabled={!isSetupMode} title="Load">
                                                 <FolderOpen size={11} />
                                             </Button>
-                                            <Button variant="secondary" size="sm" className="min-h-11 px-2 text-[10px] font-bold" onClick={() => onRenameWorkout(workout.id)} disabled={!isSetupMode} title="Rename">
+                                            <Button variant="secondary" size="sm" className={layout.workoutActionButton} onClick={() => onRenameWorkout(workout.id)} disabled={!isSetupMode} title="Rename">
                                                 <Pencil size={11} />
                                             </Button>
-                                            <Button variant="ghost" size="sm" className="min-h-11 px-2 text-[10px] font-bold" onClick={() => onDeleteWorkout(workout.id)} disabled={!isSetupMode} title="Delete">
+                                            <Button variant="ghost" size="sm" className={layout.workoutActionButton} onClick={() => onDeleteWorkout(workout.id)} disabled={!isSetupMode} title="Delete">
                                                 <Trash2 size={11} />
                                             </Button>
-                                            <div className="flex min-h-11 items-center justify-center rounded border border-border/60 bg-background/60 text-[9px] font-bold">
+                                            <div className={layout.workoutStat}>
                                                 {workout.sets}S
                                             </div>
                                         </div>
@@ -375,19 +416,19 @@ const Sidebar: React.FC<SidebarProps> = ({
                 )}
             </div>
 
-            <div className="border-t border-border p-4">
+            <div className={layout.footer}>
                 <Button
                     variant={showSettings ? 'default' : 'secondary'}
-                    className={cn('min-h-12 w-full gap-2 font-bold transition-all', isCollapsed && !isMobileViewport && 'justify-center px-0')}
+                    className={cn(layout.footerButton, isCollapsed && !isMobileViewport && layout.footerButtonCollapsed)}
                     onClick={() => setShowSettings(!showSettings)}
                     title="Settings"
                     aria-label={showSettings ? 'Close Settings' : 'Open Settings'}
                 >
-                    <Settings className={cn('shrink-0', showSettings && 'animate-spin-slow')} size={18} />
+                    <Settings className={cn(layout.footerIcon, showSettings && 'animate-spin-slow')} size={18} />
                     {(!isCollapsed || isMobileViewport) && <span>{showSettings ? 'Close' : 'Settings'}</span>}
                 </Button>
                 {(!isCollapsed || isMobileViewport) && (
-                    <div className="mt-4 text-center text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground/40">
+                    <div className={layout.footerVersion}>
                         v{APP_VERSION}
                     </div>
                 )}

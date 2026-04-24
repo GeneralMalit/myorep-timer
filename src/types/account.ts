@@ -3,6 +3,7 @@ import type { Session } from '@supabase/supabase-js';
 export type AccountBootstrapStatus = 'idle' | 'bootstrapping' | 'ready' | 'disabled' | 'error';
 export type AccountMode = 'guest' | 'signed-in-free' | 'signed-in-plus';
 export type AccountPlan = 'free' | 'plus';
+export type AccountAuthFormMode = 'sign-in' | 'sign-up' | 'forgot-password';
 export type AccountSyncStatus = 'disabled' | 'idle' | 'syncing' | 'error';
 export type AccountSyncSurfaceStatus =
     | 'sync-off'
@@ -20,10 +21,16 @@ export type FirstSyncChoice = 'upload-local' | 'replace-local';
 export interface AccountActionResult {
     ok: boolean;
     message: string;
+    requiresChoice?: boolean;
+}
+
+export interface AccountSignUpResult extends AccountActionResult {
+    requiresEmailVerification?: boolean;
 }
 
 export interface AccountProfile {
     userId: string;
+    username: string;
     email: string | null;
     displayName: string | null;
     createdAt: string;
@@ -56,11 +63,10 @@ export interface AccountSyncSnapshot {
 }
 
 export interface AccountSyncActions {
-    onEnableSync?: (choice: FirstSyncChoice) => AccountActionResult | void | Promise<AccountActionResult | void>;
+    onEnableSync?: (choice?: FirstSyncChoice) => AccountActionResult | void | Promise<AccountActionResult | void>;
     onSyncNow?: () => AccountActionResult | void | Promise<AccountActionResult | void>;
     onRetrySync?: () => AccountActionResult | void | Promise<AccountActionResult | void>;
     onResumeSync?: () => AccountActionResult | void | Promise<AccountActionResult | void>;
-    onReauthenticate?: () => AccountActionResult | void | Promise<AccountActionResult | void>;
     onDisableSync?: () => AccountActionResult | void | Promise<AccountActionResult | void>;
 }
 
@@ -72,4 +78,5 @@ export interface AccountSnapshot {
     entitlement: AccountEntitlement | null;
     syncStatus: AccountSyncStatus;
     error: string | null;
+    requiresPasswordReset: boolean;
 }

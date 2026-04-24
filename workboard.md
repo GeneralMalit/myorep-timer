@@ -1,6 +1,6 @@
 # MyoRep Capacitor Workboard
 
-> Phase 0 lock: separate dev/prod Supabase projects, email magic links only, guest/free local-only, and a paid Plus subscription is required for cloud sync and session builder.
+> Phase 0 lock: separate dev/prod Supabase projects, username + email/password auth for normal access, keep email-link flows limited to password recovery, guest/free local-only, and a paid Plus subscription is required for cloud sync and session builder.
 
 Goal: make this repo ready for a clean Capacitor port to iOS and Android without rewriting the workout engine.
 
@@ -13,6 +13,7 @@ Goal: make this repo ready for a clean Capacitor port to iOS and Android without
   - [x] exact locked vs free features
 - Phase 6 now uses Paddle for web-based subscription billing, while Supabase entitlements stay the client-visible source of truth. Native App Store / Play billing remains deferred.
 - Phase 7 now uses a private test-only Plus override path for validation. Live Paddle validation stays deferred, and there is still no general admin dashboard.
+- Account creation now needs a real unique `username` in `profiles`, and signed-in users can change that username without changing the email-based login path.
 
 ## Design Gate
 - [x] Before changing mobile layout, navigation, dialogs, session editing, or other phone-first flows in code, create mockups and review them with the user.
@@ -35,13 +36,13 @@ Goal: make this repo ready for a clean Capacitor port to iOS and Android without
 - [ ] Add a migration plan for persisted data so existing `savedWorkouts`, `savedSessions`, `theme`, and config values survive a storage backend change.
 - [ ] Verify that `editingSessionDraft` should really be persisted. If not, remove it from persistence and treat it as runtime-only draft state.
 - [ ] Review `src/utils/savedWorkouts.ts` and `src/utils/savedSessions.ts` for schema versioning and future migration hooks.
-- [ ] Decide whether session export/import should be exposed in the UI. The helper code exists in `src/utils/savedSessions.ts`, but the app currently only wires workout export/import.
-- [ ] Define a mobile-safe backup story for user data: local only, share/export, or cloud sync later.
+- [x] Expose full-library export/import in the UI for both saved workouts and saved sessions.
+- [x] Define a backup/migration story for user data: local library JSON export/import remains available alongside deferred cloud sync.
 
 ## Lane 3: Export, Import, and File Flow
 - [ ] Replace the workout export download anchor in `src/App.tsx` with a mobile-friendly share/save flow.
 - [ ] Replace the workout import file picker in `src/components/Sidebar.tsx` with a Capacitor-compatible document picker or share/import flow.
-- [ ] Decide whether exported JSON should cover workouts only or both workouts and sessions.
+- [x] Export/import JSON now covers both workouts and sessions, while still accepting older workouts-only exports.
 - [ ] Make import error handling explicit in the UI rather than relying on browser file behavior.
 - [ ] Confirm that exported filenames and JSON schemas are versioned and stable enough for long-term mobile use.
 

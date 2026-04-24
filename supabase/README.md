@@ -5,7 +5,7 @@ This folder holds the initial schema and setup notes for the MyoRep Supabase fou
 ## What to do
 - Set `VITE_ENABLE_SUPABASE=true` only in builds that should actually bootstrap auth.
 - Create one Supabase project for dev and one for prod.
-- Enable email magic links only.
+- Use password auth for normal sign-in, require signup confirmation emails/magic links for new accounts, and keep password-recovery links enabled as a separate flow.
 - Use the environment variables listed in `docs/phase-0-supabase-foundation.md`.
 - Apply the migration in `supabase/migrations/0001_phase0_foundation.sql`.
 - Apply `supabase/migrations/0002_phase6_billing_foundation.sql`, then `supabase/migrations/0003_phase6_paddle_billing.sql`, before enabling Paddle-backed billing in any environment.

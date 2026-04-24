@@ -499,6 +499,10 @@ const resolveSessionImportRecords = (payload: unknown): unknown[] | null => {
         return payload.sessions;
     }
 
+    if (Array.isArray(payload.savedSessions)) {
+        return payload.savedSessions;
+    }
+
     const nestedData = isRecord(payload.data) ? payload.data : null;
     if (nestedData && Array.isArray(nestedData.sessions)) {
         return nestedData.sessions;
@@ -514,6 +518,9 @@ const resolveSessionImportRecords = (payload: unknown): unknown[] | null => {
 export const mergeSavedSessionsFromImport = (
     existing: SavedSession[],
     payload: unknown,
+    options?: {
+        importedWorkoutIdMap?: Map<string, string>;
+    },
 ): { sessions: SavedSession[]; summary: SavedSessionsImportSummary } => {
     const summary: SavedSessionsImportSummary = {
         imported: 0,
@@ -578,7 +585,21 @@ export const mergeSavedSessionsFromImport = (
         nextSessions.push({
             id,
             name: resolvedName.name,
-            nodes: nodes.map((node) => cloneSessionNode(node, nowIso)),
+            nodes: nodes.map((node) => {
+                const nextNode = cloneSessionNode(node, nowIso);
+                if (
+                    nextNode.type === 'workout'
+                    && nextNode.sourceWorkoutId
+                    && options?.importedWorkoutIdMap?.has(nextNode.sourceWorkoutId)
+                ) {
+                    return {
+                        ...nextNode,
+                        sourceWorkoutId: options.importedWorkoutIdMap.get(nextNode.sourceWorkoutId) ?? nextNode.sourceWorkoutId,
+                    };
+                }
+
+                return nextNode;
+            }),
             timesUsed: parsePositiveInt(sessionRecord.timesUsed) ?? 0,
             lastUsedAt: typeof sessionRecord.lastUsedAt === 'string' ? sessionRecord.lastUsedAt : null,
             createdAt: typeof sessionRecord.createdAt === 'string' && sessionRecord.createdAt ? sessionRecord.createdAt : nowIso,

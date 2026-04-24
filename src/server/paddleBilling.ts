@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import type { BillingEnvironment } from '@/server/billingEnv';
+import type { BillingEnvironment } from './billingEnv';
 
 const PADDLE_API_BASE = 'https://api.paddle.com';
 

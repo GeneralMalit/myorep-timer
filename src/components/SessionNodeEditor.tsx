@@ -17,6 +17,11 @@ const workoutFields: Array<{ key: keyof SavedWorkoutConfig; label: string; icon:
     { key: 'myoReps', label: 'Myo Reps', icon: Activity },
     { key: 'myoWorkSecs', label: 'Myo Pace', icon: Zap },
 ];
+const mobileWorkoutFieldRows: Array<Array<(typeof workoutFields)[number]>> = [
+    [workoutFields[0], workoutFields[1]],
+    [workoutFields[2], workoutFields[3]],
+    [workoutFields[4], workoutFields[5]],
+];
 
 const SessionNodeEditor = () => {
     const [isMobileViewport, setIsMobileViewport] = useState(false);
@@ -123,6 +128,40 @@ const SessionNodeEditor = () => {
         : null;
     const isUnsavedWorkoutNode = Boolean(workoutNode && !workoutNode.sourceWorkoutId);
     const isMissingLinkedWorkout = Boolean(workoutNode?.sourceWorkoutId && !linkedWorkout);
+    const renderWorkoutField = (field: (typeof workoutFields)[number]) => {
+        if (!workoutNode) {
+            return null;
+        }
+
+        const Icon = field.icon;
+        const isDisabled = isSingleCycle && field.key !== 'sets' && field.key !== 'reps' && field.key !== 'seconds';
+        const shouldGrayOut = isSingleCycle && field.key !== 'sets' && field.key !== 'reps' && field.key !== 'seconds';
+
+        return (
+            <div key={field.key} className={cn('space-y-2', shouldGrayOut && 'opacity-45')}>
+                <div className="flex items-center gap-2">
+                    <Icon size={12} className="text-primary" />
+                    <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                        {field.label}
+                    </Label>
+                </div>
+                <Input
+                    type="number"
+                    value={workoutNode.config[field.key]}
+                    disabled={isDisabled}
+                    onChange={(event) => {
+                        const nextValue = field.key === 'sets'
+                            ? normalizeSetsInput(event.target.value)
+                            : event.target.value;
+                        updateWorkoutNode(workoutNode.id, {
+                            ...workoutNode.config,
+                            [field.key]: nextValue,
+                        }, workoutNode.name);
+                    }}
+                />
+            </div>
+        );
+    };
 
     const handleClose = () => setEditingSessionNodeId(null);
 
@@ -235,37 +274,19 @@ const SessionNodeEditor = () => {
 
                             {workoutNode ? (
                                 <>
-                                    <div className="grid gap-3 sm:grid-cols-2">
-                                        {workoutFields.map((field) => {
-                                            const Icon = field.icon;
-                                            const isDisabled = isSingleCycle && field.key !== 'sets' && field.key !== 'reps' && field.key !== 'seconds';
-                                            const shouldGrayOut = isSingleCycle && field.key !== 'sets' && field.key !== 'reps' && field.key !== 'seconds';
-                                            return (
-                                                <div key={field.key} className={cn('space-y-2', shouldGrayOut && 'opacity-45')}>
-                                                    <div className="flex items-center gap-2">
-                                                        <Icon size={12} className="text-primary" />
-                                                        <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                                                            {field.label}
-                                                        </Label>
-                                                    </div>
-                                                    <Input
-                                                        type="number"
-                                                        value={workoutNode.config[field.key]}
-                                                        disabled={isDisabled}
-                                                        onChange={(event) => {
-                                                            const nextValue = field.key === 'sets'
-                                                                ? normalizeSetsInput(event.target.value)
-                                                                : event.target.value;
-                                                            updateWorkoutNode(workoutNode.id, {
-                                                                ...workoutNode.config,
-                                                                [field.key]: nextValue,
-                                                            }, workoutNode.name);
-                                                        }}
-                                                    />
+                                    {isMobileViewport ? (
+                                        <div className="space-y-3">
+                                            {mobileWorkoutFieldRows.map((row, index) => (
+                                                <div key={`mobile-workout-field-row-${index}`} className="grid grid-cols-2 gap-3">
+                                                    {row.map((field) => renderWorkoutField(field))}
                                                 </div>
-                                            );
-                                        })}
-                                    </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div className="grid gap-3 sm:grid-cols-2">
+                                            {workoutFields.map((field) => renderWorkoutField(field))}
+                                        </div>
+                                    )}
                                     <div className="space-y-2">
                                         <div className="flex items-center gap-2">
                                             <Label htmlFor="session-node-notes" className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">

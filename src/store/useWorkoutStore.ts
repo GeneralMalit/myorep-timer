@@ -3,9 +3,11 @@ import { persist } from 'zustand/middleware';
 import {
     SavedWorkout,
     SavedWorkoutConfig,
-    SavedWorkoutsExportV1,
-    SavedWorkoutsImportSummary,
 } from '@/types/savedWorkouts';
+import {
+    SavedLibraryExportV1,
+    SavedLibraryImportSummary,
+} from '@/types/savedLibrary';
 import {
     SavedSession,
     SessionNode,
@@ -15,9 +17,7 @@ import {
 } from '@/types/savedSessions';
 import {
     createSavedWorkout,
-    buildSavedWorkoutsExport,
     isValidWorkoutConfig,
-    mergeSavedWorkoutsFromImport,
     normalizeSetsInput,
     pickConfigFromState,
     sanitizeSavedWorkoutConfig,
@@ -32,6 +32,7 @@ import {
     moveNodeInArray,
     sanitizeRestNodeSeconds,
 } from '@/utils/savedSessions';
+import { buildSavedLibraryExport, mergeSavedLibraryFromImport } from '@/utils/savedLibrary';
 import { markSyncDeleted, normalizeSyncMetadata, touchSyncMetadata } from '@/utils/sync';
 import { useSyncStore } from '@/store/useSyncStore';
 
@@ -83,7 +84,7 @@ const enqueueSyncChangeIfEnabled = (params: {
     syncState.enqueueEntityChange(params);
 };
 
-const WORKOUT_STORE_PERSIST_VERSION = 2;
+const WORKOUT_STORE_PERSIST_VERSION = 3;
 
 type PersistedWorkoutStoreState = {
     settings: WorkoutSettings;
@@ -98,6 +99,7 @@ type PersistedWorkoutStoreState = {
     savedSessions: SavedSession[];
     selectedSavedSessionId: string | null;
     setupMode: 'workout' | 'session';
+    isAccountCardCollapsed: boolean;
     theme: string;
 };
 
@@ -130,6 +132,7 @@ const createDefaultPersistedWorkoutState = (): PersistedWorkoutStoreState => ({
     savedSessions: [],
     selectedSavedSessionId: null,
     setupMode: 'workout',
+    isAccountCardCollapsed: false,
     theme: 'theme-default',
 });
 
@@ -156,6 +159,7 @@ const persistWorkoutStoreState = (state: WorkoutState): PersistedWorkoutStoreSta
     savedSessions: state.savedSessions,
     selectedSavedSessionId: state.selectedSavedSessionId,
     setupMode: state.setupMode,
+    isAccountCardCollapsed: state.isAccountCardCollapsed,
     theme: state.theme,
 });
 
@@ -213,6 +217,9 @@ const migratePersistedWorkoutStoreState = (persistedState: unknown): PersistedWo
     const selectedSavedSessionId = typeof state.selectedSavedSessionId === 'string' && savedSessions.some((session) => session.id === state.selectedSavedSessionId)
         ? state.selectedSavedSessionId
         : defaults.selectedSavedSessionId;
+    const isAccountCardCollapsed = typeof state.isAccountCardCollapsed === 'boolean'
+        ? state.isAccountCardCollapsed
+        : defaults.isAccountCardCollapsed;
 
     return {
         settings: {
@@ -230,6 +237,7 @@ const migratePersistedWorkoutStoreState = (persistedState: unknown): PersistedWo
         savedSessions,
         selectedSavedSessionId,
         setupMode: state.setupMode === 'session' ? 'session' : defaults.setupMode,
+        isAccountCardCollapsed,
         theme: typeof state.theme === 'string' && state.theme.trim() ? state.theme : defaults.theme,
     };
 };
@@ -265,7 +273,7 @@ interface WorkoutState {
     // Saved workouts
     savedWorkouts: SavedWorkout[];
     selectedSavedWorkoutId: string | null;
-    lastImportSummary: SavedWorkoutsImportSummary | null;
+    lastImportSummary: SavedLibraryImportSummary | null;
     savedSessions: SavedSession[];
     selectedSavedSessionId: string | null;
     setupMode: 'workout' | 'session';
@@ -297,11 +305,13 @@ interface WorkoutState {
     // UI State
     showSettings: boolean;
     isSidebarCollapsed: boolean;
+    isAccountCardCollapsed: boolean;
     theme: string;
 
     // Actions
     setShowSettings: (show: boolean) => void;
     setIsSidebarCollapsed: (collapsed: boolean) => void;
+    setIsAccountCardCollapsed: (collapsed: boolean) => void;
     setTheme: (theme: string) => void;
     setSetupMode: (mode: 'workout' | 'session') => void;
     setSettings: (settings: Partial<WorkoutSettings>) => void;
@@ -314,8 +324,8 @@ interface WorkoutState {
     deleteWorkout: (id: string) => void;
     recordWorkoutUsed: (id: string) => void;
     recordSessionUsed: (id: string) => void;
-    exportSavedWorkouts: () => SavedWorkoutsExportV1;
-    importSavedWorkouts: (payload: unknown) => SavedWorkoutsImportSummary;
+    exportSavedLibrary: () => SavedLibraryExportV1;
+    importSavedLibrary: (payload: unknown) => SavedLibraryImportSummary;
     clearImportSummary: () => void;
     createSession: (name: string) => { ok: boolean; error?: string; id?: string };
     saveSessionDraft: (name?: string) => { ok: boolean; error?: string; id?: string };
@@ -391,10 +401,12 @@ export const useWorkoutStore = create<WorkoutState>()(
             completedSessionWorkoutNodeIds: [],
             showSettings: false,
             isSidebarCollapsed: false,
+            isAccountCardCollapsed: false,
             theme: 'theme-default',
 
             setShowSettings: (show: boolean) => set({ showSettings: show }),
             setIsSidebarCollapsed: (collapsed: boolean) => set({ isSidebarCollapsed: collapsed }),
+            setIsAccountCardCollapsed: (collapsed: boolean) => set({ isAccountCardCollapsed: collapsed }),
             setTheme: (theme: string) => set({ theme }),
             setSetupMode: (mode) => set({ setupMode: mode }),
             setSettings: (newSettings) => set((state) => {
@@ -678,13 +690,21 @@ export const useWorkoutStore = create<WorkoutState>()(
                     editingSessionDraft,
                 };
             }),
-            exportSavedWorkouts: () => {
-                return buildSavedWorkoutsExport(get().savedWorkouts, new Date().toISOString());
-            },
-            importSavedWorkouts: (payload) => {
+            exportSavedLibrary: () => {
                 const state = get();
-                const { workouts, summary } = mergeSavedWorkoutsFromImport(state.savedWorkouts, payload);
-                set({ savedWorkouts: workouts, lastImportSummary: summary });
+                return buildSavedLibraryExport(state.savedWorkouts, state.savedSessions, new Date().toISOString());
+            },
+            importSavedLibrary: (payload) => {
+                const state = get();
+                const { workouts, sessions, summary } = mergeSavedLibraryFromImport({
+                    workouts: state.savedWorkouts,
+                    sessions: state.savedSessions,
+                }, payload);
+                set({
+                    savedWorkouts: workouts,
+                    savedSessions: sessions,
+                    lastImportSummary: summary,
+                });
                 return summary;
             },
             clearImportSummary: () => set({ lastImportSummary: null }),

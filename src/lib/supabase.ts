@@ -79,6 +79,14 @@ export const getSupabaseAuthCodeFromUrl = (url: string): string | null => {
     }
 };
 
+export const isSupabaseRecoveryUrl = (url: string): boolean => {
+    try {
+        return new URL(url).searchParams.get('type') === 'recovery';
+    } catch {
+        return false;
+    }
+};
+
 const formatSupabaseHost = (url: string): string => {
     try {
         return new URL(url).host;

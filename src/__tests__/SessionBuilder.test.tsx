@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import SessionBuilder from '@/components/SessionBuilder';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
 
@@ -92,6 +92,7 @@ describe('SessionBuilder', () => {
         expect(screen.getByText(/Create a session, then edit nodes directly in the canvas/i)).toBeInTheDocument();
         expect(screen.getByText(/Empty canvas/i)).toBeInTheDocument();
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /^new session$/i })).toHaveClass('border-primary/60');
 
         fireEvent.click(screen.getByRole('button', { name: /start/i }));
         let dialog = screen.getByRole('dialog', { name: /no session is ready to start/i });
@@ -108,7 +109,7 @@ describe('SessionBuilder', () => {
         expect(within(dialog).getByText(/Create or load a session before saving a copy/i)).toBeInTheDocument();
         fireEvent.click(within(dialog).getByRole('button', { name: /got it/i }));
 
-        fireEvent.click(screen.getByRole('button', { name: /^new$/i }));
+        fireEvent.click(screen.getByRole('button', { name: /^new session$/i }));
         dialog = screen.getByRole('dialog', { name: /create a new session/i });
         expect(within(dialog).getByDisplayValue('New Session')).toBeInTheDocument();
         fireEvent.change(within(dialog).getByLabelText(/session name/i), { target: { value: 'Alpha Session' } });
@@ -129,8 +130,8 @@ describe('SessionBuilder', () => {
     it('uses a centered desktop shell so builder content stays aligned in web view', () => {
         render(<SessionBuilder />);
 
-        expect(screen.getByTestId('session-builder-shell')).toHaveClass('mx-auto', 'max-w-[1100px]');
-        expect(screen.getByTestId('session-canvas-frame')).toHaveClass('flex-1', 'min-h-[420px]');
+        expect(screen.getByTestId('session-builder-shell')).toHaveClass('mx-auto', 'max-w-[1024px]');
+        expect(screen.getByTestId('session-canvas-frame')).toHaveClass('flex-1', 'min-h-[360px]');
         expect(screen.getByText(/Est. Time:/i)).toBeInTheDocument();
     });
 
@@ -173,12 +174,77 @@ describe('SessionBuilder', () => {
 
         expect(screen.queryByRole('alert')).not.toBeInTheDocument();
         expect(screen.getByText(/^unsaved$/i)).toBeInTheDocument();
+        expect(screen.getByText('LEGACY SESSION')).toBeInTheDocument();
+        expect(screen.getByText('UNSAVED CHANGES')).toBeInTheDocument();
+    });
+
+    it('shows the current session name and none when the draft matches the saved session', () => {
+        useWorkoutStore.setState({
+            savedSessions: [{
+                id: 'saved-session',
+                name: 'Saved Session',
+                nodes: [
+                    {
+                        id: 'saved-node',
+                        type: 'workout',
+                        name: 'Workout 1',
+                        config: {
+                            sets: '2',
+                            reps: '10',
+                            seconds: '3',
+                            rest: '20',
+                            myoReps: '4',
+                            myoWorkSecs: '2',
+                        },
+                        sourceWorkoutId: null,
+                        createdAt: '2026-03-01T00:00:00.000Z',
+                        updatedAt: '2026-03-01T00:00:00.000Z',
+                    },
+                ],
+                timesUsed: 0,
+                lastUsedAt: null,
+                createdAt: '2026-03-01T00:00:00.000Z',
+                updatedAt: '2026-03-01T00:00:00.000Z',
+            }],
+            editingSessionId: 'saved-session',
+            editingSessionDraft: {
+                id: 'saved-session',
+                name: 'Saved Session',
+                nodes: [
+                    {
+                        id: 'saved-node',
+                        type: 'workout',
+                        name: 'Workout 1',
+                        config: {
+                            sets: '2',
+                            reps: '10',
+                            seconds: '3',
+                            rest: '20',
+                            myoReps: '4',
+                            myoWorkSecs: '2',
+                        },
+                        sourceWorkoutId: null,
+                        createdAt: '2026-03-01T00:00:00.000Z',
+                        updatedAt: '2026-03-01T00:00:00.000Z',
+                    },
+                ],
+                timesUsed: 0,
+                lastUsedAt: null,
+                createdAt: '2026-03-01T00:00:00.000Z',
+                updatedAt: '2026-03-01T00:00:00.000Z',
+            },
+        });
+
+        render(<SessionBuilder />);
+
+        expect(screen.getByText('SAVED SESSION')).toBeInTheDocument();
+        expect(screen.queryByText(/none/i)).not.toBeInTheDocument();
     });
 
     it('shows a builder dialog error when creating a session without a name', () => {
         render(<SessionBuilder />);
 
-        fireEvent.click(screen.getByRole('button', { name: /^new$/i }));
+        fireEvent.click(screen.getByRole('button', { name: /^new session$/i }));
         const dialog = screen.getByRole('dialog', { name: /create a new session/i });
         fireEvent.change(within(dialog).getByLabelText(/session name/i), { target: { value: '' } });
         fireEvent.click(within(dialog).getByRole('button', { name: /create session/i }));
@@ -242,6 +308,80 @@ describe('SessionBuilder', () => {
         expect(board).toHaveStyle({ transform: 'translate3d(72px, 58px, 0)' });
     });
 
+    it('resets the mobile canvas position when a different session draft is loaded', async () => {
+        setMobileViewport(true);
+        resetStore();
+
+        useWorkoutStore.setState({
+            editingSessionId: 'session-a',
+            editingSessionDraft: {
+                id: 'session-a',
+                name: 'Long Session',
+                nodes: [
+                    {
+                        id: 'node-a',
+                        type: 'workout',
+                        name: 'Workout 1',
+                        config: {
+                            sets: '2',
+                            reps: '10',
+                            seconds: '3',
+                            rest: '20',
+                            myoReps: '4',
+                            myoWorkSecs: '2',
+                        },
+                        sourceWorkoutId: null,
+                        createdAt: '2026-03-01T00:00:00.000Z',
+                        updatedAt: '2026-03-01T00:00:00.000Z',
+                    },
+                ],
+                timesUsed: 0,
+                lastUsedAt: null,
+                createdAt: '2026-03-01T00:00:00.000Z',
+                updatedAt: '2026-03-01T00:00:00.000Z',
+            },
+        });
+
+        render(<SessionBuilder />);
+
+        const viewport = screen.getByTestId('session-canvas-viewport');
+        const board = screen.getByTestId('session-canvas-board');
+
+        fireEvent.pointerDown(board, { pointerId: 1, clientX: 120, clientY: 120 });
+        fireEvent.pointerMove(viewport, { pointerId: 1, clientX: 164, clientY: 150 });
+        fireEvent.pointerUp(viewport, { pointerId: 1, clientX: 164, clientY: 150 });
+
+        expect(board).toHaveStyle({ transform: 'translate3d(72px, 58px, 0)' });
+
+        act(() => {
+            useWorkoutStore.setState({
+                editingSessionId: 'session-b',
+                editingSessionDraft: {
+                    id: 'session-b',
+                    name: 'Short Session',
+                    nodes: [
+                        {
+                            id: 'node-b',
+                            type: 'rest',
+                            name: 'Rest 1',
+                            seconds: '45',
+                            createdAt: '2026-03-01T00:00:00.000Z',
+                            updatedAt: '2026-03-01T00:00:00.000Z',
+                        },
+                    ],
+                    timesUsed: 0,
+                    lastUsedAt: null,
+                    createdAt: '2026-03-01T00:00:00.000Z',
+                    updatedAt: '2026-03-01T00:00:00.000Z',
+                },
+            });
+        });
+
+        await waitFor(() => {
+            expect(board).toHaveStyle({ transform: 'translate3d(28px, 28px, 0)' });
+        });
+    });
+
     it('keeps the mobile empty canvas clean without instructional copy', () => {
         setMobileViewport(true);
         resetStore();
@@ -256,7 +396,7 @@ describe('SessionBuilder', () => {
     it('closes builder dialogs from the backdrop', () => {
         render(<SessionBuilder />);
 
-        fireEvent.click(screen.getByRole('button', { name: /^new$/i }));
+        fireEvent.click(screen.getByRole('button', { name: /^new session$/i }));
         const dialog = screen.getByRole('dialog', { name: /create a new session/i });
 
         fireEvent.pointerDown(dialog, { target: dialog });
@@ -271,7 +411,7 @@ describe('SessionBuilder', () => {
 
         render(<SessionBuilder />);
 
-        fireEvent.click(screen.getByRole('button', { name: /^new$/i }));
+        fireEvent.click(screen.getByRole('button', { name: /^new session$/i }));
         const dialog = screen.getByRole('dialog', { name: /create a new session/i });
         fireEvent.change(within(dialog).getByLabelText(/session name/i), { target: { value: 'No Link Session' } });
         fireEvent.click(within(dialog).getByRole('button', { name: /create session/i }));
@@ -300,7 +440,7 @@ describe('SessionBuilder', () => {
 
         render(<SessionBuilder />);
 
-        fireEvent.click(screen.getByRole('button', { name: /^new$/i }));
+        fireEvent.click(screen.getByRole('button', { name: /^new session$/i }));
         const dialog = screen.getByRole('dialog', { name: /create a new session/i });
         fireEvent.change(within(dialog).getByLabelText(/session name/i), { target: { value: 'Broken Session' } });
         fireEvent.click(within(dialog).getByRole('button', { name: /create session/i }));
@@ -327,7 +467,7 @@ describe('SessionBuilder', () => {
     it('shows a create-session error when the dialog is submitted without a valid name', () => {
         render(<SessionBuilder />);
 
-        fireEvent.click(screen.getByRole('button', { name: /^new$/i }));
+        fireEvent.click(screen.getByRole('button', { name: /^new session$/i }));
         const dialog = screen.getByRole('dialog', { name: /create a new session/i });
         fireEvent.change(within(dialog).getByLabelText(/session name/i), { target: { value: '' } });
         fireEvent.click(within(dialog).getByRole('button', { name: /create session/i }));
@@ -477,7 +617,7 @@ describe('SessionBuilder', () => {
 
         render(<SessionBuilder />);
 
-        fireEvent.click(screen.getByRole('button', { name: /^new$/i }));
+        fireEvent.click(screen.getByRole('button', { name: /^new session$/i }));
         const dialog = screen.getByRole('dialog', { name: /create a new session/i });
         fireEvent.change(within(dialog).getByLabelText(/session name/i), { target: { value: 'Broken Session' } });
         fireEvent.click(within(dialog).getByRole('button', { name: /create session/i }));
@@ -502,11 +642,25 @@ describe('SessionBuilder', () => {
     it('builds, edits, saves, and starts a valid session', () => {
         render(<SessionBuilder />);
 
-        fireEvent.click(screen.getByRole('button', { name: /^new$/i }));
+        fireEvent.click(screen.getByRole('button', { name: /^new session$/i }));
         const createDialog = screen.getByRole('dialog', { name: /create a new session/i });
         fireEvent.change(within(createDialog).getByLabelText(/session name/i), { target: { value: 'Leg Session' } });
         fireEvent.click(within(createDialog).getByRole('button', { name: /create session/i }));
         fireEvent.click(screen.getByRole('button', { name: /^Workout$/i }));
+
+        const orderedButtons = [
+            screen.getByRole('button', { name: /^new session$/i }),
+            screen.getByRole('button', { name: /^Workout$/i }),
+            screen.getByRole('button', { name: /^Rest$/i }),
+            screen.getByRole('button', { name: /^Save$/i }),
+            screen.getByRole('button', { name: /^Save As$/i }),
+            screen.getByRole('button', { name: /^Start$/i }),
+        ];
+        for (let index = 0; index < orderedButtons.length - 1; index += 1) {
+            expect(
+                orderedButtons[index].compareDocumentPosition(orderedButtons[index + 1]) & Node.DOCUMENT_POSITION_FOLLOWING,
+            ).toBeTruthy();
+        }
 
         expect(screen.getByText(/1 node in the chain/i)).toBeInTheDocument();
         expect(screen.getByText('Workout 1')).toBeInTheDocument();
@@ -711,7 +865,7 @@ describe('SessionBuilder', () => {
     it('reorders nodes when dropping a dragged node onto a middle node', () => {
         render(<SessionBuilder />);
 
-        fireEvent.click(screen.getByRole('button', { name: /^new$/i }));
+        fireEvent.click(screen.getByRole('button', { name: /^new session$/i }));
         fireEvent.change(screen.getByLabelText(/session name/i), { target: { value: 'Drag Session' } });
         fireEvent.click(screen.getByRole('button', { name: /create session/i }));
         fireEvent.click(screen.getByRole('button', { name: /^Workout$/i }));
@@ -756,7 +910,7 @@ describe('SessionBuilder', () => {
     it('supports touch-friendly node movement controls', () => {
         render(<SessionBuilder />);
 
-        fireEvent.click(screen.getByRole('button', { name: /^new$/i }));
+        fireEvent.click(screen.getByRole('button', { name: /^new session$/i }));
         fireEvent.change(screen.getByLabelText(/session name/i), { target: { value: 'Touch Session' } });
         fireEvent.click(screen.getByRole('button', { name: /create session/i }));
         fireEvent.click(screen.getByRole('button', { name: /^Workout$/i }));

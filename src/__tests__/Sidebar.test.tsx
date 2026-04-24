@@ -2,7 +2,9 @@ import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import Sidebar from '@/components/Sidebar';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
+import type { SidebarProps } from '@/components/Sidebar';
 import type { AccountSnapshot } from '@/types/account';
+import type { SavedLibraryImportSummary } from '@/types/savedLibrary';
 import { SavedWorkout } from '@/types/savedWorkouts';
 import { SavedSession } from '@/types/savedSessions';
 
@@ -63,8 +65,8 @@ const baseProps = {
     onLoadWorkout: vi.fn(),
     onRenameWorkout: vi.fn(),
     onDeleteWorkout: vi.fn(),
-    onExportWorkouts: vi.fn(),
-    onImportWorkouts: vi.fn(),
+    onExportLibrary: vi.fn(),
+    onImportLibrary: vi.fn(),
     importSummary: null,
     clearImportSummary: vi.fn(),
     savedSessions: [baseSession],
@@ -91,6 +93,7 @@ const guestAccount: AccountSnapshot = {
     entitlement: null,
     syncStatus: 'disabled',
     error: null,
+    requiresPasswordReset: false,
 };
 
 const signedInFreeAccount: AccountSnapshot = {
@@ -104,6 +107,7 @@ const signedInFreeAccount: AccountSnapshot = {
     } as AccountSnapshot['session'],
     profile: {
         userId: 'user-1',
+        username: 'athlete_one',
         email: 'athlete@example.com',
         displayName: 'Athlete One',
         createdAt: '2026-03-01T00:00:00.000Z',
@@ -118,6 +122,7 @@ const signedInFreeAccount: AccountSnapshot = {
     },
     syncStatus: 'disabled',
     error: null,
+    requiresPasswordReset: false,
 };
 
 const signedInPlusAccount: AccountSnapshot = {
@@ -148,6 +153,7 @@ const bootstrappingAccount: AccountSnapshot = {
     entitlement: null,
     syncStatus: 'syncing',
     error: null,
+    requiresPasswordReset: false,
 };
 
 const disabledAccount: AccountSnapshot = {
@@ -155,7 +161,7 @@ const disabledAccount: AccountSnapshot = {
     bootstrapStatus: 'disabled',
 };
 
-const renderMobileSidebar = (props: Partial<typeof baseProps> = {}) => {
+const renderMobileSidebar = (props: Partial<SidebarProps> = {}) => {
     return render(
         <Sidebar
             {...baseProps}
@@ -194,21 +200,26 @@ describe('Sidebar', () => {
 
         expect(baseProps.onSaveCurrent).toHaveBeenCalled();
         expect(baseProps.onSaveAsCurrent).toHaveBeenCalled();
-        expect(baseProps.onExportWorkouts).toHaveBeenCalled();
+        expect(baseProps.onExportLibrary).toHaveBeenCalled();
         expect(baseProps.onLoadWorkout).toHaveBeenCalledWith('w-1');
         expect(baseProps.onRenameWorkout).toHaveBeenCalledWith('w-1');
         expect(baseProps.onDeleteWorkout).toHaveBeenCalledWith('w-1');
     });
 
     it('disables setup-only actions during timer mode and handles file import', async () => {
-        const onImportWorkouts = vi.fn();
+        const onImportLibrary = vi.fn();
+        const importSummary: SavedLibraryImportSummary = {
+            workouts: { imported: 1, renamed: 0, skipped: 0 },
+            sessions: { imported: 0, renamed: 0, skipped: 0 },
+            errors: [],
+        };
 
         render(
             <Sidebar
                 {...baseProps}
                 appPhase="timer"
-                onImportWorkouts={onImportWorkouts}
-                importSummary={{ imported: 1, renamed: 0, skipped: 0, errors: [] }}
+                onImportLibrary={onImportLibrary}
+                importSummary={importSummary}
                 savedSessions={[]}
             />,
         );
@@ -225,10 +236,10 @@ describe('Sidebar', () => {
         fireEvent.change(fileInput, { target: { files: [file] } });
 
         await waitFor(() => {
-            expect(onImportWorkouts).toHaveBeenCalled();
+            expect(onImportLibrary).toHaveBeenCalled();
         });
 
-        expect(screen.getByText(/Imported 1/i)).toBeInTheDocument();
+        expect(screen.getByText(/Workouts: 1 imported/i)).toBeInTheDocument();
     });
 
     it('renders collapsed mode', () => {
@@ -247,79 +258,166 @@ describe('Sidebar', () => {
         expect(document.querySelector('input[type="file"]')).toBeNull();
     });
 
-    it('renders a guest account card and sends a magic link', async () => {
-        const onSendMagicLink = vi.fn().mockResolvedValue({
-            ok: true,
-            message: 'Magic link sent to athlete@example.com.',
-        });
-
-        render(
-            <Sidebar
-                {...baseProps}
-                account={guestAccount}
-                onSendMagicLink={onSendMagicLink}
-            />,
-        );
-
-        expect(screen.getByText(/sign in for cloud sync/i)).toBeInTheDocument();
-        fireEvent.change(screen.getByLabelText(/email/i), {
-            target: { value: 'athlete@example.com' },
-        });
-        fireEvent.click(screen.getByRole('button', { name: /send magic link/i }));
-
-        await waitFor(() => {
-            expect(onSendMagicLink).toHaveBeenCalledWith('athlete@example.com');
-        });
-        expect(screen.getByText(/magic link sent to athlete@example.com/i)).toBeInTheDocument();
-    });
-
-    it('shows guest email validation feedback before sending a magic link', async () => {
-        const onSendMagicLink = vi.fn();
-
-        render(
-            <Sidebar
-                {...baseProps}
-                account={guestAccount}
-                onSendMagicLink={onSendMagicLink}
-            />,
-        );
-
-        fireEvent.change(screen.getByLabelText(/email/i), {
-            target: { value: 'not-an-email' },
-        });
-        fireEvent.click(screen.getByRole('button', { name: /send magic link/i }));
-
-        await waitFor(() => {
-            expect(screen.getByText(/enter a valid email address/i)).toBeInTheDocument();
-        });
-        expect(onSendMagicLink).not.toHaveBeenCalled();
-    });
-
-    it('keeps the guest account card readable in the narrow mobile drawer', async () => {
-        const onSendMagicLink = vi.fn().mockResolvedValue({
-            ok: true,
-            message: 'Magic link sent to athlete@example.com.',
-        });
-
+    it('keeps the guest account card readable in the narrow mobile drawer', () => {
         renderMobileSidebar({
             account: guestAccount,
-            onSendMagicLink,
+            onResendSignUpConfirmation: vi.fn(),
         });
 
         const sidebar = screen.getByRole('complementary', { name: /sidebar/i });
         expect(sidebar.className).toContain('w-[min(22rem,calc(100vw-1rem))]');
         expect(screen.getByText(/sign in for cloud sync/i)).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /send magic link/i })).toBeInTheDocument();
+        expect(screen.getByText(/^information$/i)).toBeInTheDocument();
+        expect(screen.queryByText(/library \/ mobile drawer/i)).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /sign in with password/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /resend confirmation link/i })).toBeInTheDocument();
+    });
+
+    it('supports password sign-in as the default guest flow', async () => {
+        const onSignInWithPassword = vi.fn().mockResolvedValue({
+            ok: true,
+            message: 'Signed in with password.',
+        });
+
+        render(
+            <Sidebar
+                {...baseProps}
+                account={guestAccount}
+                onSignInWithPassword={onSignInWithPassword}
+            />,
+        );
+
+        expect(screen.getByRole('button', { name: /sign in with password/i })).toBeInTheDocument();
+        fireEvent.change(screen.getByLabelText(/email/i), {
+            target: { value: 'athlete@example.com' },
+        });
+        fireEvent.change(screen.getByLabelText(/^password$/i), {
+            target: { value: 'very-secure-pass' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: /sign in with password/i }));
+
+        await waitFor(() => {
+            expect(onSignInWithPassword).toHaveBeenCalledWith('athlete@example.com', 'very-secure-pass');
+        });
+        expect(screen.getByText(/signed in with password/i)).toBeInTheDocument();
+    });
+
+    it('supports password sign-up and shows confirmation-link success messaging', async () => {
+        const onSignUpWithPassword = vi.fn().mockResolvedValue({
+            ok: true,
+            message: 'Account created. Check your email for the confirmation magic link before signing in with your password.',
+        });
+
+        render(
+            <Sidebar
+                {...baseProps}
+                account={guestAccount}
+                onSignUpWithPassword={onSignUpWithPassword}
+            />,
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: /^create$/i }));
+        fireEvent.change(screen.getByLabelText(/username/i), {
+            target: { value: 'athlete_one' },
+        });
+        fireEvent.change(screen.getByLabelText(/email/i), {
+            target: { value: 'athlete@example.com' },
+        });
+        fireEvent.change(screen.getByLabelText(/^password$/i), {
+            target: { value: 'very-secure-pass' },
+        });
+        fireEvent.change(screen.getByLabelText(/confirm password/i), {
+            target: { value: 'very-secure-pass' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: /create account/i }));
+
+        await waitFor(() => {
+            expect(onSignUpWithPassword).toHaveBeenCalledWith('athlete_one', 'athlete@example.com', 'very-secure-pass');
+        });
+        expect(screen.getByText(/check your email for the confirmation magic link/i)).toBeInTheDocument();
+    });
+
+    it('resends the signup confirmation link from the guest account card', async () => {
+        const onResendSignUpConfirmation = vi.fn().mockResolvedValue({
+            ok: true,
+            message: 'Confirmation magic link sent to athlete@example.com.',
+        });
+
+        render(
+            <Sidebar
+                {...baseProps}
+                account={guestAccount}
+                onResendSignUpConfirmation={onResendSignUpConfirmation}
+            />,
+        );
 
         fireEvent.change(screen.getByLabelText(/email/i), {
             target: { value: 'athlete@example.com' },
         });
-        fireEvent.click(screen.getByRole('button', { name: /send magic link/i }));
+        fireEvent.click(screen.getByRole('button', { name: /resend confirmation link/i }));
 
         await waitFor(() => {
-            expect(onSendMagicLink).toHaveBeenCalledWith('athlete@example.com');
+            expect(onResendSignUpConfirmation).toHaveBeenCalledWith('athlete@example.com');
         });
-        expect(screen.getByText(/magic link sent to athlete@example.com/i)).toBeInTheDocument();
+        expect(screen.getByText(/confirmation magic link sent to athlete@example.com/i)).toBeInTheDocument();
+    });
+
+    it('supports forgot-password as a fallback auth path', async () => {
+        const onSendPasswordReset = vi.fn().mockResolvedValue({
+            ok: true,
+            message: 'Password reset sent to athlete@example.com.',
+        });
+
+        render(
+            <Sidebar
+                {...baseProps}
+                account={guestAccount}
+                onSendPasswordReset={onSendPasswordReset}
+            />,
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: /forgot password/i }));
+        fireEvent.change(screen.getByLabelText(/email/i), {
+            target: { value: 'athlete@example.com' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: /send reset email/i }));
+
+        await waitFor(() => {
+            expect(onSendPasswordReset).toHaveBeenCalledWith('athlete@example.com');
+        });
+        expect(screen.getByText(/password reset sent to athlete@example.com/i)).toBeInTheDocument();
+    });
+
+    it('shows the password recovery form when recovery mode is active', async () => {
+        const onUpdatePassword = vi.fn().mockResolvedValue({
+            ok: true,
+            message: 'Password updated.',
+        });
+
+        render(
+            <Sidebar
+                {...baseProps}
+                account={{
+                    ...guestAccount,
+                    requiresPasswordReset: true,
+                }}
+                onUpdatePassword={onUpdatePassword}
+            />,
+        );
+
+        expect(screen.getByText(/^set a new password$/i)).toBeInTheDocument();
+        fireEvent.change(screen.getByLabelText(/new password/i), {
+            target: { value: 'very-secure-pass' },
+        });
+        fireEvent.change(screen.getByLabelText(/confirm password/i), {
+            target: { value: 'very-secure-pass' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: /update password/i }));
+
+        await waitFor(() => {
+            expect(onUpdatePassword).toHaveBeenCalledWith('very-secure-pass');
+        });
+        expect(screen.getByText(/password updated/i)).toBeInTheDocument();
     });
 
     it('renders a signed-in free account card and signs out without affecting other sidebar actions', async () => {
@@ -337,7 +435,9 @@ describe('Sidebar', () => {
             />,
         );
 
-        expect(screen.getByText(/athlete one/i)).toBeInTheDocument();
+        expect(screen.getByText(/@athlete_one/i)).toBeInTheDocument();
+        expect(screen.getByText(/free \| athlete@example.com/i)).toBeInTheDocument();
+        expect(screen.queryByText(/your public handle stays lowercase and unique/i)).not.toBeInTheDocument();
         expect(screen.getByText(/cloud sync locked/i)).toBeInTheDocument();
         expect(screen.getByText(/session builder is part of plus/i)).toBeInTheDocument();
         fireEvent.click(screen.getAllByRole('button', { name: /upgrade to plus/i })[0]);
@@ -395,9 +495,39 @@ describe('Sidebar', () => {
         );
 
         expect(screen.getByText(/cloud sync available/i)).toBeInTheDocument();
-        expect(screen.getAllByText(/^plus$/i).length).toBeGreaterThan(0);
+        expect(screen.getByText(/@athlete_one/i)).toBeInTheDocument();
+        expect(screen.getByText(/plus \| athlete@example.com/i)).toBeInTheDocument();
+        expect(screen.queryByText(/your public handle stays lowercase and unique/i)).not.toBeInTheDocument();
         expect(screen.getByRole('button', { name: /manage subscription/i })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /sign out/i })).toBeEnabled();
+    });
+
+    it('lets signed-in users collapse the account card while keeping guest auth expanded', () => {
+        const { rerender } = render(
+            <Sidebar
+                {...baseProps}
+                account={signedInFreeAccount}
+                isAccountCardCollapsed
+                onToggleAccountCardCollapsed={vi.fn()}
+            />,
+        );
+
+        expect(screen.getByRole('button', { name: /show/i })).toBeInTheDocument();
+        expect(screen.queryByText(/cloud sync locked/i)).not.toBeInTheDocument();
+        expect(screen.getByText(/signed in - athlete_one/i)).toBeInTheDocument();
+        expect(screen.getByText(/^free$/i)).toBeInTheDocument();
+
+        rerender(
+            <Sidebar
+                {...baseProps}
+                account={guestAccount}
+                isAccountCardCollapsed
+                onToggleAccountCardCollapsed={vi.fn()}
+            />,
+        );
+
+        expect(screen.getByText(/sign in for cloud sync/i)).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /show/i })).not.toBeInTheDocument();
     });
 
     it('renders signed-in plus and error account states clearly', () => {
@@ -410,7 +540,9 @@ describe('Sidebar', () => {
         );
 
         expect(screen.getByText(/cloud sync available/i)).toBeInTheDocument();
-        expect(screen.getAllByText(/^plus$/i).length).toBeGreaterThan(0);
+        expect(screen.getByText(/^@athlete_one$/i)).toBeInTheDocument();
+        expect(screen.getByText(/plus \| athlete@example.com/i)).toBeInTheDocument();
+        expect(screen.queryByText(/your public handle stays lowercase and unique/i)).not.toBeInTheDocument();
         expect(screen.getByRole('button', { name: /manage subscription/i })).toBeInTheDocument();
 
         rerender(
@@ -474,10 +606,10 @@ describe('Sidebar', () => {
         expect(screen.getByRole('button', { name: /^syncing$/i })).toBeDisabled();
     });
 
-    it('opens a first-sync chooser and passes the selected direction to sync actions', async () => {
-        const onEnableSync = vi.fn().mockResolvedValue({
+    it('uses the manual sync action once cloud sync is already enabled and does not open the first-sync chooser', async () => {
+        const onSyncNow = vi.fn().mockResolvedValue({
             ok: true,
-            message: 'This device uploaded its local library to cloud sync.',
+            message: 'Synced now.',
         });
 
         render(
@@ -485,8 +617,50 @@ describe('Sidebar', () => {
                 {...baseProps}
                 account={signedInPlusAccount}
                 syncSnapshot={{
-                    status: 'enable-sync',
-                    detail: 'Cloud sync is available on Plus, but it stays off until you enable it on this device.',
+                    status: 'last-synced',
+                    detail: 'Cloud sync is on for this device.',
+                    lastSyncedAt: '2026-03-02T10:00:00.000Z',
+                    isOnline: true,
+                }}
+                syncActions={{ onSyncNow }}
+                onSignOut={vi.fn()}
+            />,
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: /sync now/i }));
+
+        await waitFor(() => {
+            expect(onSyncNow).toHaveBeenCalledTimes(1);
+        });
+
+        expect(screen.queryByRole('dialog', { name: /choose first sync direction/i })).not.toBeInTheDocument();
+        expect(screen.getByText(/synced now\./i)).toBeInTheDocument();
+    });
+
+    it.each([
+        ['enable-sync', /enable sync/i, 'Cloud sync is available on Plus, but it stays off until you enable it on this device.'],
+        ['first-sync-required', /run first sync/i, 'Pick whether this device uploads its local library or replaces it with cloud data.'],
+    ])('opens a first-sync chooser when %s is the active sync state', async (status, trigger, detail) => {
+        const onEnableSync = vi.fn().mockImplementation((choice?: FirstSyncChoice) => (
+            choice
+                ? {
+                    ok: true,
+                    message: 'This device uploaded its local library to cloud sync.',
+                }
+                : {
+                    ok: false,
+                    message: 'Choose whether this device uploads its local library or replaces it with cloud data.',
+                    requiresChoice: true,
+                }
+        ));
+
+        render(
+            <Sidebar
+                {...baseProps}
+                account={signedInPlusAccount}
+                syncSnapshot={{
+                    status: status as 'enable-sync' | 'first-sync-required',
+                    detail,
                     isOnline: true,
                 }}
                 syncActions={{ onEnableSync }}
@@ -494,15 +668,37 @@ describe('Sidebar', () => {
             />,
         );
 
-        fireEvent.click(screen.getByRole('button', { name: /enable sync/i }));
-        expect(screen.getByRole('dialog', { name: /choose first sync direction/i })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: trigger }));
+        await waitFor(() => {
+            expect(screen.getByRole('dialog', { name: /choose first sync direction/i })).toBeInTheDocument();
+        });
 
-        fireEvent.click(screen.getByRole('button', { name: /upload this device to cloud/i }));
+        fireEvent.click(screen.getByRole('button', { name: /upload local to cloud/i }));
 
         await waitFor(() => {
             expect(onEnableSync).toHaveBeenCalledWith('upload-local');
         });
         expect(screen.getByText(/uploaded its local library to cloud sync/i)).toBeInTheDocument();
+    });
+
+    it('keeps empty enable states chooser-free when sync can resolve without a first-sync decision', () => {
+        render(
+            <Sidebar
+                {...baseProps}
+                account={signedInPlusAccount}
+                syncSnapshot={{
+                    status: 'sync-available',
+                    detail: 'Cloud sync is available and ready to switch on.',
+                    isOnline: true,
+                }}
+                syncActions={{ onEnableSync: vi.fn() }}
+                onSignOut={vi.fn()}
+            />,
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: /enable sync/i }));
+
+        expect(screen.queryByRole('dialog', { name: /choose first sync direction/i })).not.toBeInTheDocument();
     });
 
     it('confirms turning sync off before calling the disable action', async () => {

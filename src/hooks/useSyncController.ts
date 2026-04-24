@@ -37,18 +37,43 @@ const getErrorMessage = (error: unknown): string => {
     return 'Cloud sync failed.';
 };
 
+const hasLocalLibraryData = (workouts: SavedWorkout[], sessions: SavedSession[]): boolean => {
+    return workouts.length > 0 || sessions.length > 0;
+};
+
+const resolveFirstSyncChoice = (params: {
+    localHasData: boolean;
+    remoteHasData: boolean;
+    choice?: FirstSyncChoice;
+}): FirstSyncChoice | null => {
+    const { localHasData, remoteHasData, choice } = params;
+
+    if (localHasData && !remoteHasData) {
+        return 'upload-local';
+    }
+
+    if (!localHasData && remoteHasData) {
+        return 'replace-local';
+    }
+
+    if (!localHasData && !remoteHasData) {
+        return 'upload-local';
+    }
+
+    return choice ?? null;
+};
+
 export const useSyncController = (params: {
     account: AccountSnapshot;
     savedWorkouts: SavedWorkout[];
     savedSessions: SavedSession[];
-    sendMagicLink: (email: string) => Promise<AccountActionResult>;
 }): {
     visibleWorkouts: SavedWorkout[];
     visibleSessions: SavedSession[];
     syncSnapshot?: AccountSyncSnapshot;
     syncActions?: AccountSyncActions;
 } => {
-    const { account, savedWorkouts, savedSessions, sendMagicLink } = params;
+    const { account, savedWorkouts, savedSessions } = params;
     const client = getSupabaseClient();
     const [isOnline, setIsOnline] = useState(() => (
         typeof navigator === 'undefined' ? true : navigator.onLine
@@ -166,7 +191,7 @@ export const useSyncController = (params: {
         return () => window.clearTimeout(timeoutId);
     }, [queuedOperations, retryClock]);
 
-    const runFirstSync = useCallback(async (choice: FirstSyncChoice): Promise<AccountActionResult> => {
+    const runFirstSync = useCallback(async (choice?: FirstSyncChoice): Promise<AccountActionResult> => {
         if (!client || !userId || !canUseCloudSync) {
             return { ok: false, message: 'Cloud sync is only available for signed-in Plus users.' };
         }
@@ -182,10 +207,26 @@ export const useSyncController = (params: {
 
         try {
             const presence = await inspectRemoteSyncPresence(client, userId);
-            beginEnableSync(backup, presence.hasData);
-            markFirstSyncProcessing(choice);
+            const localHasData = hasLocalLibraryData(visibleWorkouts, visibleSessions);
+            const effectiveChoice = resolveFirstSyncChoice({
+                localHasData,
+                remoteHasData: presence.hasData,
+                choice,
+            });
 
-            if (choice === 'replace-local') {
+            beginEnableSync(backup, presence.hasData);
+
+            if (!effectiveChoice) {
+                return {
+                    ok: false,
+                    message: 'Choose whether this device uploads its local library or replaces it with cloud data.',
+                    requiresChoice: true,
+                };
+            }
+
+            markFirstSyncProcessing(effectiveChoice);
+
+            if (effectiveChoice === 'replace-local') {
                 const snapshot = await fetchRemoteLibrarySnapshot(client, userId);
                 replaceLibrariesFromSync(snapshot);
             } else {
@@ -197,7 +238,7 @@ export const useSyncController = (params: {
             clearQueueError();
             return {
                 ok: true,
-                message: choice === 'replace-local'
+                message: effectiveChoice === 'replace-local'
                     ? 'This device now matches your cloud library.'
                     : 'This device uploaded its local library to cloud sync.',
             };
@@ -292,21 +333,6 @@ export const useSyncController = (params: {
         markQueuePending();
         return { ok: true, message: 'Cloud sync resumed.' };
     }, [clearQueueError, markQueuePending]);
-
-    const reauthenticate = useCallback(async (): Promise<AccountActionResult> => {
-        const email = account.profile?.email ?? account.session?.user.email ?? '';
-        if (!email) {
-            return { ok: false, message: 'No email is available for this account.' };
-        }
-
-        const result = await sendMagicLink(email);
-        if (!result.ok) {
-            return { ok: false, message: result.message };
-        }
-
-        clearQueueError();
-        return { ok: true, message: result.message };
-    }, [account.profile?.email, account.session?.user.email, clearQueueError, sendMagicLink]);
 
     const turnSyncOff = useCallback(async (): Promise<AccountActionResult> => {
         if (!syncEnabled) {
@@ -546,10 +572,9 @@ export const useSyncController = (params: {
             onSyncNow: syncNow,
             onRetrySync: retrySync,
             onResumeSync: resumeSync,
-            onReauthenticate: reauthenticate,
             onDisableSync: turnSyncOff,
         };
-    }, [canUseCloudSync, reauthenticate, retrySync, resumeSync, runFirstSync, syncNow, turnSyncOff]);
+    }, [canUseCloudSync, retrySync, resumeSync, runFirstSync, syncNow, turnSyncOff]);
 
     return {
         visibleWorkouts,

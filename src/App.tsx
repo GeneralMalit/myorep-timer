@@ -11,6 +11,9 @@ import SessionBuilder from '@/components/SessionBuilder';
 import SetupModeToggle from '@/components/SetupModeToggle';
 import SupabaseBootstrap from '@/components/SupabaseBootstrap';
 import SupabaseStatusPill from '@/components/SupabaseStatusPill';
+import { getResponsiveLayout } from '@/layout';
+import { appShellMobile } from '@/layout/appShell.mobile';
+import { appShellDesktop } from '@/layout/appShell.desktop';
 import { useSyncController } from '@/hooks/useSyncController';
 import { Capacitor } from '@capacitor/core';
 import {
@@ -20,7 +23,16 @@ import {
 } from '@/lib/billing';
 import { initializePaddleCheckoutFromQuery } from '@/lib/paddle';
 import { getSupabaseAuthRedirectUrl, getSupabaseClient } from '@/lib/supabase';
-import { sendSupabaseMagicLink, signOutSupabase } from '@/lib/supabaseAccount';
+import {
+    loadSupabaseAccountState,
+    resendSupabaseSignUpConfirmation,
+    sendSupabasePasswordReset,
+    signInSupabaseWithPassword,
+    signOutSupabase,
+    signUpSupabaseWithPassword,
+    updateSupabaseUsername,
+    updateSupabasePassword,
+} from '@/lib/supabaseAccount';
 import { Play, Square, RotateCcw, ChevronRight, Zap, Activity, Volume2, Menu, Settings2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -66,9 +78,13 @@ interface AppDialogProps {
     onChangeValue: (value: string) => void;
     onClose: () => void;
     onConfirm: () => void;
+    layout: {
+        dialogOverlay: string;
+        dialogPanel: string;
+    };
 }
 
-const AppDialog = ({ state, value, onChangeValue, onClose, onConfirm }: AppDialogProps) => {
+const AppDialog = ({ state, value, onChangeValue, onClose, onConfirm, layout }: AppDialogProps) => {
     if (!state) {
         return null;
     }
@@ -81,14 +97,14 @@ const AppDialog = ({ state, value, onChangeValue, onClose, onConfirm }: AppDialo
             role="dialog"
             aria-modal="true"
             aria-label={state.title}
-            className="fixed inset-0 z-[120] flex items-end justify-center bg-black/75 px-[max(1rem,var(--safe-left))] py-[max(1rem,var(--safe-bottom))] backdrop-blur-sm sm:items-center sm:px-4 sm:py-6"
+            className={layout.dialogOverlay}
             onPointerDown={(event) => {
                 if (event.target === event.currentTarget) {
                     onClose();
                 }
             }}
         >
-            <div className="max-h-[calc(var(--viewport-dynamic)-var(--safe-top)-var(--safe-bottom)-1rem)] w-full max-w-md overflow-y-auto rounded-[28px] border border-border/60 bg-background/95 p-5 shadow-[0_24px_90px_rgba(0,0,0,0.45)] scroll-contain-y sm:p-6">
+            <div className={layout.dialogPanel}>
                 <div className="space-y-2">
                     <div className="text-[11px] font-black uppercase tracking-[0.32em] text-primary">
                         {isPrompt ? 'Name Action' : isMessage ? 'Status' : 'Confirm Action'}
@@ -143,10 +159,10 @@ export default function App() {
         appPhase, timerStatus, isTimerRunning, setIsTimerRunning,
         currentSet, currentRep, isMainRep, isWorking, timeLeft, setTotalDuration, setElapsedTime,
         startWorkout, resetWorkout, advanceCycle, updateTimerBaselines,
-        saveCurrentWorkout, saveCurrentWorkoutAs, loadWorkout, renameWorkout, deleteWorkout, exportSavedWorkouts, importSavedWorkouts, clearImportSummary,
+        saveCurrentWorkout, saveCurrentWorkoutAs, loadWorkout, renameWorkout, deleteWorkout, exportSavedLibrary, importSavedLibrary, clearImportSummary,
         createSession, loadSessionForEditing, duplicateSession, renameSession, deleteSession,
         setupMode, setSetupMode, showSettings, setShowSettings, setSettings,
-        isSidebarCollapsed, setIsSidebarCollapsed, theme, setTheme
+        isSidebarCollapsed, setIsSidebarCollapsed, isAccountCardCollapsed, setIsAccountCardCollapsed, theme, setTheme
     } = useWorkoutStore();
     const {
         applyAccountState,
@@ -157,6 +173,8 @@ export default function App() {
         entitlement,
         syncStatus,
         error,
+        requiresPasswordReset,
+        setPasswordRecoveryMode,
     } = useAccountStore();
     const [showProtocolIntel, setShowProtocolIntel] = useState(false);
     const [isMobileViewport, setIsMobileViewport] = useState(false);
@@ -178,6 +196,7 @@ export default function App() {
     const isSessionSetup = appPhase === 'setup' && setupMode === 'session' && canUseSessionBuilder;
     const isPreparing = timerStatus === 'Preparing';
     const isSidebarOpen = !isSidebarCollapsed;
+    const appShellLayout = getResponsiveLayout(isMobileViewport, appShellMobile, appShellDesktop);
     const account = useMemo<AccountSnapshot>(() => ({
         bootstrapStatus,
         mode,
@@ -186,7 +205,8 @@ export default function App() {
         entitlement,
         syncStatus,
         error,
-    }), [bootstrapStatus, entitlement, error, mode, profile, session, syncStatus]);
+        requiresPasswordReset,
+    }), [bootstrapStatus, entitlement, error, mode, profile, requiresPasswordReset, session, syncStatus]);
     useEffect(() => {
         if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
         const mediaQuery = window.matchMedia('(max-width: 767px)');
@@ -431,18 +451,18 @@ export default function App() {
             onConfirm: () => deleteWorkout(id),
         });
     }, [deleteWorkout, openConfirmDialog, savedWorkouts]);
-    const handleExportWorkouts = useCallback(() => {
-        const payload = exportSavedWorkouts();
+    const handleExportLibrary = useCallback(() => {
+        const payload = exportSavedLibrary();
         const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const anchor = document.createElement('a');
         anchor.href = url;
-        anchor.download = `myorep-workouts-${new Date().toISOString().slice(0, 10)}.json`;
+        anchor.download = `myorep-library-${new Date().toISOString().slice(0, 10)}.json`;
         document.body.appendChild(anchor);
         anchor.click();
         anchor.remove();
         URL.revokeObjectURL(url);
-    }, [exportSavedWorkouts]);
+    }, [exportSavedLibrary]);
     const handleUpgradeToPlus = useCallback(async (): Promise<AccountActionResult> => {
         if (account.mode === 'guest') {
             setIsSidebarCollapsed(false);
@@ -582,27 +602,6 @@ export default function App() {
 
         setSetupMode(nextMode);
     }, [canUseSessionBuilder, handleSessionBuilderLocked, setSetupMode]);
-    const handleSendMagicLink = useCallback(async (email: string): Promise<AccountActionResult> => {
-        const client = getSupabaseClient();
-        if (!client) {
-            return { ok: false, message: 'Supabase is not configured for this build.' };
-        }
-
-        const normalizedEmail = email.trim();
-        const result = await sendSupabaseMagicLink(
-            client,
-            normalizedEmail,
-            getSupabaseAuthRedirectUrl({
-                native: Capacitor.isNativePlatform(),
-                origin: window.location.origin,
-            }),
-        );
-        if (!result.ok) {
-            return { ok: false, message: result.error ?? 'Could not send magic link.' };
-        }
-
-        return { ok: true, message: `Magic link sent to ${normalizedEmail}.` };
-    }, []);
     const handleSignOut = useCallback(async (): Promise<AccountActionResult> => {
         const client = getSupabaseClient();
         if (!client) {
@@ -616,6 +615,119 @@ export default function App() {
 
         return { ok: true, message: 'Signed out.' };
     }, []);
+    const handleSignInWithPassword = useCallback(async (email: string, password: string): Promise<AccountActionResult> => {
+        const client = getSupabaseClient();
+        if (!client) {
+            return { ok: false, message: 'Supabase is not configured for this build.' };
+        }
+
+        const result = await signInSupabaseWithPassword(client, email, password);
+        if (!result.ok) {
+            return { ok: false, message: result.error ?? 'Could not sign in with password.' };
+        }
+
+        return { ok: true, message: 'Signed in with password.' };
+    }, []);
+    const handleSignUpWithPassword = useCallback(async (username: string, email: string, password: string) => {
+        const client = getSupabaseClient();
+        if (!client) {
+            return { ok: false, message: 'Supabase is not configured for this build.' };
+        }
+
+        const redirectTo = getSupabaseAuthRedirectUrl({
+            native: Capacitor.isNativePlatform(),
+            origin: typeof window !== 'undefined' ? window.location.origin : null,
+        });
+
+        const result = await signUpSupabaseWithPassword(
+            client,
+            username,
+            email.trim(),
+            password,
+            redirectTo,
+        );
+        if (!result.ok) {
+            return { ok: false, message: result.error ?? 'Could not create your account.' };
+        }
+
+        return {
+            ok: true,
+            message: result.requiresEmailVerification
+                ? 'Account created. Check your email for the confirmation magic link before signing in with your password.'
+                : 'Account created successfully.',
+        };
+    }, []);
+    const handleResendSignUpConfirmation = useCallback(async (email: string): Promise<AccountActionResult> => {
+        const client = getSupabaseClient();
+        if (!client) {
+            return { ok: false, message: 'Supabase is not configured for this build.' };
+        }
+
+        const redirectTo = getSupabaseAuthRedirectUrl({
+            native: Capacitor.isNativePlatform(),
+            origin: typeof window !== 'undefined' ? window.location.origin : null,
+        });
+        const result = await resendSupabaseSignUpConfirmation(client, email, redirectTo);
+        if (!result.ok) {
+            return { ok: false, message: result.error ?? 'Could not resend the confirmation email.' };
+        }
+
+        return { ok: true, message: `Confirmation magic link sent to ${email}.` };
+    }, []);
+    const handleUpdateUsername = useCallback(async (username: string): Promise<AccountActionResult> => {
+        const client = getSupabaseClient();
+        if (!client) {
+            return { ok: false, message: 'Supabase is not configured for this build.' };
+        }
+
+        if (!session) {
+            return { ok: false, message: 'Sign in first to update your username.' };
+        }
+
+        const result = await updateSupabaseUsername(session, username);
+        if (!result.ok) {
+            return { ok: false, message: result.error ?? 'Could not update your username.' };
+        }
+
+        const resolved = await loadSupabaseAccountState(client, session);
+        applyAccountState(resolved);
+        return { ok: true, message: 'Username updated.' };
+    }, [applyAccountState, session]);
+    const handleSendPasswordReset = useCallback(async (email: string): Promise<AccountActionResult> => {
+        const client = getSupabaseClient();
+        if (!client) {
+            return { ok: false, message: 'Supabase is not configured for this build.' };
+        }
+
+        const normalizedEmail = email.trim();
+        const result = await sendSupabasePasswordReset(
+            client,
+            normalizedEmail,
+            getSupabaseAuthRedirectUrl({
+                native: Capacitor.isNativePlatform(),
+                origin: window.location.origin,
+            }),
+        );
+        if (!result.ok) {
+            return { ok: false, message: result.error ?? 'Could not send password reset email.' };
+        }
+
+        return { ok: true, message: `Password reset sent to ${normalizedEmail}.` };
+    }, []);
+    const handleUpdatePassword = useCallback(async (password: string): Promise<AccountActionResult> => {
+        const client = getSupabaseClient();
+        if (!client) {
+            return { ok: false, message: 'Supabase is not configured for this build.' };
+        }
+
+        const result = await updateSupabasePassword(client, password);
+        if (!result.ok) {
+            return { ok: false, message: result.error ?? 'Could not update your password.' };
+        }
+
+        setPasswordRecoveryMode(false);
+        return { ok: true, message: 'Password updated. You can keep using this account normally now.' };
+    }, [setPasswordRecoveryMode]);
     const {
         visibleWorkouts,
         visibleSessions,
@@ -625,7 +737,6 @@ export default function App() {
         account,
         savedWorkouts,
         savedSessions,
-        sendMagicLink: handleSendMagicLink,
     });
 
     useEffect(() => {
@@ -729,8 +840,8 @@ export default function App() {
                 onLoadWorkout={handleLoadWorkout}
                 onRenameWorkout={handleRenameWorkout}
                 onDeleteWorkout={handleDeleteWorkout}
-                onExportWorkouts={handleExportWorkouts}
-                onImportWorkouts={importSavedWorkouts}
+                onExportLibrary={handleExportLibrary}
+                onImportLibrary={importSavedLibrary}
                 importSummary={lastImportSummary}
                 clearImportSummary={clearImportSummary}
                 savedSessions={visibleSessions}
@@ -742,7 +853,14 @@ export default function App() {
                 account={account}
                 syncSnapshot={syncSnapshot}
                 syncActions={syncActions}
-                onSendMagicLink={handleSendMagicLink}
+                isAccountCardCollapsed={isAccountCardCollapsed}
+                onToggleAccountCardCollapsed={() => setIsAccountCardCollapsed(!isAccountCardCollapsed)}
+                onSignInWithPassword={handleSignInWithPassword}
+                onSignUpWithPassword={handleSignUpWithPassword}
+                onResendSignUpConfirmation={handleResendSignUpConfirmation}
+                onUpdateUsername={handleUpdateUsername}
+                onSendPasswordReset={handleSendPasswordReset}
+                onUpdatePassword={handleUpdatePassword}
                 onSignOut={handleSignOut}
                 canAccessSessionBuilder={canUseSessionBuilder}
                 onUpgradeToPlus={handleUpgradeToPlus}
@@ -753,19 +871,17 @@ export default function App() {
             <main
                 data-testid="app-main-shell"
                 className={cn(
-                    "relative overflow-x-hidden overflow-y-auto px-[max(1rem,var(--safe-left))] pb-[calc(var(--safe-bottom)+1rem)] pt-[calc(var(--safe-top)+0.75rem)] transition-[margin] duration-300 scroll-contain-y md:px-6 md:pb-0 md:pt-6",
-                    isMobileViewport ? "h-dvh-safe" : "min-h-[100dvh]",
+                    appShellLayout.mainShell,
                     isSidebarCollapsed ? "md:ml-[4.5rem]" : "md:ml-72",
                     isSessionSetup ? "md:px-10 md:pt-0" : "",
                 )}
             >
                 <div className="pointer-events-none absolute left-1/2 top-1/2 h-[32rem] w-[32rem] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-10 blur-[120px] transition-colors duration-1000" style={{ backgroundColor: timerStatus === 'Preparing' || !isWorking ? settings.restColor : settings.activeColor }} />
                 <div className={cn(
-                    "relative z-10 flex flex-col md:min-h-[calc(100dvh-3rem)]",
-                    isMobileViewport ? "min-h-full" : "min-h-[calc(100dvh-var(--safe-top)-var(--safe-bottom)-1.75rem)]",
+                    appShellLayout.contentShell,
                 )}>
                     {isMobileViewport && (
-                        <header className="mb-4 flex items-center justify-between gap-3 rounded-[1.75rem] border border-border/60 bg-card/80 px-4 py-3 shadow-lg backdrop-blur-xl md:hidden">
+                        <header className={appShellLayout.mobileHeader}>
                             <Button variant="ghost" size="icon" className="h-11 w-11 rounded-2xl" onClick={toggleSidebar} aria-label="Open Navigation"><Menu size={20} /></Button>
                             <div className="min-w-0 text-center">
                                 <div className="text-[10px] font-black uppercase tracking-[0.32em] text-primary">MyoREP</div>
@@ -783,10 +899,7 @@ export default function App() {
                             <div className="mx-auto flex w-full max-w-[1100px] flex-1 flex-col items-stretch justify-start">
                                 <div
                                     data-testid="workout-setup-shell"
-                                    className={cn(
-                                        "w-full animate-in fade-in slide-in-from-bottom-4 duration-700",
-                                        isMobileViewport ? "space-y-4 px-1 py-2" : "space-y-6 px-2 py-4 sm:px-4 sm:py-5 md:px-6 md:py-6",
-                                    )}
+                                    className={appShellLayout.workoutSetupShell}
                                 >
                                     <div className={cn("mx-auto max-w-3xl text-center", isMobileViewport ? "space-y-1.5" : "space-y-2")}>
                                         <h1 className="bg-gradient-to-br from-foreground to-foreground/50 bg-clip-text text-[clamp(2.6rem,11vw,5rem)] font-black italic tracking-tighter text-transparent">
@@ -847,10 +960,10 @@ export default function App() {
                                         ))}
                                     </div>
                                     <div className={cn(
-                                        "rounded-[24px] border border-border/60 bg-card/70",
-                                        isMobileViewport ? "flex items-center justify-between gap-3 px-4 py-3" : "flex flex-col gap-4 py-2 sm:flex-row sm:items-center sm:justify-between",
+                                        "rounded-[24px] border border-border/60 bg-card/70 p-4 sm:p-5",
+                                        isMobileViewport ? "flex items-center justify-between gap-3" : "flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between",
                                     )}>
-                                            <div className={cn("space-y-1", isMobileViewport && "min-w-0")}>
+                                            <div className={cn("space-y-1.5", isMobileViewport && "min-w-0")}>
                                                 <div className="flex items-center gap-2">
                                                     <Volume2 size={16} className="text-primary" />
                                                     <p className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground">Voice Guidance</p>
@@ -861,7 +974,7 @@ export default function App() {
                                                 )}>Toggle spoken countdowns and rep calls without opening the settings panel.</p>
                                             </div>
                                             <div className="flex items-center justify-between gap-3 sm:justify-end">
-                                                <Label htmlFor="setup-voice-guidance" className="text-xs font-black uppercase tracking-widest">Voice Guidance</Label>
+                                                <Label htmlFor="setup-voice-guidance" className="text-xs font-black uppercase tracking-widest leading-none">Voice Guidance</Label>
                                                 <Switch id="setup-voice-guidance" checked={settings.ttsEnabled} onCheckedChange={(checked) => setSettings({ ttsEnabled: checked })} aria-label="Voice Guidance" />
                                             </div>
                                     </div>
@@ -881,12 +994,7 @@ export default function App() {
                         )}>
                             <div
                                 data-testid="timer-screen-shell"
-                                className={cn(
-                                    "flex w-full max-w-5xl flex-1 flex-col items-center animate-in fade-in zoom-in-95 duration-500",
-                                    isMobileViewport
-                                        ? "justify-start space-y-4 px-1 py-2 pb-[calc(var(--safe-bottom)+1rem)]"
-                                        : "justify-center space-y-5 px-2 py-4 sm:px-4 sm:py-5 md:px-6 md:py-6",
-                                )}
+                                className={appShellLayout.timerScreenShell}
                             >
                                 {settings.fullScreenMode && (
                                     <div className="fixed inset-0 -z-10 transition-colors duration-1000" style={{ backgroundColor: timerStatus === 'Finished' ? settings.finishedColor : (timerStatus === 'Preparing' || !isWorking) ? settings.restColor : (timeLeft <= settings.concentricSecond && timeLeft > 0 ? settings.concentricColor : settings.activeColor) }} />
@@ -960,12 +1068,9 @@ export default function App() {
                         </div>
                     )}
                     {!isSessionSetup && (
-                        <footer className={cn(
-                            "w-full border-t border-border/50 text-center opacity-50 transition-opacity hover:opacity-100",
-                            isMobileViewport ? "mt-5 px-2 py-4" : "mt-8 px-4 py-5 sm:mt-10 sm:px-0 sm:py-6",
-                        )}>
+                        <footer className={appShellLayout.footerShell}>
                             <div className="text-[10px] font-black uppercase tracking-[0.5em] text-muted-foreground">MYOREP v{APP_VERSION}</div>
-                            <div className={cn("flex justify-center", isMobileViewport ? "mt-2" : "mt-3")}>
+                            <div className={appShellLayout.footerStatusRow}>
                                 <SupabaseStatusPill />
                             </div>
                             <div className="mt-2 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/60">Engineered by General Malit</div>
@@ -979,6 +1084,7 @@ export default function App() {
                 onChangeValue={setDialogValue}
                 onClose={closeDialog}
                 onConfirm={handleDialogConfirm}
+                layout={appShellLayout}
             />
         </div>
     );

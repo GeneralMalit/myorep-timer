@@ -7,6 +7,9 @@ import SessionCanvas from '@/components/SessionCanvas';
 import SessionNodeEditor from '@/components/SessionNodeEditor';
 import SetupModeToggle from '@/components/SetupModeToggle';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
+import { getResponsiveLayout } from '@/layout';
+import { sessionBuilderDesktopLayout } from '@/layout/sessionBuilder.desktop';
+import { sessionBuilderMobileLayout } from '@/layout/sessionBuilder.mobile';
 import { estimateSessionDurationSeconds, formatEstimatedSessionDuration } from '@/utils/savedSessions';
 import { cn } from '@/lib/utils';
 
@@ -28,39 +31,19 @@ interface BuilderDialogProps {
 }
 
 const BuilderDialog = ({ state, onChangeValue, onClose, onConfirm }: BuilderDialogProps) => {
-    const [isMobileViewport, setIsMobileViewport] = useState(false);
-
-    useEffect(() => {
-        if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
-            return;
-        }
-
-        const mediaQuery = window.matchMedia('(max-width: 767px)');
-        const handleViewportChange = (event: MediaQueryListEvent | MediaQueryList) => {
-            setIsMobileViewport(event.matches);
-        };
-
-        handleViewportChange(mediaQuery);
-        if (typeof mediaQuery.addEventListener === 'function') {
-            mediaQuery.addEventListener('change', handleViewportChange);
-            return () => mediaQuery.removeEventListener('change', handleViewportChange);
-        }
-
-        mediaQuery.addListener(handleViewportChange);
-        return () => mediaQuery.removeListener(handleViewportChange);
-    }, []);
+    const isMobileViewport = useMobileViewport();
 
     if (!state) {
         return null;
     }
 
     const isPrompt = state.type === 'new-session' || state.type === 'save-session-as';
+    const layout = getResponsiveLayout(isMobileViewport, sessionBuilderMobileLayout.dialog, sessionBuilderDesktopLayout.dialog);
 
     return (
         <div
             className={cn(
-                'fixed inset-0 z-[115] flex bg-black/70 backdrop-blur-sm',
-                isMobileViewport ? 'items-end justify-center px-0 py-0' : 'items-center justify-center px-4 py-6',
+                layout.backdrop,
             )}
             role="dialog"
             aria-modal="true"
@@ -71,11 +54,8 @@ const BuilderDialog = ({ state, onChangeValue, onClose, onConfirm }: BuilderDial
                 }
             }}
         >
-            <div className={cn(
-                'w-full border border-border/60 bg-background/95 p-5 shadow-[0_24px_90px_rgba(0,0,0,0.45)]',
-                isMobileViewport ? 'max-w-none rounded-t-[28px] rounded-b-none border-b-0' : 'max-w-md rounded-[28px]',
-            )}>
-                {isMobileViewport && <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-muted/50" />}
+            <div className={layout.panel}>
+                {isMobileViewport && layout.handle && <div className={layout.handle} />}
                 <div className="space-y-2">
                     <div className="text-[11px] font-black uppercase tracking-[0.32em] text-primary">
                         Session Action
@@ -102,7 +82,7 @@ const BuilderDialog = ({ state, onChangeValue, onClose, onConfirm }: BuilderDial
                     </div>
                 )}
 
-                <div className={cn('mt-6 grid gap-2', isPrompt ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 sm:grid-cols-2')}>
+                <div className={layout.actions}>
                     <Button type="button" variant="secondary" onClick={onClose} className="rounded-2xl font-black italic tracking-tighter">
                         {isPrompt ? 'Cancel' : 'Close'}
                     </Button>
@@ -119,9 +99,36 @@ const BuilderDialog = ({ state, onChangeValue, onClose, onConfirm }: BuilderDial
     );
 };
 
-const SessionBuilder = () => {
+function useMobileViewport() {
     const [isMobileViewport, setIsMobileViewport] = useState(false);
+
+    useEffect(() => {
+        if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+            return;
+        }
+
+        const mediaQuery = window.matchMedia('(max-width: 767px)');
+        const handleViewportChange = (event: MediaQueryListEvent | MediaQueryList) => {
+            setIsMobileViewport(event.matches);
+        };
+
+        handleViewportChange(mediaQuery);
+        if (typeof mediaQuery.addEventListener === 'function') {
+            mediaQuery.addEventListener('change', handleViewportChange);
+            return () => mediaQuery.removeEventListener('change', handleViewportChange);
+        }
+
+        mediaQuery.addListener(handleViewportChange);
+        return () => mediaQuery.removeListener(handleViewportChange);
+    }, []);
+
+    return isMobileViewport;
+}
+
+const SessionBuilder = () => {
+    const isMobileViewport = useMobileViewport();
     const editingSessionDraft = useWorkoutStore((state) => state.editingSessionDraft);
+    const savedSessions = useWorkoutStore((state) => state.savedSessions);
     const editingSessionNodeId = useWorkoutStore((state) => state.editingSessionNodeId);
     const setEditingSessionNodeId = useWorkoutStore((state) => state.setEditingSessionNodeId);
     const prepTime = useWorkoutStore((state) => state.settings.prepTime);
@@ -155,25 +162,27 @@ const SessionBuilder = () => {
         return estimateSessionDurationSeconds(editingSessionDraft, prepTime);
     }, [editingSessionDraft, prepTime]);
 
-    useEffect(() => {
-        if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
-            return;
+    const sessionDraftStatus = useMemo<'unsaved changes' | 'none'>(() => {
+        if (!editingSessionDraft) {
+            return 'none';
         }
 
-        const mediaQuery = window.matchMedia('(max-width: 767px)');
-        const handleViewportChange = (event: MediaQueryListEvent | MediaQueryList) => {
-            setIsMobileViewport(event.matches);
-        };
-
-        handleViewportChange(mediaQuery);
-        if (typeof mediaQuery.addEventListener === 'function') {
-            mediaQuery.addEventListener('change', handleViewportChange);
-            return () => mediaQuery.removeEventListener('change', handleViewportChange);
+        const savedSession = savedSessions.find((session) => session.id === editingSessionDraft.id);
+        if (!savedSession) {
+            return 'unsaved changes';
         }
 
-        mediaQuery.addListener(handleViewportChange);
-        return () => mediaQuery.removeListener(handleViewportChange);
-    }, []);
+        const draftComparable = JSON.stringify({
+            name: editingSessionDraft.name,
+            nodes: editingSessionDraft.nodes,
+        });
+        const savedComparable = JSON.stringify({
+            name: savedSession.name,
+            nodes: savedSession.nodes,
+        });
+
+        return draftComparable === savedComparable ? 'none' : 'unsaved changes';
+    }, [editingSessionDraft, savedSessions]);
 
     const handleNewSession = () => {
         setDialogState({
@@ -280,50 +289,41 @@ const SessionBuilder = () => {
 
         setDialogState(null);
     };
+    const layout = getResponsiveLayout(isMobileViewport, sessionBuilderMobileLayout, sessionBuilderDesktopLayout);
+
     return (
         <>
-            <section className={cn(
-                'flex min-h-0 w-full flex-col gap-5',
-                isMobileViewport ? 'min-h-full px-3 py-3 pb-6' : 'h-full px-4 py-4 sm:px-6 sm:py-6 xl:px-8 xl:py-8',
-            )}>
+            <section className={layout.shell}>
                 <div
                     data-testid="session-builder-shell"
-                    className={cn(
-                        'mx-auto flex min-h-0 w-full flex-col gap-5',
-                        isMobileViewport ? 'max-w-none gap-4' : 'h-full max-w-[1100px]',
-                    )}
+                    className={layout.shellInner}
                 >
-                    <header className={cn(
-                        'flex flex-col',
-                        isMobileViewport ? 'gap-4' : 'items-center gap-5 text-center',
-                    )}>
-                        <div className={cn('space-y-2', !isMobileViewport && 'max-w-3xl')}>
-                            <h1 className="bg-gradient-to-br from-foreground to-foreground/50 bg-clip-text text-[clamp(2.6rem,11vw,5rem)] font-black italic tracking-tighter text-transparent">
+                    <header className={layout.header}>
+                        <div className={layout.titleBlock}>
+                            <h1 className="bg-gradient-to-br from-foreground to-foreground/50 bg-clip-text text-[clamp(2.6rem,11vw,5rem)] font-black italic leading-[1.05] tracking-tighter text-transparent pb-1">
                                 Build a Session
                             </h1>
-                            <p className={cn(
-                                'text-sm font-medium leading-relaxed text-muted-foreground',
-                                !isMobileViewport && 'mx-auto max-w-2xl',
-                            )}>
+                            <p className={layout.summary}>
                                 {summary}
                             </p>
                         </div>
 
-                        <div className={cn(
-                            'flex w-full flex-col gap-3',
-                            isMobileViewport ? 'items-start' : 'items-center',
-                        )}>
+                        <div className={layout.controls}>
                             <SetupModeToggle
                                 mode={setupMode}
                                 onChange={setSetupMode}
-                                className={cn(!isMobileViewport && 'w-full max-w-md justify-center')}
+                                className={layout.toggle}
                             />
-                            <div className={cn('w-full', !isMobileViewport && 'flex justify-center')}>
-                                <div className={cn(
-                                    isMobileViewport
-                                        ? 'grid w-full grid-cols-2 gap-2'
-                                        : 'flex w-full max-w-[920px] items-center justify-center gap-2 overflow-x-auto pb-1',
-                                )}>
+                            <div className={layout.actionsWrap}>
+                                <div className={layout.actionsGrid}>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={handleNewSession}
+                                        className="shrink-0 gap-2 rounded-full border-primary/60 bg-background px-4 font-black italic tracking-tighter text-primary hover:bg-primary/10"
+                                    >
+                                        <Plus size={16} /> New Session
+                                    </Button>
                                     <Button
                                         type="button"
                                         variant="secondary"
@@ -340,9 +340,6 @@ const SessionBuilder = () => {
                                     >
                                         <Plus size={16} /> Rest
                                     </Button>
-                                    <Button type="button" variant="secondary" onClick={handleNewSession} className="shrink-0 gap-2 rounded-full px-4 font-black italic tracking-tighter">
-                                        <Plus size={16} /> New
-                                    </Button>
                                     <Button type="button" variant="secondary" onClick={handleSave} className="shrink-0 gap-2 rounded-full px-4 font-black italic tracking-tighter">
                                         <Save size={16} /> Save
                                     </Button>
@@ -354,10 +351,7 @@ const SessionBuilder = () => {
                                     </Button>
                                 </div>
                             </div>
-                            <div className={cn(
-                                'flex w-full items-baseline gap-3 px-1 text-[12px] font-semibold uppercase tracking-[0.24em] text-muted-foreground',
-                                isMobileViewport ? 'justify-start' : 'max-w-[920px] justify-end',
-                            )}>
+                            <div className={layout.estimatedTime}>
                                 <span>Est. Time:</span>
                                 <span className="text-xl font-black tracking-tight text-foreground normal-case">
                                     {formatEstimatedSessionDuration(estimatedDuration)}
@@ -366,14 +360,14 @@ const SessionBuilder = () => {
                         </div>
                     </header>
 
-                    <div className={cn(
-                        'flex min-h-0',
-                        isMobileViewport ? 'flex-none' : 'flex-1 min-h-[420px] justify-center',
-                    )}>
-                        <div className={cn('flex min-h-0 w-full', !isMobileViewport && 'max-w-[920px] flex-1')}>
+                    <div className={layout.canvasWrap}>
+                        <div className={layout.canvasInner}>
                             <SessionCanvas
                                 nodes={editingSessionDraft?.nodes ?? []}
                                 activeNodeId={editingSessionNodeId}
+                                sessionId={editingSessionDraft?.id ?? null}
+                                sessionName={editingSessionDraft?.name ?? null}
+                                sessionDraftStatus={sessionDraftStatus}
                                 onEditNode={setEditingSessionNodeId}
                                 onRemoveNode={removeSessionNode}
                                 onMoveNode={moveSessionNode}

@@ -6,6 +6,7 @@ import {
     getSupabaseClient,
     getSupabaseEnvironment,
     isSupabaseNativeAuthCallbackUrl,
+    isSupabaseRecoveryUrl,
 } from '@/lib/supabase';
 import { loadSupabaseAccountState } from '@/lib/supabaseAccount';
 import { useAccountStore } from '@/store/useAccountStore';
@@ -15,6 +16,7 @@ export const useSupabaseBootstrap = (): void => {
     const applyAccountState = useAccountStore((state) => state.applyAccountState);
     const markError = useAccountStore((state) => state.markError);
     const markUnavailable = useAccountStore((state) => state.markUnavailable);
+    const setPasswordRecoveryMode = useAccountStore((state) => state.setPasswordRecoveryMode);
     const setBootstrapStatus = useAccountStore((state) => state.setBootstrapStatus);
 
     useEffect(() => {
@@ -33,17 +35,17 @@ export const useSupabaseBootstrap = (): void => {
         let requestId = 0;
         const handledNativeCodes = new Set<string>();
         const inFlightNativeCodes = new Set<string>();
+        let isPasswordRecoveryMode = false;
         setBootstrapStatus('bootstrapping');
 
         const resolveSessionState = async (session: Parameters<typeof applySession>[0]) => {
             const currentRequestId = ++requestId;
             if (!session) {
                 applySession(null);
+                setPasswordRecoveryMode(isPasswordRecoveryMode);
                 setBootstrapStatus('ready');
                 return;
             }
-
-            applySession(session);
 
             try {
                 const resolvedState = await loadSupabaseAccountState(client, session);
@@ -58,12 +60,19 @@ export const useSupabaseBootstrap = (): void => {
                     return;
                 }
 
+                applySession(session);
                 const message = error instanceof Error
                     ? error.message
                     : 'Failed to load Supabase account state.';
                 markError(message);
             }
         };
+
+        const hasRecoveryUrl = typeof window !== 'undefined' && isSupabaseRecoveryUrl(window.location.href);
+        if (hasRecoveryUrl) {
+            isPasswordRecoveryMode = true;
+            setPasswordRecoveryMode(true);
+        }
 
         void client.auth.getSession()
             .then(({ data, error }) => {
@@ -89,9 +98,23 @@ export const useSupabaseBootstrap = (): void => {
                 markError(message);
             });
 
-        const { data: { subscription } } = client.auth.onAuthStateChange((_event, session) => {
+        const { data: { subscription } } = client.auth.onAuthStateChange((event, session) => {
             if (!isActive) {
                 return;
+            }
+
+            if (event === 'PASSWORD_RECOVERY') {
+                isPasswordRecoveryMode = true;
+                setPasswordRecoveryMode(true);
+            } else if (event === 'SIGNED_OUT') {
+                isPasswordRecoveryMode = false;
+                setPasswordRecoveryMode(false);
+            } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+                const hasRecoveryUrl = typeof window !== 'undefined' && isSupabaseRecoveryUrl(window.location.href);
+                isPasswordRecoveryMode = hasRecoveryUrl;
+                if (!hasRecoveryUrl) {
+                    setPasswordRecoveryMode(false);
+                }
             }
 
             void resolveSessionState(session);
@@ -120,6 +143,8 @@ export const useSupabaseBootstrap = (): void => {
                     return;
                 }
 
+                setPasswordRecoveryMode(isSupabaseRecoveryUrl(url));
+                isPasswordRecoveryMode = isSupabaseRecoveryUrl(url);
                 handledNativeCodes.add(code);
                 await resolveSessionState(data.session);
             } catch (error: unknown) {
@@ -179,5 +204,5 @@ export const useSupabaseBootstrap = (): void => {
             subscription.unsubscribe();
             removeUrlListener?.();
         };
-    }, [applyAccountState, applySession, markError, markUnavailable, setBootstrapStatus]);
+    }, [applyAccountState, applySession, markError, markUnavailable, setBootstrapStatus, setPasswordRecoveryMode]);
 };

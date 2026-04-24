@@ -11,6 +11,8 @@ node_modules
 dist
 dist-ssr
 *.local
+supabase/.temp/
+session-builder-local.png
 
 # Editor directories and files
 .vscode/*

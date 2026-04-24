@@ -53,7 +53,7 @@
   - [x] `myorep-timer-prod`
 - [x] Create the separate Supabase dev project.
 - [x] Create the separate Supabase prod project.
-- [x] Enable email magic links in both Supabase projects.
+- [x] Configure password-based auth in both Supabase projects and require signup confirmation emails/magic links before first password login.
 - [x] Set the redirect URLs for web and mobile entry points in both Supabase projects.
 - [x] Send the Supabase project URL and anon key for each environment so the app can be pointed at dev and prod.
 - [ ] Confirm the auth callback / deep-link scheme later, if you want anything beyond the default browser redirect path.
@@ -93,10 +93,11 @@
 ### Outcomes
 - [x] Introduce the app-level account domain:
   - [x] auth state
-  - [x] user profile/account id
+  - [x] user profile/account id and username
   - [x] entitlement/plan status
   - [x] sync status
-- [x] Define login/logout UX for web and mobile using email magic links first.
+- [x] Define login/logout UX for web and mobile with email/password auth for normal access, signup confirmation magic links before first login, and password recovery email links.
+- [x] Support username-based account creation and signed-in username changes through Supabase-backed profiles.
 - [x] Define save behavior by user state:
   - [x] guest/free: local persistence only
   - [x] signed-in free: account exists, but cloud sync stays locked

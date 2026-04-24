@@ -15,6 +15,7 @@ vi.mock('@/lib/supabase', () => ({
     getSupabaseEnvironment: getSupabaseEnvironmentMock,
     isSupabaseNativeAuthCallbackUrl: (url: string) => url.startsWith('com.generalmalit.myoreptimer://auth/callback'),
     getSupabaseAuthCodeFromUrl: (url: string) => new URL(url).searchParams.get('code'),
+    isSupabaseRecoveryUrl: (url: string) => new URL(url).searchParams.get('type') === 'recovery',
 }));
 
 vi.mock('@/lib/supabaseAccount', () => ({
@@ -46,6 +47,7 @@ const resetAccountState = () => {
         entitlement: null,
         syncStatus: 'disabled',
         error: null,
+        requiresPasswordReset: false,
     });
 };
 
@@ -593,5 +595,90 @@ describe('SupabaseBootstrap', () => {
 
         expect(appListenerRemoveMock).toHaveBeenCalled();
         expect(unsubscribe).toHaveBeenCalledTimes(1);
+    });
+
+    it('enables password recovery mode when the current URL is a recovery link', async () => {
+        vi.stubEnv('VITE_ENABLE_SUPABASE', 'true');
+        getSupabaseEnvironmentMock.mockReturnValue({
+            enabled: true,
+            configured: true,
+            url: 'https://example.supabase.co',
+            anonKey: 'anon-key',
+            redirectUrl: 'https://app.example.com',
+            missing: [],
+        });
+        const client = {
+            auth: {
+                getSession: vi.fn().mockResolvedValue({ data: { session: null }, error: null }),
+                onAuthStateChange: vi.fn().mockReturnValue({
+                    data: {
+                        subscription: {
+                            unsubscribe: vi.fn(),
+                        },
+                    },
+                }),
+            },
+        };
+        getSupabaseClientMock.mockReturnValue(client);
+
+        const previousHref = window.location.href;
+        window.history.replaceState({}, '', 'http://localhost:3000/reset?type=recovery');
+
+        render(<SupabaseBootstrap />);
+
+        await waitFor(() => {
+            expect(useAccountStore.getState().requiresPasswordReset).toBe(true);
+            expect(useAccountStore.getState().bootstrapStatus).toBe('ready');
+        });
+
+        window.history.replaceState({}, '', previousHref);
+    });
+
+    it('toggles password recovery mode from auth state change events', async () => {
+        vi.stubEnv('VITE_ENABLE_SUPABASE', 'true');
+        getSupabaseEnvironmentMock.mockReturnValue({
+            enabled: true,
+            configured: true,
+            url: 'https://example.supabase.co',
+            anonKey: 'anon-key',
+            redirectUrl: 'https://app.example.com',
+            missing: [],
+        });
+        const authStateHandlers: Array<(event: string, session: unknown) => void> = [];
+        const client = {
+            auth: {
+                getSession: vi.fn().mockResolvedValue({ data: { session: null }, error: null }),
+                onAuthStateChange: vi.fn().mockImplementation((handler) => {
+                    authStateHandlers.push(handler);
+                    return {
+                        data: {
+                            subscription: {
+                                unsubscribe: vi.fn(),
+                            },
+                        },
+                    };
+                }),
+            },
+        };
+        getSupabaseClientMock.mockReturnValue(client);
+
+        render(<SupabaseBootstrap />);
+
+        await waitFor(() => {
+            expect(authStateHandlers).toHaveLength(1);
+            expect(useAccountStore.getState().requiresPasswordReset).toBe(false);
+        });
+
+        authStateHandlers[0]?.('PASSWORD_RECOVERY', null);
+
+        await waitFor(() => {
+            expect(useAccountStore.getState().requiresPasswordReset).toBe(true);
+        });
+
+        authStateHandlers[0]?.('SIGNED_OUT', null);
+
+        await waitFor(() => {
+            expect(useAccountStore.getState().requiresPasswordReset).toBe(false);
+        });
     });
 });

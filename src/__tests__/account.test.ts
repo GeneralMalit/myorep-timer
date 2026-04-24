@@ -26,8 +26,9 @@ describe('account utils', () => {
 
         expect(profile).toMatchObject({
             userId: 'user-1',
+            username: 'athlete_one',
             email: 'athlete@example.com',
-            displayName: 'Athlete One',
+            displayName: 'athlete_one',
             createdAt: '2026-03-01T00:00:00.000Z',
         });
         expect(profile.updatedAt).toMatch(/T/);

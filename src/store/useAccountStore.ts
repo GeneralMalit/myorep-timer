@@ -22,11 +22,13 @@ interface AccountState {
     entitlement: AccountEntitlement | null;
     syncStatus: AccountSyncStatus;
     error: string | null;
+    requiresPasswordReset: boolean;
     setBootstrapStatus: (status: AccountBootstrapStatus) => void;
     applySession: (session: Session | null) => void;
     applyAccountState: (state: AccountResolvedState) => void;
     setEntitlement: (entitlement: AccountEntitlement | null) => void;
     setSyncStatus: (status: AccountSyncStatus) => void;
+    setPasswordRecoveryMode: (requiresPasswordReset: boolean) => void;
     markUnavailable: () => void;
     markError: (message: string) => void;
     clearAccountState: () => void;
@@ -40,6 +42,7 @@ const initialState = {
     entitlement: null as AccountEntitlement | null,
     syncStatus: 'disabled' as const,
     error: null as string | null,
+    requiresPasswordReset: false,
 };
 
 export const useAccountStore = create<AccountState>()((set) => ({
@@ -53,15 +56,17 @@ export const useAccountStore = create<AccountState>()((set) => ({
         syncStatus: state.syncStatus,
         error: null,
     }),
-    applySession: (session) => {
-        set(buildAccountStateFromSession(session));
-    },
+    applySession: (session) => set((state) => ({
+        ...buildAccountStateFromSession(session),
+        requiresPasswordReset: session ? state.requiresPasswordReset : false,
+    })),
     setEntitlement: (entitlement) => set((state) => ({
         entitlement,
         mode: resolveAccountMode(state.session, entitlement),
         syncStatus: state.session && canAccessCloudSync(entitlement) ? 'idle' : 'disabled',
     })),
     setSyncStatus: (status) => set({ syncStatus: status }),
+    setPasswordRecoveryMode: (requiresPasswordReset) => set({ requiresPasswordReset }),
     markUnavailable: () => set({
         ...initialState,
         bootstrapStatus: 'disabled',

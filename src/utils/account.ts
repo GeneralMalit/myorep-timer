@@ -1,6 +1,7 @@
 import type { Session } from '@supabase/supabase-js';
 import type { AccountEntitlement, AccountMode, AccountPlan, AccountProfile, AccountResolvedState } from '@/types/account';
 import type { SupabaseEntitlementRow, SupabaseProfileRow } from '@/types/sync';
+import { deriveUsernameFromEmail, normalizeUsername } from '@/lib/accountIdentity';
 
 export const hasActivePlusEntitlement = (entitlement: AccountEntitlement | null | undefined): boolean => {
     return entitlement?.plan === 'plus' && entitlement.cloudSyncEnabled;
@@ -14,25 +15,31 @@ export const canAccessSessionBuilder = (entitlement: AccountEntitlement | null |
     return hasActivePlusEntitlement(entitlement);
 };
 
-const resolveDisplayName = (session: Session): string | null => {
+const resolveSessionUsername = (session: Session): string => {
     const metadata = session.user.user_metadata as Record<string, unknown> | undefined;
-    const candidate = typeof metadata?.full_name === 'string'
-        ? metadata.full_name
-        : typeof metadata?.name === 'string'
-            ? metadata.name
-            : typeof metadata?.username === 'string'
-                ? metadata.username
-                : session.user.email?.split('@')[0] ?? null;
+    const candidate = typeof metadata?.username === 'string'
+        ? metadata.username
+        : typeof metadata?.full_name === 'string'
+            ? metadata.full_name
+            : typeof metadata?.name === 'string'
+                ? metadata.name
+                : session.user.email ?? null;
+    const normalized = normalizeUsername(candidate ?? '');
+    if (normalized.length >= 3) {
+        return normalized;
+    }
 
-    return candidate ? candidate.trim() || null : null;
+    return deriveUsernameFromEmail(session.user.email);
 };
 
 export const buildAccountProfileFromSession = (session: Session): AccountProfile => {
     const nowIso = new Date().toISOString();
+    const username = resolveSessionUsername(session);
     return {
         userId: session.user.id,
+        username,
         email: session.user.email ?? null,
-        displayName: resolveDisplayName(session),
+        displayName: username,
         createdAt: session.user.created_at ?? nowIso,
         updatedAt: nowIso,
     };
@@ -41,6 +48,7 @@ export const buildAccountProfileFromSession = (session: Session): AccountProfile
 export const buildAccountProfileFromSupabaseRow = (row: SupabaseProfileRow): AccountProfile => {
     return {
         userId: row.id,
+        username: row.username,
         email: row.email,
         displayName: row.display_name,
         createdAt: row.created_at,

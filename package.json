@@ -20,9 +20,6 @@
     "test:ui": "vitest --ui",
     "test:coverage": "vitest --coverage",
     "test:coverage:ci": "vitest --coverage --run && node scripts/check-coverage-thresholds.mjs",
-    "admin:grant-plus": "node scripts/entitlement-overrides.mjs grant",
-    "admin:revoke-plus": "node scripts/entitlement-overrides.mjs revoke",
-    "admin:list-overrides": "node scripts/entitlement-overrides.mjs list",
     "release": "semantic-release",
     "release:dry": "semantic-release --dry-run",
     "sync:readme-version": "node scripts/sync-readme-version.mjs"

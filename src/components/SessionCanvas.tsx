@@ -6,6 +6,9 @@ import SessionNodeCard from '@/components/SessionNodeCard';
 interface SessionCanvasProps {
     nodes: SessionNode[];
     activeNodeId: string | null;
+    sessionId: string | null;
+    sessionName: string | null;
+    sessionDraftStatus: 'unsaved changes' | 'none';
     onEditNode: (nodeId: string) => void;
     onRemoveNode: (nodeId: string) => void;
     onMoveNode: (nodeId: string, direction: 'left' | 'right') => void;
@@ -15,6 +18,9 @@ interface SessionCanvasProps {
 const SessionCanvas = ({
     nodes,
     activeNodeId,
+    sessionId,
+    sessionName,
+    sessionDraftStatus,
     onEditNode,
     onRemoveNode,
     onMoveNode,
@@ -61,7 +67,10 @@ const SessionCanvas = ({
         return Math.max(baseWidth, isMobileViewport ? 760 : 920);
     }, [isMobileViewport, nodes.length]);
 
-    const boardHeight = isMobileViewport ? 440 : 420;
+    const boardHeight = isMobileViewport ? 440 : 380;
+    const hasUnsavedChanges = sessionDraftStatus === 'unsaved changes';
+    const displaySessionName = (sessionName?.trim() || 'SESSION').toUpperCase();
+    const getDefaultCanvasOffset = (mobileViewport: boolean) => (mobileViewport ? { x: 28, y: 28 } : { x: 0, y: 0 });
 
     const handleDrop = (targetIndex: number) => {
         if (!draggedNodeId) {
@@ -98,10 +107,15 @@ const SessionCanvas = ({
         panStateRef.current = null;
     };
 
+    useEffect(() => {
+        endPan();
+        setCanvasOffset(getDefaultCanvasOffset(isMobileViewport));
+    }, [isMobileViewport, sessionId]);
+
     return isMobileViewport ? (
         <div
             data-testid="session-canvas-frame"
-            className="relative flex min-h-[360px] w-full flex-col overflow-hidden rounded-[28px] border border-border/50 bg-[radial-gradient(circle_at_1px_1px,rgba(255,255,255,0.05)_1px,transparent_0)] bg-[size:28px_28px] bg-black/90 shadow-[0_24px_80px_rgba(0,0,0,0.25)]"
+            className="relative flex min-h-[320px] w-full flex-col overflow-hidden rounded-[28px] border border-border/50 bg-[radial-gradient(circle_at_1px_1px,rgba(255,255,255,0.05)_1px,transparent_0)] bg-[size:28px_28px] bg-black/90 shadow-[0_24px_80px_rgba(0,0,0,0.25)]"
             onDragOver={(event) => event.preventDefault()}
             onDrop={(event) => {
                 event.preventDefault();
@@ -112,6 +126,16 @@ const SessionCanvas = ({
                 <div className="space-y-1">
                     <div className="text-[11px] font-black uppercase tracking-[0.3em] text-muted-foreground">
                         Session Canvas
+                    </div>
+                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm tracking-tight">
+                        <span className="font-black uppercase text-foreground">
+                            {displaySessionName}
+                        </span>
+                        {hasUnsavedChanges && (
+                            <span className="font-black uppercase italic text-primary">
+                                UNSAVED CHANGES
+                            </span>
+                        )}
                     </div>
                     <div className="text-xs text-muted-foreground">
                         Drag the canvas to explore, then edit or reorder nodes from each card.
@@ -212,7 +236,7 @@ const SessionCanvas = ({
     ) : (
         <div
             data-testid="session-canvas-frame"
-            className="relative flex min-h-[420px] w-full flex-1 flex-col overflow-hidden rounded-[32px] border border-border/50 bg-[radial-gradient(circle_at_1px_1px,rgba(255,255,255,0.05)_1px,transparent_0)] bg-[size:28px_28px] bg-black/90 shadow-[0_24px_80px_rgba(0,0,0,0.25)]"
+            className="relative flex min-h-[360px] w-full flex-1 flex-col overflow-hidden rounded-[32px] border border-border/50 bg-[radial-gradient(circle_at_1px_1px,rgba(255,255,255,0.05)_1px,transparent_0)] bg-[size:28px_28px] bg-black/90 shadow-[0_24px_80px_rgba(0,0,0,0.25)]"
             onDragOver={(event) => event.preventDefault()}
             onDrop={(event) => {
                 event.preventDefault();
@@ -223,6 +247,16 @@ const SessionCanvas = ({
                 <div className="space-y-1">
                     <div className="text-[11px] font-black uppercase tracking-[0.3em] text-muted-foreground">
                         Session Canvas
+                    </div>
+                    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-base tracking-tight">
+                        <span className="font-black uppercase text-foreground">
+                            {displaySessionName}
+                        </span>
+                        {hasUnsavedChanges && (
+                            <span className="font-black uppercase italic text-primary">
+                                UNSAVED CHANGES
+                            </span>
+                        )}
                     </div>
                     <div className="text-sm text-muted-foreground">
                         Drag tiles or use the move buttons to reorder. Edit opens the node modal.

@@ -111,6 +111,87 @@ npm run test:ui
 npm run build
 ```
 
+### 5.4. UI Layout Editing Guide
+
+The main UI layout now uses dedicated mobile and desktop layout files under [`src/layout/`](./src/layout) so spacing, padding, margins, widths, and alignment can be edited manually without digging through mixed inline Tailwind branches.
+
+Each layout file is also split into smaller internal categories such as:
+- `layout`
+- `spacing`
+- `surface`
+- `typography`
+- `motion`
+- `size`
+
+Those categories are composed into the final exported class strings, so you can adjust one concern at a time instead of editing a single giant utility string.
+
+#### Edit Mobile vs Desktop Layouts
+
+- **App shell and main screens**
+  - Mobile: [`src/layout/appShell.mobile.ts`](./src/layout/appShell.mobile.ts)
+  - Desktop/web: [`src/layout/appShell.desktop.ts`](./src/layout/appShell.desktop.ts)
+  - Controls the main page shell, setup screen shell, timer screen shell, footer, and app dialog container.
+
+- **Sidebar / mobile drawer**
+  - Mobile: [`src/layout/sidebar.mobile.ts`](./src/layout/sidebar.mobile.ts)
+  - Desktop/web: [`src/layout/sidebar.desktop.ts`](./src/layout/sidebar.desktop.ts)
+  - Controls sidebar width, section spacing, saved workout/session layouts, drawer spacing, and footer spacing.
+
+- **Settings drawer**
+  - Mobile: [`src/layout/settingsPanel.mobile.ts`](./src/layout/settingsPanel.mobile.ts)
+  - Desktop/web: [`src/layout/settingsPanel.desktop.ts`](./src/layout/settingsPanel.desktop.ts)
+  - Controls panel width, header padding, section spacing, control row spacing, and content padding.
+
+- **Session builder**
+  - Mobile: [`src/layout/sessionBuilder.mobile.ts`](./src/layout/sessionBuilder.mobile.ts)
+  - Desktop/web: [`src/layout/sessionBuilder.desktop.ts`](./src/layout/sessionBuilder.desktop.ts)
+  - Controls builder page padding, action bar spacing, estimated-time row, canvas frame spacing, and builder dialog layout.
+
+- **Concentric timer**
+  - Mobile: [`src/layout/concentricTimer.mobile.ts`](./src/layout/concentricTimer.mobile.ts)
+  - Desktop/web: [`src/layout/concentricTimer.desktop.ts`](./src/layout/concentricTimer.desktop.ts)
+  - Controls timer size, max width, up/down mode spacing, and timer text spacing.
+
+#### When To Edit `src/layout` vs Component Files
+
+- Edit `src/layout/*.mobile.ts` or `*.desktop.ts` for:
+  - padding
+  - margins
+  - gaps
+  - widths
+  - shell spacing
+  - layout alignment
+
+- Edit component files for structure or behavior:
+  - [`src/App.tsx`](./src/App.tsx)
+  - [`src/components/Sidebar.tsx`](./src/components/Sidebar.tsx)
+  - [`src/components/SettingsPanel.tsx`](./src/components/SettingsPanel.tsx)
+  - [`src/components/SessionBuilder.tsx`](./src/components/SessionBuilder.tsx)
+  - [`src/components/ConcentricTimer.tsx`](./src/components/ConcentricTimer.tsx)
+
+- Edit [`src/index.css`](./src/index.css) for:
+  - theme tokens
+  - safe-area variables
+  - viewport variables
+  - shared global CSS utilities
+
+#### What "Mobile" Means In This Branch
+
+In this branch, **mobile** means any viewport matching the media query:
+
+```css
+(max-width: 767px)
+```
+
+That includes:
+- actual phones
+- narrow browser windows
+- Chrome DevTools device emulation / responsive mode when the viewport width is `767px` or below
+
+So yes, if you switch Chrome into mobile device mode and the viewport is within that breakpoint, the app will use the `*.mobile.ts` layout files.
+
+The desktop/web layout files apply when the viewport is wider than `767px`.
+
 ---
 
 ## 6. Versioning

@@ -24,8 +24,8 @@
    - scheme: `com.generalmalit.myoreptimer`
    - expected callback: `com.generalmalit.myoreptimer://auth/callback`
 4. Confirm Capacitor `App` URL-open events reach the shared React listener added in `src/`.
-5. Confirm the cold-start path also reaches the same shared bootstrap flow when the app is launched from a magic link.
-6. Validate that tapping a Supabase magic link returns into the installed app and completes session bootstrap.
+5. Confirm the cold-start path also reaches the same shared bootstrap flow when the app is launched from a password-recovery or account-confirmation link.
+6. Validate that tapping a Supabase email-link flow returns into the installed app and completes session bootstrap when that flow is still enabled.
 
 ## Likely Native Files To Touch
 - `ios/App/App/Info.plist`
@@ -49,8 +49,8 @@
 
 ## Validation Checklist
 - App installs and launches in iOS simulator or on device.
-- Magic-link tap returns to the installed app instead of staying browser-only.
-- Cold-start magic-link launches are handled by the shared bootstrap flow, not only warm `appUrlOpen` callbacks.
+- Email-link tap returns to the installed app instead of staying browser-only.
+- Cold-start email-link launches are handled by the shared bootstrap flow, not only warm `appUrlOpen` callbacks.
 - Signed-in session appears through the existing shared bootstrap flow.
 - No duplicate app instance opens during callback handling.
 - Timer/setup/session builder still behave the same after auth return.

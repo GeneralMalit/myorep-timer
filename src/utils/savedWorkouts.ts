@@ -152,6 +152,10 @@ const resolveWorkoutImportRecords = (payload: unknown): unknown[] | null => {
         return payload.workouts;
     }
 
+    if (Array.isArray(payload.savedWorkouts)) {
+        return payload.savedWorkouts;
+    }
+
     const nestedData = isRecord(payload.data) ? payload.data : null;
     if (nestedData && Array.isArray(nestedData.workouts)) {
         return nestedData.workouts;
@@ -208,17 +212,18 @@ const toSavedWorkoutRecord = (value: unknown): SavedWorkout | null => {
 export const mergeSavedWorkoutsFromImport = (
     existing: SavedWorkout[],
     payload: unknown,
-): { workouts: SavedWorkout[]; summary: SavedWorkoutsImportSummary } => {
+): { workouts: SavedWorkout[]; summary: SavedWorkoutsImportSummary; idMap: Map<string, string> } => {
     const summary: SavedWorkoutsImportSummary = {
         imported: 0,
         renamed: 0,
         skipped: 0,
         errors: [],
     };
+    const idMap = new Map<string, string>();
 
     if (!payload || typeof payload !== 'object') {
         summary.errors.push('Invalid import payload.');
-        return { workouts: existing, summary };
+        return { workouts: existing, summary, idMap };
     }
 
     const parsedPayload = payload as Record<string, unknown>;
@@ -229,11 +234,27 @@ export const mergeSavedWorkoutsFromImport = (
         } else {
             summary.errors.push('Missing workouts array.');
         }
-        return { workouts: existing, summary };
+        return { workouts: existing, summary, idMap };
     }
 
     const nextWorkouts = [...existing];
     const usedNames = new Set(existing.map((workout) => normalizeName(workout.name)));
+    const usedIds = new Set(existing.map((workout) => workout.id));
+
+    const resolveImportedWorkoutId = (candidateId: string | undefined): string => {
+        const originalId = candidateId?.trim() ?? '';
+        if (originalId && !usedIds.has(originalId)) {
+            usedIds.add(originalId);
+            return originalId;
+        }
+
+        let nextId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+        while (usedIds.has(nextId)) {
+            nextId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+        }
+        usedIds.add(nextId);
+        return nextId;
+    };
 
     importedRecords.forEach((workout, index) => {
         const parsedWorkout = toSavedWorkoutRecord(workout);
@@ -248,14 +269,21 @@ export const mergeSavedWorkoutsFromImport = (
             summary.renamed += 1;
         }
 
+        const nextId = resolveImportedWorkoutId(parsedWorkout.id);
+        if (parsedWorkout.id) {
+            idMap.set(parsedWorkout.id, nextId);
+        }
+
         nextWorkouts.push({
             ...parsedWorkout,
+            id: nextId,
             name: resolvedName.name,
+            sync: normalizeSyncMetadata(parsedWorkout.sync, nextId, parsedWorkout.updatedAt),
         });
         summary.imported += 1;
     });
 
-    return { workouts: nextWorkouts, summary };
+    return { workouts: nextWorkouts, summary, idMap };
 };
 
 export const pickConfigFromState = (state: SavedWorkoutConfig): SavedWorkoutConfig => {

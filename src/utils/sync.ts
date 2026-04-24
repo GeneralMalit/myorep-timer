@@ -208,9 +208,10 @@ export const toSupabaseSavedWorkoutWriteRow = (
 ): SupabaseSavedWorkoutWriteRow => {
     const sync = workout.sync;
     const nowIso = sync?.updatedAt ?? workout.updatedAt;
+    const remoteId = typeof sync?.remoteId === 'string' && sync.remoteId.trim() ? sync.remoteId : null;
 
     return {
-        id: sync?.remoteId ?? undefined,
+        ...(remoteId ? { id: remoteId } : {}),
         user_id: userId,
         local_id: sync?.localId ?? workout.id,
         name: workout.name,
@@ -234,9 +235,10 @@ export const toSupabaseSavedSessionWriteRow = (
 ): SupabaseSavedSessionWriteRow => {
     const sync = session.sync;
     const nowIso = sync?.updatedAt ?? session.updatedAt;
+    const remoteId = typeof sync?.remoteId === 'string' && sync.remoteId.trim() ? sync.remoteId : null;
 
     return {
-        id: sync?.remoteId ?? undefined,
+        ...(remoteId ? { id: remoteId } : {}),
         user_id: userId,
         local_id: sync?.localId ?? session.id,
         name: session.name,

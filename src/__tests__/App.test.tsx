@@ -7,7 +7,11 @@ import { audioEngine } from '@/utils/audioEngine';
 
 const getSupabaseClientMock = vi.hoisted(() => vi.fn());
 const getSupabaseEnvironmentMock = vi.hoisted(() => vi.fn());
-const sendSupabaseMagicLinkMock = vi.hoisted(() => vi.fn());
+const signInSupabaseWithPasswordMock = vi.hoisted(() => vi.fn());
+const signUpSupabaseWithPasswordMock = vi.hoisted(() => vi.fn());
+const resendSupabaseSignUpConfirmationMock = vi.hoisted(() => vi.fn());
+const sendSupabasePasswordResetMock = vi.hoisted(() => vi.fn());
+const updateSupabasePasswordMock = vi.hoisted(() => vi.fn());
 const signOutSupabaseMock = vi.hoisted(() => vi.fn());
 const isNativePlatformMock = vi.hoisted(() => vi.fn());
 const startBillingCheckoutMock = vi.hoisted(() => vi.fn());
@@ -74,7 +78,11 @@ vi.mock('@/lib/supabase', () => ({
 }));
 
 vi.mock('@/lib/supabaseAccount', () => ({
-    sendSupabaseMagicLink: sendSupabaseMagicLinkMock,
+    signInSupabaseWithPassword: signInSupabaseWithPasswordMock,
+    signUpSupabaseWithPassword: signUpSupabaseWithPasswordMock,
+    resendSupabaseSignUpConfirmation: resendSupabaseSignUpConfirmationMock,
+    sendSupabasePasswordReset: sendSupabasePasswordResetMock,
+    updateSupabasePassword: updateSupabasePasswordMock,
     signOutSupabase: signOutSupabaseMock,
 }));
 
@@ -147,6 +155,7 @@ const resetAccountStore = () => {
         entitlement: null,
         syncStatus: 'disabled',
         error: null,
+        requiresPasswordReset: false,
     });
 };
 
@@ -176,6 +185,7 @@ const grantPlusAccess = () => {
         },
         syncStatus: 'idle',
         error: null,
+        requiresPasswordReset: false,
     });
 };
 
@@ -224,11 +234,30 @@ describe('App', () => {
         concentricTimerMock.mockClear();
         getSupabaseClientMock.mockReset();
         getSupabaseEnvironmentMock.mockReset();
-        sendSupabaseMagicLinkMock.mockReset();
+        signInSupabaseWithPasswordMock.mockReset();
+        signUpSupabaseWithPasswordMock.mockReset();
+        resendSupabaseSignUpConfirmationMock.mockReset();
+        sendSupabasePasswordResetMock.mockReset();
+        updateSupabasePasswordMock.mockReset();
         signOutSupabaseMock.mockReset();
-        sendSupabaseMagicLinkMock.mockResolvedValue({
+        signInSupabaseWithPasswordMock.mockResolvedValue({
             ok: true,
-            message: 'Magic link sent to athlete@example.com.',
+            message: 'Signed in with password.',
+        });
+        signUpSupabaseWithPasswordMock.mockResolvedValue({
+            ok: true,
+            requiresEmailVerification: true,
+        });
+        resendSupabaseSignUpConfirmationMock.mockResolvedValue({
+            ok: true,
+        });
+        sendSupabasePasswordResetMock.mockResolvedValue({
+            ok: true,
+            message: 'Password reset sent to athlete@example.com.',
+        });
+        updateSupabasePasswordMock.mockResolvedValue({
+            ok: true,
+            message: 'Password updated.',
         });
         startBillingCheckoutMock.mockReset();
         openBillingPortalMock.mockReset();
@@ -254,7 +283,6 @@ describe('App', () => {
         });
         getSupabaseClientMock.mockReturnValue({
             auth: {
-                signInWithOtp: vi.fn(),
                 signOut: vi.fn(),
             },
         });
@@ -330,24 +358,6 @@ describe('App', () => {
         expect(useWorkoutStore.getState().isTimerRunning).toBe(true);
     });
 
-    it('uses the native auth callback redirect when sending a magic link from a native shell', async () => {
-        isNativePlatformMock.mockReturnValue(true);
-        render(<App />);
-
-        fireEvent.change(screen.getByLabelText(/email/i), {
-            target: { value: 'athlete@example.com' },
-        });
-        fireEvent.click(screen.getByRole('button', { name: /send magic link/i }));
-
-        await waitFor(() => {
-            expect(sendSupabaseMagicLinkMock).toHaveBeenCalledWith(
-                expect.any(Object),
-                'athlete@example.com',
-                'com.generalmalit.myoreptimer://auth/callback',
-            );
-        });
-    });
-
     it('blocks guest access to session builder and keeps the user on workout setup', () => {
         render(<App />);
 
@@ -384,6 +394,7 @@ describe('App', () => {
             },
             syncStatus: 'disabled',
             error: null,
+            requiresPasswordReset: false,
         });
 
         render(<App />);
@@ -477,6 +488,7 @@ describe('App', () => {
             },
             syncStatus: 'disabled',
             error: null,
+            requiresPasswordReset: false,
         });
 
         render(<App />);
@@ -1500,7 +1512,7 @@ describe('App', () => {
         expect(screen.queryByRole('button', { name: /pip active/i })).not.toBeInTheDocument();
     });
 
-    it('exports and imports saved workouts through sidebar controls', async () => {
+    it('exports and imports the saved library through sidebar controls', async () => {
         const createUrlSpy = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:test');
         const revokeUrlSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => { });
         const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => { });
@@ -1523,7 +1535,7 @@ describe('App', () => {
         expect(revokeUrlSpy).toHaveBeenCalled();
 
         const input = document.querySelector('input[type=\"file\"]') as HTMLInputElement;
-        const file = new File([JSON.stringify({ schemaVersion: 1, exportedAt: new Date().toISOString(), workouts: [] })], 'backup.json', {
+        const file = new File([JSON.stringify({ schemaVersion: 1, exportedAt: new Date().toISOString(), workouts: [], sessions: [] })], 'backup.json', {
             type: 'application/json',
         });
         fireEvent.change(input, { target: { files: [file] } });
@@ -1692,6 +1704,126 @@ describe('App', () => {
         expect(screen.getByTestId('timer-screen-shell')).toHaveClass('justify-start', 'pb-[calc(var(--safe-bottom)+1rem)]');
         expect(screen.getByRole('button', { name: /resume/i })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /terminate/i })).toBeInTheDocument();
+    });
+
+    it('signs in with email and password through the app account handler', async () => {
+        render(<App />);
+
+        fireEvent.change(screen.getByLabelText(/email/i), {
+            target: { value: 'athlete@example.com' },
+        });
+        fireEvent.change(screen.getByLabelText(/^password$/i), {
+            target: { value: 'very-secure-pass' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: /sign in with password/i }));
+
+        await waitFor(() => {
+            expect(signInSupabaseWithPasswordMock).toHaveBeenCalledWith(
+                expect.any(Object),
+                'athlete@example.com',
+                'very-secure-pass',
+            );
+        });
+        expect(screen.getByText(/signed in with password/i)).toBeInTheDocument();
+    });
+
+    it('creates an email and password account and requires the confirmation magic link before sign-in', async () => {
+        render(<App />);
+
+        fireEvent.click(screen.getByRole('button', { name: /^create$/i }));
+        fireEvent.change(screen.getByLabelText(/username/i), {
+            target: { value: 'athlete_one' },
+        });
+        fireEvent.change(screen.getByLabelText(/email/i), {
+            target: { value: 'athlete@example.com' },
+        });
+        fireEvent.change(screen.getByLabelText(/^password$/i), {
+            target: { value: 'very-secure-pass' },
+        });
+        fireEvent.change(screen.getByLabelText(/confirm password/i), {
+            target: { value: 'very-secure-pass' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: /create account/i }));
+
+        await waitFor(() => {
+            expect(signUpSupabaseWithPasswordMock).toHaveBeenCalledWith(
+                expect.any(Object),
+                'athlete_one',
+                'athlete@example.com',
+                'very-secure-pass',
+                'https://myorep-timer.vercel.app/',
+            );
+        });
+        expect(screen.getByText(/check your email for the confirmation magic link before signing in with your password/i)).toBeInTheDocument();
+    });
+
+    it('resends the signup confirmation email from the account card', async () => {
+        render(<App />);
+
+        fireEvent.change(screen.getByLabelText(/email/i), {
+            target: { value: 'athlete@example.com' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: /resend confirmation link/i }));
+
+        await waitFor(() => {
+            expect(resendSupabaseSignUpConfirmationMock).toHaveBeenCalledWith(
+                expect.any(Object),
+                'athlete@example.com',
+                'https://myorep-timer.vercel.app/',
+            );
+        });
+        expect(screen.getByText(/confirmation magic link sent to athlete@example.com/i)).toBeInTheDocument();
+    });
+
+    it('sends password reset emails from the account card', async () => {
+        render(<App />);
+
+        fireEvent.click(screen.getByRole('button', { name: /forgot password/i }));
+        fireEvent.change(screen.getByLabelText(/email/i), {
+            target: { value: 'athlete@example.com' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: /send reset email/i }));
+
+        await waitFor(() => {
+            expect(sendSupabasePasswordResetMock).toHaveBeenCalledWith(
+                expect.any(Object),
+                'athlete@example.com',
+                'https://myorep-timer.vercel.app/',
+            );
+        });
+        expect(screen.getByText(/password reset sent to athlete@example.com/i)).toBeInTheDocument();
+    });
+
+    it('updates the password when bootstrap enters recovery mode', async () => {
+        useAccountStore.setState({
+            bootstrapStatus: 'ready',
+            mode: 'guest',
+            session: null,
+            profile: null,
+            entitlement: null,
+            syncStatus: 'disabled',
+            error: null,
+            requiresPasswordReset: true,
+        });
+
+        render(<App />);
+
+        fireEvent.change(screen.getByLabelText(/new password/i), {
+            target: { value: 'very-secure-pass' },
+        });
+        fireEvent.change(screen.getByLabelText(/confirm password/i), {
+            target: { value: 'very-secure-pass' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: /update password/i }));
+
+        await waitFor(() => {
+            expect(updateSupabasePasswordMock).toHaveBeenCalledWith(
+                expect.any(Object),
+                'very-secure-pass',
+            );
+        });
+        expect(screen.getByText(/password updated\./i)).toBeInTheDocument();
+        expect(useAccountStore.getState().requiresPasswordReset).toBe(false);
     });
 });
 

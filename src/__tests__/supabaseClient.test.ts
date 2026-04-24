@@ -14,6 +14,11 @@ describe('supabase client config', () => {
     });
 
     it('returns null when supabase env vars are missing', async () => {
+        vi.stubEnv('VITE_ENABLE_SUPABASE', 'false');
+        vi.stubEnv('VITE_SUPABASE_URL', '');
+        vi.stubEnv('VITE_SUPABASE_ANON_KEY', '');
+        vi.stubEnv('VITE_SUPABASE_REDIRECT_URL', '');
+
         const { getSupabaseClient, getSupabaseEnvironment, getSupabaseRuntimeState } = await import('@/lib/supabase');
 
         expect(getSupabaseEnvironment().enabled).toBe(false);
@@ -28,6 +33,7 @@ describe('supabase client config', () => {
     });
 
     it('returns null when the feature flag is disabled even if env vars are present', async () => {
+        vi.stubEnv('VITE_ENABLE_SUPABASE', 'false');
         vi.stubEnv('VITE_SUPABASE_URL', 'https://example.supabase.co');
         vi.stubEnv('VITE_SUPABASE_ANON_KEY', 'anon-key');
 
@@ -99,6 +105,7 @@ describe('supabase client config', () => {
         vi.stubEnv('VITE_ENABLE_SUPABASE', 'true');
         vi.stubEnv('VITE_SUPABASE_URL', 'https://example.supabase.co');
         vi.stubEnv('VITE_SUPABASE_ANON_KEY', 'anon-key');
+        vi.stubEnv('VITE_SUPABASE_REDIRECT_URL', '');
 
         const { getSupabaseAuthRedirectUrl } = await import('@/lib/supabase');
 

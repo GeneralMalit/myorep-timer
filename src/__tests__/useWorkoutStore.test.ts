@@ -1353,16 +1353,22 @@ describe('useWorkoutStore', () => {
             expect(updated.lastUsedAt).not.toBeNull();
         });
 
-        it('should export and import with conflict renaming and invalid skips', () => {
+        it('should export and import the full library with conflict renaming and invalid skips', () => {
             const store = useWorkoutStore.getState();
             act(() => {
                 store.setWorkoutConfig(validConfig);
             });
             store.saveCurrentWorkout('Arms');
+            act(() => {
+                store.createSession('Arms Session');
+                store.addWorkoutNodeFromSavedWorkout(useWorkoutStore.getState().savedWorkouts[0].id);
+                store.saveSessionDraft();
+            });
 
-            const payload = store.exportSavedWorkouts();
+            const payload = store.exportSavedLibrary();
             expect(payload.schemaVersion).toBe(1);
             expect(payload.workouts).toHaveLength(1);
+            expect(payload.sessions).toHaveLength(1);
 
             const importPayload = {
                 schemaVersion: 1,
@@ -1372,30 +1378,87 @@ describe('useWorkoutStore', () => {
                     { ...payload.workouts[0], id: 'new-id' },
                     { name: 'Bad Workout', sets: '0' },
                 ],
+                sessions: [
+                    payload.sessions[0],
+                    { ...payload.sessions[0], id: 'session-copy' },
+                    { name: 'Bad Session', nodes: [] },
+                ],
             };
 
-            const summary = store.importSavedWorkouts(importPayload);
-            expect(summary.imported).toBe(2);
-            expect(summary.renamed).toBe(2);
-            expect(summary.skipped).toBe(1);
+            const summary = store.importSavedLibrary(importPayload);
+            expect(summary.workouts.imported).toBe(2);
+            expect(summary.workouts.renamed).toBe(2);
+            expect(summary.workouts.skipped).toBe(1);
+            expect(summary.sessions.imported).toBe(2);
+            expect(summary.sessions.renamed).toBe(2);
+            expect(summary.sessions.skipped).toBe(1);
             expect(useWorkoutStore.getState().savedWorkouts).toHaveLength(3);
+            expect(useWorkoutStore.getState().savedSessions).toHaveLength(3);
             expect(useWorkoutStore.getState().savedWorkouts.some((workout) => workout.name.includes('(Imported'))).toBe(true);
+            const importedSession = useWorkoutStore.getState().savedSessions.find((session) => session.name.includes('(Imported'));
+            const importedLinkedNode = importedSession?.nodes.find((node) => node.type === 'workout');
+            if (importedLinkedNode?.type === 'workout') {
+                expect(useWorkoutStore.getState().savedWorkouts.some((workout) => workout.id === importedLinkedNode.sourceWorkoutId)).toBe(true);
+            }
         });
 
         it('should return import error summary for malformed payloads', () => {
             const store = useWorkoutStore.getState();
-            const summary = store.importSavedWorkouts({ schemaVersion: 99, workouts: [] });
-            expect(summary.imported).toBe(0);
+            const summary = store.importSavedLibrary({ schemaVersion: 99, workouts: [] });
+            expect(summary.workouts.imported).toBe(0);
             expect(summary.errors).toEqual([]);
 
-            const malformedSummary = store.importSavedWorkouts({ schemaVersion: 1, workouts: {} });
-            expect(malformedSummary.imported).toBe(0);
+            const malformedSummary = store.importSavedLibrary({ schemaVersion: 1, workouts: {} });
+            expect(malformedSummary.workouts.imported).toBe(0);
             expect(malformedSummary.errors[0]).toContain('Missing workouts array');
 
             act(() => {
                 store.clearImportSummary();
             });
             expect(useWorkoutStore.getState().lastImportSummary).toBeNull();
+        });
+
+        it('imports a raw persisted myorep-workout-storage snapshot', () => {
+            const store = useWorkoutStore.getState();
+            const payload = {
+                state: {
+                    savedWorkouts: [{
+                        id: 'persisted-workout',
+                        name: 'Persisted Workout',
+                        sets: '3',
+                        reps: '10',
+                        seconds: '3',
+                        rest: '20',
+                        myoReps: '4',
+                        myoWorkSecs: '2',
+                    }],
+                    savedSessions: [{
+                        id: 'persisted-session',
+                        name: 'Persisted Session',
+                        nodes: [{
+                            id: 'node-1',
+                            type: 'workout',
+                            name: 'Node Workout',
+                            config: {
+                                sets: '3',
+                                reps: '10',
+                                seconds: '3',
+                                rest: '20',
+                                myoReps: '4',
+                                myoWorkSecs: '2',
+                            },
+                            sourceWorkoutId: 'persisted-workout',
+                        }],
+                    }],
+                },
+                version: 3,
+            };
+
+            const summary = store.importSavedLibrary(payload);
+            expect(summary.workouts.imported).toBe(1);
+            expect(summary.sessions.imported).toBe(1);
+            expect(useWorkoutStore.getState().savedWorkouts.some((workout) => workout.name === 'Persisted Workout')).toBe(true);
+            expect(useWorkoutStore.getState().savedSessions.some((session) => session.name === 'Persisted Session')).toBe(true);
         });
 
         it('should sanitize set input to minimum of 1 while allowing empty', () => {

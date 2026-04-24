@@ -3,7 +3,7 @@
 ## Scope
 - Phase 2 adds a lightweight account domain without changing the local-first workout engine.
 - The app continues to work fully as a guest when Supabase is disabled, unconfigured, or unavailable.
-- Authentication uses email magic links first and defers the real paid Plus subscription flow to a later billing phase.
+- Authentication now supports username-based account creation plus email/password sign-in for normal access, requires a signup confirmation magic link before the first password login, and still defers the real paid Plus subscription flow to a later billing phase.
 
 ## Account Domain
 - `useAccountStore` is the single client-side account domain for:
@@ -39,15 +39,16 @@
 ## UI Surface
 - The primary auth entry lives in the existing sidebar as a compact account card.
 - The account card shows:
-  - guest: sign-in prompt and email field
-  - signed-in free: account identity, Free badge, Plus upsell, and locked messaging for cloud sync/session builder
-  - signed-in Plus: account identity, Plus badge, and available messaging for cloud sync/session builder
+  - guest: username + email + password account creation, signup confirmation resend, password sign-in after confirmation, and forgot-password
+  - signed-in free: username/account identity, Free badge, username editing, Plus upsell, and locked messaging for cloud sync/session builder
+  - signed-in Plus: username/account identity, Plus badge, username editing, and available messaging for cloud sync/session builder
   - bootstrapping/error/disabled states with concise status copy
+  - password recovery: reset-password form when Supabase returns a recovery link/session
 - `App.tsx` owns the auth action handlers and passes callbacks into `Sidebar.tsx`.
 - `SupabaseStatusPill` remains a low-level environment/status indicator separate from the account card.
 
 ## Backend Contract
-- `profiles` is the source for account identity metadata.
+- `profiles` is the source for account identity metadata, including the canonical unique `username`.
 - `entitlements` is the source of truth for plan state when a row exists.
 - Phase 2 supports exactly two client-visible plans:
   - `free`
@@ -66,7 +67,8 @@
   - missing entitlement fallback to free
   - fetch failure handling
 - Sidebar and app coverage covers:
-  - guest magic-link entry
+  - guest password sign-in and sign-up entry with confirmation-link messaging
+  - forgot-password and password recovery handling
   - email validation
   - signed-in free and Plus account visibility
   - error messaging

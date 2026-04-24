@@ -4,7 +4,7 @@
 - One shared React app remains the source of truth for web, iOS, and Android.
 - Supabase is the first backend for auth and saved-data persistence.
 - Separate dev and prod Supabase projects are required.
-- Email magic links are the only v1 auth method.
+- Username plus email/password auth stays primary, but new accounts must confirm through a magic-link email before password sign-in is allowed.
 - Guest and free users stay local-only.
 - Signed-in free users get an account but no cloud sync entitlement.
 - Session builder is a Plus-only feature.

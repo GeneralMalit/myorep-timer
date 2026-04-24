@@ -192,4 +192,60 @@ describe('sync metadata helpers', () => {
             deleted_at: '2026-02-03T00:00:00.000Z',
         });
     });
+
+    it('omits id for unsynced workout writes and includes it for synced workout writes', () => {
+        const workout = createSavedWorkout('Push Day', {
+            sets: '3',
+            reps: '12',
+            seconds: '3',
+            rest: '20',
+            myoReps: '4',
+            myoWorkSecs: '2',
+        }, '2026-02-01T00:00:00.000Z');
+
+        const unsyncedRow = toSupabaseSavedWorkoutWriteRow(workout, 'user-1');
+        const syncedRow = toSupabaseSavedWorkoutWriteRow({
+            ...workout,
+            sync: {
+                ...workout.sync!,
+                remoteId: 'remote-workout-1',
+            },
+        }, 'user-1');
+
+        expect(unsyncedRow).not.toHaveProperty('id');
+        expect(syncedRow).toHaveProperty('id', 'remote-workout-1');
+    });
+
+    it('omits id for unsynced session writes and includes it for synced session writes', () => {
+        const session = createSavedSession(
+            'Session One',
+            [
+                createWorkoutSessionNode(
+                    'Workout Node',
+                    {
+                        sets: '3',
+                        reps: '12',
+                        seconds: '3',
+                        rest: '20',
+                        myoReps: '4',
+                        myoWorkSecs: '2',
+                    },
+                    '2026-02-01T00:00:00.000Z',
+                ),
+            ],
+            '2026-02-01T00:00:00.000Z',
+        );
+
+        const unsyncedRow = toSupabaseSavedSessionWriteRow(session, 'user-1');
+        const syncedRow = toSupabaseSavedSessionWriteRow({
+            ...session,
+            sync: {
+                ...session.sync!,
+                remoteId: 'remote-session-1',
+            },
+        }, 'user-1');
+
+        expect(unsyncedRow).not.toHaveProperty('id');
+        expect(syncedRow).toHaveProperty('id', 'remote-session-1');
+    });
 });

@@ -4,8 +4,8 @@ import {
     getBillingAccountByUserId,
     type BillingAccountRow,
     type EntitlementOverrideRow,
-} from '@/server/billingData';
-import { isPaddleSubscriptionActive } from '@/server/paddleBilling';
+} from './billingData';
+import { isPaddleSubscriptionActive } from './paddleBilling';
 
 export interface EffectiveEntitlementInput {
     userId: string;
