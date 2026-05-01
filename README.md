@@ -1,4 +1,4 @@
-# Myo-Rep v3.6.3
+# Myo-Rep v3.6.4
 
 [![Tech Stack](https://img.shields.io/badge/Stack-React_19_+_TypeScript_+_Zustand-61dafb.svg)](https://react.dev/)
 [![Build Tool](https://img.shields.io/badge/Build-Rolldown_Vite-ffcf00.svg)](https://rolldown.rs/)
@@ -196,7 +196,7 @@ The desktop/web layout files apply when the viewport is wider than `767px`.
 
 ## 6. Versioning
 
-**Current Version: 3.6.3**
+**Current Version: 3.6.4**
 - Refactor: `rolldown-vite` integration for improved HMR performance.
 - Feature: "Workout Complete" TTS announcement.
 - Fix: Enhanced resting phase countdown accuracy and latency reduction.

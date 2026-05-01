@@ -1,3 +1,10 @@
+## [3.6.4](https://github.com/GeneralMalit/myorep-timer/compare/v3.6.3...v3.6.4) (2026-05-01)
+
+
+### Bug Fixes
+
+* restore timer persistence and section skipping ([499aef2](https://github.com/GeneralMalit/myorep-timer/commit/499aef249431fe553d4d28c1c42587778dea8dc3))
+
 ## [3.6.3](https://github.com/GeneralMalit/myorep-timer/compare/v3.6.2...v3.6.3) (2026-04-24)
 
 
