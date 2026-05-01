@@ -216,6 +216,35 @@ const setMobileViewport = (matches: boolean) => {
     });
 };
 
+class ManualWorker {
+    static instances: ManualWorker[] = [];
+    onmessage: ((event: MessageEvent) => void) | null = null;
+    startMessages = 0;
+    stopMessages = 0;
+
+    constructor() {
+        ManualWorker.instances.push(this);
+    }
+
+    postMessage(data: unknown) {
+        const message = data as { action?: string };
+        if (message.action === 'start') {
+            this.startMessages += 1;
+        }
+        if (message.action === 'stop') {
+            this.stopMessages += 1;
+        }
+    }
+
+    tick(elapsedMs: number) {
+        this.onmessage?.(new MessageEvent('message', { data: { action: 'tick', elapsed: elapsedMs } }));
+    }
+
+    terminate() {}
+    addEventListener() {}
+    removeEventListener() {}
+}
+
 describe('App', () => {
     beforeEach(() => {
         setMobileViewport(false);
@@ -1057,6 +1086,89 @@ describe('App', () => {
         }
     });
 
+    it('catches up through multiple timer boundaries from one large worker tick', async () => {
+        const originalWorker = global.Worker;
+        global.Worker = ManualWorker as unknown as typeof Worker;
+        ManualWorker.instances = [];
+
+        try {
+            render(<App />);
+
+            const inputs = screen.getAllByRole('spinbutton');
+            fireEvent.change(inputs[0], { target: { value: '2' } });
+            fireEvent.change(inputs[1], { target: { value: '2' } });
+            fireEvent.change(inputs[2], { target: { value: '2' } });
+            fireEvent.change(inputs[3], { target: { value: '10' } });
+            fireEvent.change(inputs[4], { target: { value: '2' } });
+            fireEvent.change(inputs[5], { target: { value: '2' } });
+
+            fireEvent.click(screen.getByRole('button', { name: /initialize protocol/i }));
+
+            act(() => {
+                ManualWorker.instances[0].tick(9000);
+            });
+
+            await waitFor(() => {
+                expect(useWorkoutStore.getState().timerStatus).toBe('Resting');
+            });
+            expect(useWorkoutStore.getState().timeLeft).toBe(10);
+            expect(useWorkoutStore.getState().isTimerRunning).toBe(true);
+        } finally {
+            global.Worker = originalWorker;
+        }
+    });
+
+    it('resumes from the paused countdown instead of the beginning of the section', async () => {
+        const originalWorker = global.Worker;
+        global.Worker = ManualWorker as unknown as typeof Worker;
+        ManualWorker.instances = [];
+
+        try {
+            useWorkoutStore.setState({
+                appPhase: 'timer',
+                timerStatus: 'Main Set',
+                isTimerRunning: true,
+                currentSet: 1,
+                currentRep: 1,
+                isMainRep: true,
+                isWorking: true,
+                sets: '1',
+                reps: '2',
+                rest: '',
+                myoReps: '',
+                myoWorkSecs: '',
+                seconds: '3',
+                timeLeft: 3,
+                setElapsedTime: 0,
+                setTotalDuration: 6,
+            });
+
+            render(<App />);
+
+            act(() => {
+                ManualWorker.instances[0].tick(1000);
+            });
+            await waitFor(() => {
+                expect(useWorkoutStore.getState().timeLeft).toBe(2);
+            });
+
+            fireEvent.click(screen.getByRole('button', { name: /pause/i }));
+            expect(useWorkoutStore.getState().isTimerRunning).toBe(false);
+            expect(useWorkoutStore.getState().timeLeft).toBe(2);
+
+            fireEvent.click(screen.getByRole('button', { name: /resume/i }));
+            act(() => {
+                ManualWorker.instances[0].tick(500);
+            });
+
+            await waitFor(() => {
+                expect(useWorkoutStore.getState().timeLeft).toBeCloseTo(1.5);
+            });
+        } finally {
+            global.Worker = originalWorker;
+        }
+    });
+
     it('renders timer branch with finished status controls', () => {
         useWorkoutStore.setState({
             appPhase: 'timer',
@@ -1644,7 +1756,7 @@ describe('App', () => {
         expect(within(errorDialog).getByText(/load failed/i)).toBeInTheDocument();
     });
 
-    it('pauses an active timer when the document is backgrounded', () => {
+    it('keeps an active timer running when the document is backgrounded', () => {
         useWorkoutStore.setState({
             appPhase: 'timer',
             timerStatus: 'Main Set',
@@ -1671,8 +1783,102 @@ describe('App', () => {
 
         fireEvent(document, new Event('visibilitychange'));
 
-        expect(useWorkoutStore.getState().isTimerRunning).toBe(false);
-        expect(screen.getByText(/timer paused while the app was in the background/i)).toBeInTheDocument();
+        expect(useWorkoutStore.getState().isTimerRunning).toBe(true);
+        expect(screen.queryByText(/timer paused while the app was in the background/i)).not.toBeInTheDocument();
+    });
+
+    it('renders skip section and advances the active session node', () => {
+        useWorkoutStore.setState({
+            appPhase: 'timer',
+            timerStatus: 'Main Set',
+            isTimerRunning: true,
+            currentSet: 1,
+            currentRep: 1,
+            isMainRep: true,
+            isWorking: true,
+            sets: '1',
+            reps: '1',
+            rest: '',
+            myoReps: '',
+            myoWorkSecs: '',
+            seconds: '2',
+            timeLeft: 2,
+            setTotalDuration: 2,
+            activeSessionId: 'session-1',
+            activeSessionNodeIndex: 0,
+            sessionStatus: 'running',
+            isRunningSession: true,
+            sessionNodeRuntimeType: 'workout',
+            savedSessions: [
+                {
+                    id: 'session-1',
+                    name: 'Skip Session',
+                    nodes: [
+                        {
+                            id: 'node-workout',
+                            type: 'workout',
+                            name: 'Lateral Raises',
+                            config: {
+                                sets: '1',
+                                reps: '1',
+                                seconds: '2',
+                                rest: '',
+                                myoReps: '',
+                                myoWorkSecs: '',
+                            },
+                            sourceWorkoutId: null,
+                            createdAt: '2026-03-01T00:00:00.000Z',
+                            updatedAt: '2026-03-01T00:00:00.000Z',
+                        },
+                        {
+                            id: 'node-rest',
+                            type: 'rest',
+                            name: 'Reset',
+                            seconds: '8',
+                            createdAt: '2026-03-01T00:00:00.000Z',
+                            updatedAt: '2026-03-01T00:00:00.000Z',
+                        },
+                    ],
+                    timesUsed: 0,
+                    lastUsedAt: null,
+                    createdAt: '2026-03-01T00:00:00.000Z',
+                    updatedAt: '2026-03-01T00:00:00.000Z',
+                },
+            ],
+        });
+
+        render(<App />);
+
+        fireEvent.click(screen.getByRole('button', { name: /skip section/i }));
+
+        expect(useWorkoutStore.getState().activeSessionNodeIndex).toBe(1);
+        expect(useWorkoutStore.getState().sessionNodeRuntimeType).toBe('rest');
+        expect(useWorkoutStore.getState().timerStatus).toBe('Resting');
+    });
+
+    it('styles timer controls with black backgrounds and white text', () => {
+        useWorkoutStore.setState({
+            appPhase: 'timer',
+            timerStatus: 'Main Set',
+            isTimerRunning: true,
+            currentSet: 1,
+            currentRep: 1,
+            isMainRep: true,
+            isWorking: true,
+            sets: '2',
+            reps: '10',
+            rest: '10',
+            myoReps: '4',
+            myoWorkSecs: '2',
+            seconds: '3',
+            timeLeft: 3,
+        });
+
+        render(<App />);
+
+        expect(screen.getByRole('button', { name: /pause/i })).toHaveClass('bg-black', 'text-white');
+        expect(screen.getByRole('button', { name: /skip section/i })).toHaveClass('bg-black', 'text-white');
+        expect(screen.getByRole('button', { name: /terminate/i })).toHaveClass('bg-black', 'text-white');
     });
 
     it('keeps the mobile timer shell scroll-safe on narrow screens', () => {

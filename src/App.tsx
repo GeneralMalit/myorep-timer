@@ -32,7 +32,7 @@ import {
     updateSupabaseUsername,
     updateSupabasePassword,
 } from '@/lib/supabaseAccount';
-import { Play, Square, RotateCcw, ChevronRight, Zap, Activity, Volume2, Menu, Settings2 } from 'lucide-react';
+import { Play, Square, RotateCcw, ChevronRight, Zap, Activity, Volume2, Menu, Settings2, SkipForward } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -157,7 +157,7 @@ export default function App() {
         activeSessionId, activeSessionNodeIndex, sessionStatus, isRunningSession, sessionNodeRuntimeType, completeSessionNode,
         appPhase, timerStatus, isTimerRunning, setIsTimerRunning,
         currentSet, currentRep, isMainRep, isWorking, timeLeft, setTotalDuration, setElapsedTime,
-        startWorkout, resetWorkout, advanceCycle, updateTimerBaselines,
+        startWorkout, resetWorkout, applyTimerElapsed, skipSection,
         saveCurrentWorkout, saveCurrentWorkoutAs, loadWorkout, renameWorkout, deleteWorkout, exportSavedLibrary, importSavedLibrary, clearImportSummary,
         createSession, loadSessionForEditing, duplicateSession, renameSession, deleteSession,
         setupMode, setSetupMode, showSettings, setShowSettings, setSettings,
@@ -179,11 +179,9 @@ export default function App() {
     const [isMobileViewport, setIsMobileViewport] = useState(false);
     const [dialogState, setDialogState] = useState<AppDialogState>(null);
     const [dialogValue, setDialogValue] = useState('');
-    const [backgroundPauseNotice, setBackgroundPauseNotice] = useState<string | null>(null);
     const isSingleCycle = parseInt(sets, 10) === 1;
     const workerRef = useRef<Worker | null>(null);
-    const baseTimeLeft = useRef(0);
-    const baseSetElapsedTime = useRef(0);
+    const lastWorkerElapsedRef = useRef(0);
     const lastSpokenSecondRef = useRef(-1);
     const prepAnnouncedRef = useRef(false);
     const dialogConfirmRef = useRef<((value: string) => void) | null>(null);
@@ -228,35 +226,36 @@ export default function App() {
         worker.onmessage = (e) => {
             if (e.data.action === 'tick') {
                 const elapsedSecs = e.data.elapsed / 1000;
-                updateTimerBaselines(Math.max(0, baseTimeLeft.current - elapsedSecs), baseSetElapsedTime.current + elapsedSecs);
+                const deltaSeconds = Math.max(0, elapsedSecs - lastWorkerElapsedRef.current);
+                lastWorkerElapsedRef.current = elapsedSecs;
+                applyTimerElapsed(deltaSeconds);
             }
         };
         return () => worker.terminate();
-    }, [updateTimerBaselines]);
+    }, [applyTimerElapsed]);
 
     useEffect(() => {
         if (!workerRef.current) return;
         if (isTimerRunning) {
             if (timeLeft > 0.001) {
+                lastWorkerElapsedRef.current = 0;
                 workerRef.current.postMessage({ action: 'start', interval: settings.smoothAnimation ? 50 : 250 });
             } else if (timerStatus !== 'Finished') {
                 workerRef.current.postMessage({ action: 'stop' });
-                baseSetElapsedTime.current = setElapsedTime;
-                if (isRunningSession && sessionNodeRuntimeType === 'rest') completeSessionNode();
-                else advanceCycle();
+                lastWorkerElapsedRef.current = 0;
+                applyTimerElapsed(0.002);
             }
         } else {
             workerRef.current.postMessage({ action: 'stop' });
+            lastWorkerElapsedRef.current = 0;
         }
-    }, [isTimerRunning, timeLeft <= 0.001, timerStatus, advanceCycle, completeSessionNode, isRunningSession, sessionNodeRuntimeType, settings.smoothAnimation]);
+    }, [isTimerRunning, timeLeft <= 0.001, timerStatus, applyTimerElapsed, settings.smoothAnimation]);
 
     useEffect(() => {
         if (isRunningSession && sessionNodeRuntimeType === 'workout' && sessionStatus === 'running' && timerStatus === 'Finished') completeSessionNode();
     }, [completeSessionNode, isRunningSession, sessionNodeRuntimeType, sessionStatus, timerStatus]);
 
     useEffect(() => {
-        baseTimeLeft.current = timeLeft;
-        if (setElapsedTime === 0) baseSetElapsedTime.current = 0;
         lastSpokenSecondRef.current = -1;
     }, [timerStatus, currentRep, isWorking, isMainRep]);
 
@@ -286,40 +285,6 @@ export default function App() {
             prepAnnouncedRef.current = true;
         }
     }, [timerStatus, isTimerRunning, settings.ttsEnabled]);
-    useEffect(() => {
-        if (typeof document === 'undefined') {
-            return undefined;
-        }
-
-        const pauseForBackground = () => {
-            if (!isTimerRunning) {
-                return;
-            }
-
-            setIsTimerRunning(false);
-            setBackgroundPauseNotice('Timer paused while the app was in the background. Resume when ready.');
-        };
-
-        const handleVisibilityChange = () => {
-            if (document.hidden) {
-                pauseForBackground();
-            }
-        };
-
-        document.addEventListener('visibilitychange', handleVisibilityChange);
-        window.addEventListener('pagehide', pauseForBackground);
-
-        return () => {
-            document.removeEventListener('visibilitychange', handleVisibilityChange);
-            window.removeEventListener('pagehide', pauseForBackground);
-        };
-    }, [isTimerRunning, setIsTimerRunning]);
-    useEffect(() => {
-        if (isTimerRunning && backgroundPauseNotice) {
-            setBackgroundPauseNotice(null);
-        }
-    }, [backgroundPauseNotice, isTimerRunning]);
-
     const closeDialog = useCallback(() => {
         setDialogState(null);
         setDialogValue('');
@@ -1006,11 +971,6 @@ export default function App() {
                                         {isRunningSession && activeSessionNode && !isMobileViewport && <div className="rounded-full border border-border bg-muted px-4 py-1.5 text-[10px] font-black italic tracking-[0.2em] text-muted-foreground sm:text-xs sm:tracking-widest">NODE {activeSessionNodeIndex + 1} {activeSessionNode.type === 'rest' ? 'REST' : 'WORKOUT'}</div>}
                                     </div>
                                     <h2 className="text-4xl font-black italic uppercase tracking-tighter text-foreground drop-shadow-sm sm:text-5xl">{timerStatus}</h2>
-                                    {backgroundPauseNotice && (
-                                        <div className="mx-auto w-full max-w-md rounded-[1.5rem] border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-center text-sm font-semibold text-amber-100 shadow-lg">
-                                            {backgroundPauseNotice}
-                                        </div>
-                                    )}
                                     {isMobileViewport && (
                                         <div className="mx-auto flex w-full max-w-md items-center justify-between gap-4 rounded-[1.75rem] border border-border/60 bg-card/80 px-4 py-3 text-left shadow-lg backdrop-blur-xl">
                                             <div className="min-w-0">
@@ -1056,10 +1016,15 @@ export default function App() {
                                     isPreparing={timerStatus === 'Preparing'}
                                 />
                                 <div className="flex w-full max-w-md flex-col justify-center gap-3 pb-1 sm:max-w-none sm:flex-row sm:gap-4">
-                                    <Button onClick={() => { audioEngine.init(); if (timerStatus === 'Finished') resetWorkout(); else setIsTimerRunning(!isTimerRunning); }} variant={isTimerRunning ? "secondary" : "default"} className="min-h-14 min-w-[200px] rounded-2xl px-6 text-lg font-black italic tracking-tighter shadow-md sm:h-16 sm:px-10 sm:text-xl">
+                                    <Button onClick={() => { audioEngine.init(); if (timerStatus === 'Finished') resetWorkout(); else setIsTimerRunning(!isTimerRunning); }} className="min-h-14 min-w-[200px] rounded-2xl bg-black px-6 text-lg font-black italic tracking-tighter text-white shadow-md hover:bg-black/90 sm:h-16 sm:px-10 sm:text-xl">
                                         {timerStatus === 'Finished' ? <><RotateCcw className="mr-2" /> NEW SESSION</> : (isTimerRunning ? <><Square className="mr-2" /> PAUSE</> : <><Play className="mr-2" /> RESUME</>)}
                                     </Button>
-                                    <Button onClick={resetWorkout} variant="ghost" className="min-h-14 rounded-2xl px-6 text-lg font-black italic tracking-tighter text-muted-foreground hover:bg-destructive/10 hover:text-destructive sm:h-16 sm:px-10 sm:text-xl">
+                                    {timerStatus !== 'Finished' && (
+                                        <Button onClick={() => { audioEngine.init(); skipSection(); }} className="min-h-14 rounded-2xl bg-black px-6 text-lg font-black italic tracking-tighter text-white shadow-md hover:bg-black/90 sm:h-16 sm:px-10 sm:text-xl">
+                                            <SkipForward className="mr-2" /> SKIP SECTION
+                                        </Button>
+                                    )}
+                                    <Button onClick={resetWorkout} className="min-h-14 rounded-2xl bg-black px-6 text-lg font-black italic tracking-tighter text-white shadow-md hover:bg-black/90 sm:h-16 sm:px-10 sm:text-xl">
                                         TERMINATE
                                     </Button>
                                 </div>

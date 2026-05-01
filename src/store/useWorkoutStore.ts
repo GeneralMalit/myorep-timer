@@ -363,6 +363,8 @@ interface WorkoutState {
     setSetElapsedTime: (time: number) => void;
     setLastTickSecond: (sec: number) => void;
     advanceCycle: () => void;
+    applyTimerElapsed: (deltaSeconds: number) => void;
+    skipSection: () => void;
     updateTimerBaselines: (timeLeft: number, setElapsed: number) => void;
     replaceLibrariesFromSync: (params: { workouts: SavedWorkout[]; sessions: SavedSession[] }) => void;
     acknowledgeSyncedWorkout: (workout: SavedWorkout) => void;
@@ -1647,6 +1649,86 @@ export const useWorkoutStore = create<WorkoutState>()(
             setLastTickSecond: (sec: number) => set({ lastTickSecond: sec }),
 
             updateTimerBaselines: (timeLeft: number, setElapsed: number) => set({ timeLeft, setElapsedTime: setElapsed }),
+            applyTimerElapsed: (deltaSeconds: number) => {
+                let remaining = Number.isFinite(deltaSeconds) ? Math.max(0, deltaSeconds) : 0;
+                const epsilon = 0.001;
+                let guard = 0;
+
+                while (remaining > epsilon && guard < 1000) {
+                    guard += 1;
+                    const state = get();
+
+                    if (!state.isTimerRunning || state.timerStatus === 'Finished') {
+                        break;
+                    }
+
+                    const timeLeft = Math.max(0, state.timeLeft);
+
+                    if (timeLeft > remaining + epsilon) {
+                        const nextTimeLeft = Math.max(0, timeLeft - remaining);
+                        set({
+                            timeLeft: nextTimeLeft,
+                            setElapsedTime: state.setElapsedTime + remaining,
+                            sessionRestTimeLeft: state.sessionNodeRuntimeType === 'rest' ? nextTimeLeft : state.sessionRestTimeLeft,
+                        });
+                        remaining = 0;
+                        break;
+                    }
+
+                    set({
+                        timeLeft: 0,
+                        setElapsedTime: state.setElapsedTime + timeLeft,
+                        sessionRestTimeLeft: state.sessionNodeRuntimeType === 'rest' ? 0 : state.sessionRestTimeLeft,
+                    });
+                    remaining -= timeLeft;
+
+                    const boundaryState = get();
+                    const beforeTransition = {
+                        timerStatus: boundaryState.timerStatus,
+                        currentSet: boundaryState.currentSet,
+                        currentRep: boundaryState.currentRep,
+                        isWorking: boundaryState.isWorking,
+                        isMainRep: boundaryState.isMainRep,
+                        activeSessionNodeIndex: boundaryState.activeSessionNodeIndex,
+                        sessionNodeRuntimeType: boundaryState.sessionNodeRuntimeType,
+                    };
+
+                    if (boundaryState.isRunningSession && boundaryState.sessionNodeRuntimeType === 'rest') {
+                        get().advanceSessionNode();
+                    } else {
+                        get().advanceCycle();
+                    }
+
+                    const afterTransition = get();
+                    const didTransition =
+                        beforeTransition.timerStatus !== afterTransition.timerStatus ||
+                        beforeTransition.currentSet !== afterTransition.currentSet ||
+                        beforeTransition.currentRep !== afterTransition.currentRep ||
+                        beforeTransition.isWorking !== afterTransition.isWorking ||
+                        beforeTransition.isMainRep !== afterTransition.isMainRep ||
+                        beforeTransition.activeSessionNodeIndex !== afterTransition.activeSessionNodeIndex ||
+                        beforeTransition.sessionNodeRuntimeType !== afterTransition.sessionNodeRuntimeType ||
+                        afterTransition.timerStatus === 'Finished';
+
+                    if (!didTransition) {
+                        break;
+                    }
+                }
+            },
+            skipSection: () => {
+                const state = get();
+
+                if (state.timerStatus === 'Finished') {
+                    return;
+                }
+
+                if (state.activeSessionId) {
+                    get().advanceSessionNode();
+                    return;
+                }
+
+                get().advanceCycle();
+            },
             replaceLibrariesFromSync: ({ workouts, sessions }) => set((state) => {
                 const nowIso = new Date().toISOString();
                 const nextWorkouts = workouts.map((workout) => ({

@@ -487,6 +487,114 @@ describe('useWorkoutStore', () => {
             expect(state.savedSessions[0].lastUsedAt).not.toBeNull();
         });
 
+        it('should catch up elapsed time across session prep, workout, and rest nodes', () => {
+            const store = useWorkoutStore.getState();
+            seedSelectedWorkout({
+                sets: '1',
+                reps: '1',
+                seconds: '2',
+                rest: '',
+                myoReps: '',
+                myoWorkSecs: '',
+            }, 'Quick Workout');
+            act(() => {
+                store.setSettings({ prepTime: 5 });
+            });
+
+            let sessionId = '';
+            act(() => {
+                const created = store.createSession('Catch Up Session');
+                expect(created.ok).toBe(true);
+                sessionId = created.id as string;
+                store.addWorkoutNodeFromCurrentSetup();
+                store.addRestNode('8');
+                store.saveSessionDraft();
+                store.startSession(sessionId);
+            });
+
+            act(() => {
+                store.applyTimerElapsed(9);
+            });
+
+            const state = useWorkoutStore.getState();
+            expect(state.isTimerRunning).toBe(true);
+            expect(state.sessionStatus).toBe('running');
+            expect(state.sessionNodeRuntimeType).toBe('rest');
+            expect(state.activeSessionNodeIndex).toBe(1);
+            expect(state.timerStatus).toBe('Resting');
+            expect(state.timeLeft).toBe(6);
+        });
+
+        it('should skip a session workout node without recording it as completed', () => {
+            const store = useWorkoutStore.getState();
+            seedSelectedWorkout({
+                sets: '1',
+                reps: '1',
+                seconds: '2',
+                rest: '',
+                myoReps: '',
+                myoWorkSecs: '',
+            }, 'Skip Workout');
+
+            let sessionId = '';
+            act(() => {
+                const created = store.createSession('Skip Session');
+                expect(created.ok).toBe(true);
+                sessionId = created.id as string;
+                store.addWorkoutNodeFromCurrentSetup();
+                store.addRestNode('8');
+                store.saveSessionDraft();
+                store.startSession(sessionId);
+                store.advanceCycle();
+            });
+
+            const skippedNode = useWorkoutStore.getState().savedSessions[0].nodes[0];
+
+            act(() => {
+                store.skipSection();
+            });
+
+            const state = useWorkoutStore.getState();
+            expect(state.activeSessionNodeIndex).toBe(1);
+            expect(state.sessionNodeRuntimeType).toBe('rest');
+            expect(state.timerStatus).toBe('Resting');
+            expect(state.completedSessionWorkoutNodeIds).not.toContain(skippedNode.id);
+            expect(state.savedWorkouts[0].timesUsed).toBe(0);
+        });
+
+        it('should finish the session when skipping the final node', () => {
+            const store = useWorkoutStore.getState();
+            seedSelectedWorkout({
+                sets: '1',
+                reps: '1',
+                seconds: '2',
+                rest: '',
+                myoReps: '',
+                myoWorkSecs: '',
+            }, 'Final Skip Workout');
+
+            let sessionId = '';
+            act(() => {
+                const created = store.createSession('Final Skip Session');
+                expect(created.ok).toBe(true);
+                sessionId = created.id as string;
+                store.addWorkoutNodeFromCurrentSetup();
+                store.saveSessionDraft();
+                store.startSession(sessionId);
+                store.advanceCycle();
+            });
+
+            act(() => {
+                store.skipSection();
+            });
+
+            const state = useWorkoutStore.getState();
+            expect(state.sessionStatus).toBe('finished');
+            expect(state.isTimerRunning).toBe(false);
+            expect(state.timerStatus).toBe('Finished');
+            expect(state.activeSessionNodeIndex).toBe(1);
+        });
+
         it('should fully reset volatile runtime state if the active session disappears', () => {
             const store = useWorkoutStore.getState();
 
@@ -992,6 +1100,105 @@ describe('useWorkoutStore', () => {
             expect(state.timerStatus).toBe('Resting');
             expect(state.isWorking).toBe(false);
             expect(state.timeLeft).toBe(15);
+        });
+    });
+
+    describe('Elapsed Timer Catch-up', () => {
+        it('should reduce timeLeft and increase setElapsedTime within the current phase', () => {
+            const store = useWorkoutStore.getState();
+
+            act(() => {
+                useWorkoutStore.setState({
+                    appPhase: 'timer',
+                    timerStatus: 'Main Set',
+                    isTimerRunning: true,
+                    isWorking: true,
+                    isMainRep: true,
+                    currentSet: 1,
+                    currentRep: 1,
+                    sets: '2',
+                    reps: '3',
+                    seconds: '4',
+                    rest: '10',
+                    myoReps: '2',
+                    myoWorkSecs: '3',
+                    timeLeft: 4,
+                    setElapsedTime: 0,
+                    setTotalDuration: 12,
+                });
+                store.applyTimerElapsed(1.25);
+            });
+
+            const state = useWorkoutStore.getState();
+            expect(state.timerStatus).toBe('Main Set');
+            expect(state.currentRep).toBe(1);
+            expect(state.timeLeft).toBeCloseTo(2.75);
+            expect(state.setElapsedTime).toBeCloseTo(1.25);
+        });
+
+        it('should catch up across multiple standalone boundaries', () => {
+            const store = useWorkoutStore.getState();
+
+            act(() => {
+                useWorkoutStore.setState({
+                    appPhase: 'timer',
+                    timerStatus: 'Main Set',
+                    isTimerRunning: true,
+                    isWorking: true,
+                    isMainRep: true,
+                    currentSet: 1,
+                    currentRep: 1,
+                    sets: '2',
+                    reps: '2',
+                    seconds: '2',
+                    rest: '10',
+                    myoReps: '2',
+                    myoWorkSecs: '2',
+                    timeLeft: 2,
+                    setElapsedTime: 0,
+                    setTotalDuration: 4,
+                });
+                store.applyTimerElapsed(5);
+            });
+
+            const state = useWorkoutStore.getState();
+            expect(state.timerStatus).toBe('Resting');
+            expect(state.isWorking).toBe(false);
+            expect(state.currentRep).toBe(2);
+            expect(state.timeLeft).toBe(9);
+            expect(state.setElapsedTime).toBe(1);
+        });
+
+        it('should finish a standalone workout when elapsed time exceeds the remaining duration', () => {
+            const store = useWorkoutStore.getState();
+
+            act(() => {
+                useWorkoutStore.setState({
+                    appPhase: 'timer',
+                    timerStatus: 'Main Set',
+                    isTimerRunning: true,
+                    isWorking: true,
+                    isMainRep: true,
+                    currentSet: 1,
+                    currentRep: 1,
+                    sets: '1',
+                    reps: '1',
+                    seconds: '2',
+                    rest: '',
+                    myoReps: '',
+                    myoWorkSecs: '',
+                    timeLeft: 2,
+                    setElapsedTime: 0,
+                    setTotalDuration: 2,
+                });
+                store.applyTimerElapsed(10);
+            });
+
+            const state = useWorkoutStore.getState();
+            expect(state.timerStatus).toBe('Finished');
+            expect(state.isTimerRunning).toBe(false);
+            expect(state.timeLeft).toBe(0);
+            expect(state.setElapsedTime).toBe(2);
         });
     });
 
