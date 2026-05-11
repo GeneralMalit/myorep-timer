@@ -1,3 +1,10 @@
+## [3.6.5](https://github.com/GeneralMalit/myorep-timer/compare/v3.6.4...v3.6.5) (2026-05-11)
+
+
+### Bug Fixes
+
+* schedule metronome ticks on audio clock ([c203bba](https://github.com/GeneralMalit/myorep-timer/commit/c203bba25c65f8782522b099989779e8e97c3cb2))
+
 ## [3.6.4](https://github.com/GeneralMalit/myorep-timer/compare/v3.6.3...v3.6.4) (2026-05-01)
 
 
