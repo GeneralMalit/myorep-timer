@@ -58,6 +58,18 @@ const isBurnoutRepSet = (params: { timerStatus: string; isWorking: boolean; seco
     return activeRepSeconds === 1;
 };
 
+const getMetronomeOffsets = (timeLeft: number) => {
+    const currentSecond = Math.ceil(timeLeft);
+    if (!Number.isFinite(timeLeft) || currentSecond < 1) {
+        return [];
+    }
+
+    return Array.from({ length: currentSecond }, (_, index) => {
+        const second = currentSecond - index;
+        return Math.max(0, Number((timeLeft - second).toFixed(3)));
+    });
+};
+
 type AppDialogState =
     | {
         kind: 'prompt' | 'confirm' | 'message';
@@ -183,6 +195,7 @@ export default function App() {
     const workerRef = useRef<Worker | null>(null);
     const lastWorkerElapsedRef = useRef(0);
     const lastSpokenSecondRef = useRef(-1);
+    const metronomeScheduleKeyRef = useRef<string | null>(null);
     const prepAnnouncedRef = useRef(false);
     const dialogConfirmRef = useRef<((value: string) => void) | null>(null);
     const loadedWorkout = selectedSavedWorkoutId ? savedWorkouts.find((workout) => workout.id === selectedSavedWorkoutId) ?? null : null;
@@ -260,6 +273,35 @@ export default function App() {
     }, [timerStatus, currentRep, isWorking, isMainRep]);
 
     useEffect(() => {
+        const canScheduleMetronome = isTimerRunning && settings.metronomeEnabled && isWorking && timerStatus !== 'Preparing' && timeLeft > 0.001;
+        const scheduleKey = canScheduleMetronome
+            ? [timerStatus, currentSet, currentRep, isMainRep ? 'main' : 'myo', settings.metronomeSound].join('|')
+            : null;
+
+        if (!canScheduleMetronome || !scheduleKey) {
+            if (metronomeScheduleKeyRef.current !== null) {
+                audioEngine.cancelScheduledTicks();
+                metronomeScheduleKeyRef.current = null;
+            }
+            return;
+        }
+
+        if (metronomeScheduleKeyRef.current === scheduleKey) {
+            return;
+        }
+
+        const offsets = getMetronomeOffsets(timeLeft);
+        if (offsets.length > 0) {
+            audioEngine.scheduleTickSequence(settings.metronomeSound, offsets);
+            metronomeScheduleKeyRef.current = scheduleKey;
+        }
+    }, [timeLeft, isTimerRunning, settings.metronomeEnabled, settings.metronomeSound, isWorking, timerStatus, currentSet, currentRep, isMainRep]);
+
+    useEffect(() => () => {
+        audioEngine.cancelScheduledTicks();
+    }, []);
+
+    useEffect(() => {
         if (isTimerRunning && settings.metronomeEnabled && isWorking && timerStatus !== 'Preparing') {
             const currentSecond = Math.ceil(timeLeft);
             if (currentSecond !== lastSpokenSecondRef.current && currentSecond >= 0) {
@@ -267,7 +309,6 @@ export default function App() {
                 const suppressVoice = isBurnoutRepSet({ timerStatus, isWorking, seconds, myoWorkSecs });
                 const shouldSpeakCurrentSecond = settings.ttsEnabled && !suppressVoice && currentSecond >= 1 && (currentSecond > 1 || activeRepTarget !== 1);
                 if (shouldSpeakCurrentSecond) audioEngine.speak(currentSecond);
-                if (settings.metronomeEnabled) audioEngine.playTick(settings.metronomeSound);
                 lastSpokenSecondRef.current = currentSecond;
             }
         } else if (timerStatus !== 'Preparing') {

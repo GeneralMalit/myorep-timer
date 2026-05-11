@@ -2,6 +2,7 @@ export class AudioEngine {
     private audioCtx: AudioContext | null = null;
     private voices: SpeechSynthesisVoice[] = [];
     private selectedVoice: SpeechSynthesisVoice | null = null;
+    private scheduledTickNodes: Array<{ oscillator: OscillatorNode; envelope: GainNode }> = [];
     private unlocked = false;
     private preferredPatterns = ['Google US English', 'Microsoft Aria Online', 'Natural', 'Samantha', 'Google', 'Microsoft'];
     private readonly defaultLang = 'en-US';
@@ -123,57 +124,102 @@ export class AudioEngine {
         this.init();
         if (!this.audioCtx) return;
 
+        this.scheduleTickAt(type, this.audioCtx.currentTime);
+    }
+
+    scheduleTickSequence(type: string = 'woodblock', offsetsSeconds: number[]) {
+        if (this.isDocumentHidden()) return;
+
+        this.init();
+        if (!this.audioCtx) return;
+
+        this.cancelScheduledTicks();
+        const now = this.audioCtx.currentTime;
+
+        for (const offset of offsetsSeconds) {
+            if (!Number.isFinite(offset) || offset < 0) {
+                continue;
+            }
+
+            this.scheduledTickNodes.push(this.scheduleTickAt(type, now + offset));
+        }
+    }
+
+    cancelScheduledTicks() {
+        for (const node of this.scheduledTickNodes) {
+            try {
+                node.oscillator.stop();
+            } catch {
+                // Already-started or already-stopped nodes can throw in some browsers.
+            }
+
+            try {
+                node.oscillator.disconnect();
+                node.envelope.disconnect();
+            } catch {
+                // Disconnect is best-effort cleanup.
+            }
+        }
+
+        this.scheduledTickNodes = [];
+    }
+
+    private scheduleTickAt(type: string, startTime: number): { oscillator: OscillatorNode; envelope: GainNode } {
+        if (!this.audioCtx) {
+            throw new Error('AudioContext is not initialized.');
+        }
+
         const osc = this.audioCtx.createOscillator();
         const envelope = this.audioCtx.createGain();
 
         osc.connect(envelope);
         envelope.connect(this.audioCtx.destination);
 
-        const now = this.audioCtx.currentTime;
-
         switch (type) {
             case 'woodblock':
                 osc.type = 'sine';
-                osc.frequency.setValueAtTime(1200, now);
-                osc.frequency.exponentialRampToValueAtTime(800, now + 0.05);
-                envelope.gain.setValueAtTime(0.5, now);
-                envelope.gain.exponentialRampToValueAtTime(0.01, now + 0.05);
-                osc.start(now);
-                osc.stop(now + 0.05);
+                osc.frequency.setValueAtTime(1200, startTime);
+                osc.frequency.exponentialRampToValueAtTime(800, startTime + 0.05);
+                envelope.gain.setValueAtTime(0.5, startTime);
+                envelope.gain.exponentialRampToValueAtTime(0.01, startTime + 0.05);
+                osc.start(startTime);
+                osc.stop(startTime + 0.05);
                 break;
             case 'mechanical':
                 osc.type = 'triangle';
-                osc.frequency.setValueAtTime(800, now);
-                envelope.gain.setValueAtTime(0.3, now);
-                envelope.gain.linearRampToValueAtTime(0, now + 0.02);
-                osc.start(now);
-                osc.stop(now + 0.02);
+                osc.frequency.setValueAtTime(800, startTime);
+                envelope.gain.setValueAtTime(0.3, startTime);
+                envelope.gain.linearRampToValueAtTime(0, startTime + 0.02);
+                osc.start(startTime);
+                osc.stop(startTime + 0.02);
                 break;
             case 'electronic':
                 osc.type = 'square';
-                osc.frequency.setValueAtTime(1500, now);
-                envelope.gain.setValueAtTime(0.2, now);
-                envelope.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
-                osc.start(now);
-                osc.stop(now + 0.1);
+                osc.frequency.setValueAtTime(1500, startTime);
+                envelope.gain.setValueAtTime(0.2, startTime);
+                envelope.gain.exponentialRampToValueAtTime(0.01, startTime + 0.1);
+                osc.start(startTime);
+                osc.stop(startTime + 0.1);
                 break;
             case 'low-thud':
                 osc.type = 'sine';
-                osc.frequency.setValueAtTime(150, now);
-                osc.frequency.exponentialRampToValueAtTime(50, now + 0.1);
-                envelope.gain.setValueAtTime(0.8, now);
-                envelope.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
-                osc.start(now);
-                osc.stop(now + 0.15);
+                osc.frequency.setValueAtTime(150, startTime);
+                osc.frequency.exponentialRampToValueAtTime(50, startTime + 0.1);
+                envelope.gain.setValueAtTime(0.8, startTime);
+                envelope.gain.exponentialRampToValueAtTime(0.01, startTime + 0.15);
+                osc.start(startTime);
+                osc.stop(startTime + 0.15);
                 break;
             default:
                 osc.type = 'sine';
-                osc.frequency.setValueAtTime(1000, now);
-                envelope.gain.setValueAtTime(0.3, now);
-                envelope.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
-                osc.start(now);
-                osc.stop(now + 0.15);
+                osc.frequency.setValueAtTime(1000, startTime);
+                envelope.gain.setValueAtTime(0.3, startTime);
+                envelope.gain.exponentialRampToValueAtTime(0.01, startTime + 0.1);
+                osc.start(startTime);
+                osc.stop(startTime + 0.15);
         }
+
+        return { oscillator: osc, envelope };
     }
 
     speak(text: string | number) {

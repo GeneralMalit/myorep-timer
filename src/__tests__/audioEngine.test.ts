@@ -94,4 +94,51 @@ describe('audioEngine', () => {
 
         expect(audioContextSpy).not.toHaveBeenCalled();
     });
+
+    it('schedules metronome ticks on the audio context clock with stable offsets', async () => {
+        const oscillatorStarts: number[] = [];
+        const oscillatorStops: number[] = [];
+        const gainEvents: Array<{ method: string; value: number; time: number }> = [];
+        const oscillator = {
+            type: 'sine' as OscillatorType,
+            frequency: {
+                setValueAtTime: vi.fn(),
+                exponentialRampToValueAtTime: vi.fn(),
+            },
+            connect: vi.fn(),
+            start: vi.fn((time: number) => oscillatorStarts.push(time)),
+            stop: vi.fn((time: number) => oscillatorStops.push(time)),
+        };
+        const gain = {
+            gain: {
+                setValueAtTime: vi.fn((value: number, time: number) => gainEvents.push({ method: 'set', value, time })),
+                exponentialRampToValueAtTime: vi.fn((value: number, time: number) => gainEvents.push({ method: 'exp', value, time })),
+                linearRampToValueAtTime: vi.fn(),
+            },
+            connect: vi.fn(),
+            disconnect: vi.fn(),
+        };
+        const audioContextSpy = vi.fn(function MockAudioContext(this: Record<string, unknown>) {
+            Object.assign(this, {
+                state: 'running',
+                currentTime: 42,
+                resume: vi.fn(() => Promise.resolve()),
+                createOscillator: vi.fn(() => ({ ...oscillator, frequency: { ...oscillator.frequency } })),
+                createGain: vi.fn(() => ({ ...gain, gain: { ...gain.gain } })),
+                createBuffer: vi.fn(),
+                createBufferSource: vi.fn(),
+                destination: {},
+            });
+        });
+
+        global.AudioContext = audioContextSpy as unknown as typeof AudioContext;
+        (globalThis as typeof globalThis & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext = global.AudioContext;
+
+        const audioEngine = await loadAudioEngine();
+        audioEngine.scheduleTickSequence('woodblock', [0, 1, 2]);
+
+        expect(oscillatorStarts).toEqual([42, 43, 44]);
+        expect(oscillatorStops).toEqual([42.05, 43.05, 44.05]);
+        expect(gainEvents.filter((event) => event.method === 'set').map((event) => event.time)).toEqual([42, 43, 44]);
+    });
 });

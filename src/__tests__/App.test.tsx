@@ -36,6 +36,8 @@ vi.mock('@/utils/audioEngine', () => ({
         init: vi.fn(),
         speak: vi.fn(),
         playTick: vi.fn(),
+        scheduleTickSequence: vi.fn(),
+        cancelScheduledTicks: vi.fn(),
     },
 }));
 
@@ -256,6 +258,8 @@ describe('App', () => {
         vi.mocked(audioEngine.init).mockClear();
         vi.mocked(audioEngine.speak).mockClear();
         vi.mocked(audioEngine.playTick).mockClear();
+        vi.mocked(audioEngine.scheduleTickSequence).mockClear();
+        vi.mocked(audioEngine.cancelScheduledTicks).mockClear();
         concentricTimerMock.mockClear();
         getSupabaseClientMock.mockReset();
         getSupabaseEnvironmentMock.mockReset();
@@ -1387,10 +1391,10 @@ describe('App', () => {
         render(<App />);
 
         expect(audioEngine.speak).toHaveBeenCalledWith(1);
-        expect(audioEngine.playTick).toHaveBeenCalledTimes(1);
+        expect(audioEngine.scheduleTickSequence).toHaveBeenCalledWith('woodblock', [0]);
     });
 
-    it('does not replay the metronome while rerenders stay within the same countdown second', () => {
+    it('schedules the active rep metronome sequence once on the audio clock', () => {
         useWorkoutStore.setState({
             appPhase: 'timer',
             timerStatus: 'Main Set',
@@ -1415,7 +1419,8 @@ describe('App', () => {
 
         const { rerender } = render(<App />);
 
-        expect(audioEngine.playTick).toHaveBeenCalledTimes(1);
+        expect(audioEngine.scheduleTickSequence).toHaveBeenCalledTimes(1);
+        expect(audioEngine.scheduleTickSequence).toHaveBeenCalledWith('woodblock', [0, 0.9]);
 
         act(() => {
             useWorkoutStore.setState({
@@ -1424,7 +1429,7 @@ describe('App', () => {
         });
         rerender(<App />);
 
-        expect(audioEngine.playTick).toHaveBeenCalledTimes(1);
+        expect(audioEngine.scheduleTickSequence).toHaveBeenCalledTimes(1);
 
         act(() => {
             useWorkoutStore.setState({
@@ -1433,10 +1438,10 @@ describe('App', () => {
         });
         rerender(<App />);
 
-        expect(audioEngine.playTick).toHaveBeenCalledTimes(2);
+        expect(audioEngine.scheduleTickSequence).toHaveBeenCalledTimes(1);
     });
 
-    it('stops replaying the metronome once the timer is paused', () => {
+    it('cancels scheduled metronome ticks once the timer is paused', () => {
         useWorkoutStore.setState({
             appPhase: 'timer',
             timerStatus: 'Main Set',
@@ -1461,7 +1466,7 @@ describe('App', () => {
 
         const { rerender } = render(<App />);
 
-        expect(audioEngine.playTick).toHaveBeenCalledTimes(1);
+        expect(audioEngine.scheduleTickSequence).toHaveBeenCalledTimes(1);
 
         act(() => {
             useWorkoutStore.setState({
@@ -1471,7 +1476,48 @@ describe('App', () => {
         });
         rerender(<App />);
 
-        expect(audioEngine.playTick).toHaveBeenCalledTimes(1);
+        expect(audioEngine.scheduleTickSequence).toHaveBeenCalledTimes(1);
+        expect(audioEngine.cancelScheduledTicks).toHaveBeenCalled();
+    });
+
+    it('keeps metronome beats pre-scheduled when a delayed worker tick skips countdown seconds', () => {
+        useWorkoutStore.setState({
+            appPhase: 'timer',
+            timerStatus: 'Main Set',
+            isTimerRunning: true,
+            currentSet: 1,
+            currentRep: 1,
+            isMainRep: true,
+            isWorking: true,
+            sets: '1',
+            reps: '3',
+            rest: '10',
+            myoReps: '4',
+            myoWorkSecs: '2',
+            seconds: '4',
+            timeLeft: 4,
+            setTotalDuration: 12,
+            setElapsedTime: 0,
+            settings: {
+                ...useWorkoutStore.getState().settings,
+                ttsEnabled: false,
+                metronomeEnabled: true,
+            },
+        });
+
+        const { rerender } = render(<App />);
+
+        expect(audioEngine.scheduleTickSequence).toHaveBeenCalledTimes(1);
+        expect(audioEngine.scheduleTickSequence).toHaveBeenCalledWith('woodblock', [0, 1, 2, 3]);
+
+        act(() => {
+            useWorkoutStore.getState().applyTimerElapsed(2.7);
+        });
+        rerender(<App />);
+
+        expect(useWorkoutStore.getState().timeLeft).toBeCloseTo(1.3);
+        expect(audioEngine.scheduleTickSequence).toHaveBeenCalledTimes(1);
+        expect(audioEngine.playTick).not.toHaveBeenCalled();
     });
 
     it('suppresses speech during a main-set burnout block', () => {
@@ -1501,7 +1547,7 @@ describe('App', () => {
         render(<App />);
 
         expect(audioEngine.speak).not.toHaveBeenCalled();
-        expect(audioEngine.playTick).toHaveBeenCalledTimes(1);
+        expect(audioEngine.scheduleTickSequence).toHaveBeenCalledWith('woodblock', [0]);
     });
 
     it('suppresses speech during a myo-rep burnout block', () => {
@@ -1531,7 +1577,7 @@ describe('App', () => {
         render(<App />);
 
         expect(audioEngine.speak).not.toHaveBeenCalled();
-        expect(audioEngine.playTick).toHaveBeenCalledTimes(1);
+        expect(audioEngine.scheduleTickSequence).toHaveBeenCalledWith('woodblock', [0]);
     });
 
     it('suppresses speech for session workout burnout nodes', () => {
@@ -1592,7 +1638,7 @@ describe('App', () => {
         render(<App />);
 
         expect(audioEngine.speak).not.toHaveBeenCalled();
-        expect(audioEngine.playTick).toHaveBeenCalledTimes(1);
+        expect(audioEngine.scheduleTickSequence).toHaveBeenCalledWith('woodblock', [0]);
     });
 
     it('does not render pip controls anymore', () => {
