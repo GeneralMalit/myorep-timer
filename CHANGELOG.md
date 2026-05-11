@@ -1,3 +1,10 @@
+## [3.6.6](https://github.com/GeneralMalit/myorep-timer/compare/v3.6.5...v3.6.6) (2026-05-11)
+
+
+### Bug Fixes
+
+* fall back to persisted entitlement on refresh failure ([008e5a6](https://github.com/GeneralMalit/myorep-timer/commit/008e5a6a8ae519269ed533d41bd511ec52ac2549))
+
 ## [3.6.5](https://github.com/GeneralMalit/myorep-timer/compare/v3.6.4...v3.6.5) (2026-05-11)
 
 
