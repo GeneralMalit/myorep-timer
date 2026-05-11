@@ -96,7 +96,14 @@ export const loadSupabaseAccountState = async (
         return buildAccountStateFromSession(session);
     }
 
-    const refreshedEntitlement = await refreshResolvedEntitlement(session);
+    let refreshedEntitlement: SupabaseEntitlementRow | null = null;
+    try {
+        refreshedEntitlement = await refreshResolvedEntitlement(session);
+    } catch {
+        // Refresh is opportunistic. We still want to read the persisted
+        // Supabase rows so a transient API failure does not force the user
+        // into the free path.
+    }
 
     const [profileRow, entitlementRow] = await Promise.all([
         readSupabaseProfile(client, session.user.id),

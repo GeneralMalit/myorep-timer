@@ -130,9 +130,35 @@ describe('supabaseAccount', () => {
         expect(resolved.entitlement?.cloudSyncEnabled).toBe(true);
     });
 
-    it('surfaces entitlement refresh errors before reading Supabase rows', async () => {
+    it('falls back to the persisted entitlement row when refresh fails', async () => {
+        const maybeSingleProfile = vi.fn().mockResolvedValue({
+            data: {
+                id: 'user-1',
+                email: 'athlete@example.com',
+                username: 'athlete_one',
+                display_name: 'Athlete',
+                created_at: '2026-04-01T00:00:00.000Z',
+                updated_at: '2026-04-16T00:00:00.000Z',
+            },
+            error: null,
+        });
+        const maybeSingleEntitlement = vi.fn().mockResolvedValue({
+            data: {
+                user_id: 'user-1',
+                plan: 'plus',
+                cloud_sync_enabled: true,
+                updated_at: '2026-04-16T00:00:00.000Z',
+            },
+            error: null,
+        });
         const client = {
-            from: vi.fn(),
+            from: vi.fn((table: string) => ({
+                select: vi.fn(() => ({
+                    eq: vi.fn(() => ({
+                        maybeSingle: table === 'profiles' ? maybeSingleProfile : maybeSingleEntitlement,
+                    })),
+                })),
+            })),
         };
         const session = {
             access_token: 'access-token',
@@ -152,10 +178,12 @@ describe('supabaseAccount', () => {
             }),
         });
 
-        await expect(loadSupabaseAccountState(client as never, session as never)).rejects.toThrow(
-            'Could not refresh entitlement state.',
-        );
-        expect(client.from).not.toHaveBeenCalled();
+        const resolved = await loadSupabaseAccountState(client as never, session as never);
+
+        expect(client.from).toHaveBeenCalledTimes(2);
+        expect(resolved.mode).toBe('signed-in-plus');
+        expect(resolved.entitlement?.plan).toBe('plus');
+        expect(resolved.entitlement?.cloudSyncEnabled).toBe(true);
     });
 
     it('signs in with password through Supabase auth', async () => {
