@@ -1,3 +1,10 @@
+# [3.7.0](https://github.com/GeneralMalit/myorep-timer/compare/v3.6.6...v3.7.0) (2026-05-21)
+
+
+### Features
+
+* implement sliding view transitions between workout and session setup ([b6067ea](https://github.com/GeneralMalit/myorep-timer/commit/b6067eafc25516704fedc8dfa33c7fce7224488e))
+
 ## [3.6.6](https://github.com/GeneralMalit/myorep-timer/compare/v3.6.5...v3.6.6) (2026-05-11)
 
 
