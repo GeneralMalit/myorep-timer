@@ -5,7 +5,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import SessionCanvas from '@/components/SessionCanvas';
 import SessionNodeEditor from '@/components/SessionNodeEditor';
-import SetupModeToggle from '@/components/SetupModeToggle';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
 import { getResponsiveLayout } from '@/layout';
 import { sessionBuilderDesktopLayout } from '@/layout/sessionBuilder.desktop';
@@ -132,8 +131,6 @@ const SessionBuilder = () => {
     const editingSessionNodeId = useWorkoutStore((state) => state.editingSessionNodeId);
     const setEditingSessionNodeId = useWorkoutStore((state) => state.setEditingSessionNodeId);
     const prepTime = useWorkoutStore((state) => state.settings.prepTime);
-    const setupMode = useWorkoutStore((state) => state.setupMode);
-    const setSetupMode = useWorkoutStore((state) => state.setSetupMode);
     const createSession = useWorkoutStore((state) => state.createSession);
     const saveSessionDraft = useWorkoutStore((state) => state.saveSessionDraft);
     const saveSessionDraftAs = useWorkoutStore((state) => state.saveSessionDraftAs);
@@ -298,67 +295,51 @@ const SessionBuilder = () => {
                     data-testid="session-builder-shell"
                     className={layout.shellInner}
                 >
-                    <header className={layout.header}>
-                        <div className={layout.titleBlock}>
-                            <h1 className="bg-gradient-to-br from-foreground to-foreground/50 bg-clip-text text-[clamp(2.6rem,11vw,5rem)] font-black italic leading-[1.05] tracking-tighter text-transparent pb-1">
-                                Build a Session
-                            </h1>
-                            <p className={layout.summary}>
-                                {summary}
-                            </p>
-                        </div>
-
-                        <div className={layout.controls}>
-                            <SetupModeToggle
-                                mode={setupMode}
-                                onChange={setSetupMode}
-                                className={layout.toggle}
-                            />
-                            <div className={layout.actionsWrap}>
-                                <div className={layout.actionsGrid}>
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        onClick={handleNewSession}
-                                        className="shrink-0 gap-2 rounded-full border-primary/60 bg-background px-4 font-black italic tracking-tighter text-primary hover:bg-primary/10"
-                                    >
-                                        <Plus size={16} /> New Session
-                                    </Button>
-                                    <Button
-                                        type="button"
-                                        variant="secondary"
-                                        onClick={handleAddWorkout}
-                                        className="shrink-0 gap-2 rounded-full px-4 font-black italic tracking-tighter"
-                                    >
-                                        <Plus size={16} /> Workout
-                                    </Button>
-                                    <Button
-                                        type="button"
-                                        variant="secondary"
-                                        onClick={() => addRestNode()}
-                                        className="shrink-0 gap-2 rounded-full px-4 font-black italic tracking-tighter"
-                                    >
-                                        <Plus size={16} /> Rest
-                                    </Button>
-                                    <Button type="button" variant="secondary" onClick={handleSave} className="shrink-0 gap-2 rounded-full px-4 font-black italic tracking-tighter">
-                                        <Save size={16} /> Save
-                                    </Button>
-                                    <Button type="button" variant="secondary" onClick={handleSaveAs} className="shrink-0 gap-2 rounded-full px-4 font-black italic tracking-tighter">
-                                        <Save size={16} /> Save As
-                                    </Button>
-                                    <Button type="button" onClick={handleStart} className="shrink-0 gap-2 rounded-full px-4 font-black italic tracking-tighter">
-                                        <Play size={16} /> Start
-                                    </Button>
-                                </div>
-                            </div>
-                            <div className={layout.estimatedTime}>
-                                <span>Est. Time:</span>
-                                <span className="text-xl font-black tracking-tight text-foreground normal-case">
-                                    {formatEstimatedSessionDuration(estimatedDuration)}
-                                </span>
+                    <div className={layout.controls}>
+                        <div className={layout.actionsWrap}>
+                            <div className={layout.actionsGrid}>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={handleNewSession}
+                                    className="shrink-0 gap-2 rounded-full border-primary/60 bg-background px-4 font-black italic tracking-tighter text-primary hover:bg-primary/10"
+                                >
+                                    <Plus size={16} /> New Session
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="secondary"
+                                    onClick={handleAddWorkout}
+                                    className="shrink-0 gap-2 rounded-full px-4 font-black italic tracking-tighter"
+                                >
+                                    <Plus size={16} /> Workout
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="secondary"
+                                    onClick={() => addRestNode()}
+                                    className="shrink-0 gap-2 rounded-full px-4 font-black italic tracking-tighter"
+                                >
+                                    <Plus size={16} /> Rest
+                                </Button>
+                                <Button type="button" variant="secondary" onClick={handleSave} className="shrink-0 gap-2 rounded-full px-4 font-black italic tracking-tighter">
+                                    <Save size={16} /> Save
+                                </Button>
+                                <Button type="button" variant="secondary" onClick={handleSaveAs} className="shrink-0 gap-2 rounded-full px-4 font-black italic tracking-tighter">
+                                    <Save size={16} /> Save As
+                                </Button>
+                                <Button type="button" onClick={handleStart} className="shrink-0 gap-2 rounded-full px-4 font-black italic tracking-tighter">
+                                    <Play size={16} /> Start
+                                </Button>
                             </div>
                         </div>
-                    </header>
+                        <div className={layout.estimatedTime}>
+                            <span>Est. Time:</span>
+                            <span className="text-xl font-black tracking-tight text-foreground normal-case">
+                                {formatEstimatedSessionDuration(estimatedDuration)}
+                            </span>
+                        </div>
+                    </div>
 
                     <div className={layout.canvasWrap}>
                         <div className={layout.canvasInner}>

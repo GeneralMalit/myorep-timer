@@ -1,4 +1,4 @@
-﻿import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import App from '@/App';
 import { useAccountStore } from '@/store/useAccountStore';
@@ -1218,7 +1218,7 @@ describe('App', () => {
         // Rest input is disabled when set count is one.
         expect(inputs[3]).toBeDisabled();
 
-        fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
+        fireEvent.click(screen.getByTitle('Save'));
         const saveDialog = screen.getByRole('dialog', { name: /save workout/i });
         fireEvent.change(within(saveDialog).getByLabelText(/workout name/i), { target: { value: 'Template A' } });
         fireEvent.click(within(saveDialog).getByRole('button', { name: /save workout/i }));
@@ -1243,7 +1243,7 @@ describe('App', () => {
 
         render(<App />);
 
-        fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
+        fireEvent.click(screen.getByTitle('Save'));
 
         const saveDialog = screen.getByRole('dialog', { name: /save workout/i });
         expect(within(saveDialog).getByDisplayValue('Push Day')).toBeInTheDocument();
@@ -1270,7 +1270,7 @@ describe('App', () => {
 
         render(<App />);
 
-        fireEvent.click(screen.getByRole('button', { name: /^save as$/i }));
+        fireEvent.click(screen.getByTitle('Save As'));
 
         const saveAsDialog = screen.getByRole('dialog', { name: /save workout as/i });
         expect(within(saveAsDialog).getByDisplayValue('Push Day')).toBeInTheDocument();
@@ -1731,7 +1731,7 @@ describe('App', () => {
 
         render(<App />);
 
-        fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
+        fireEvent.click(screen.getByTitle('Save'));
         fireEvent.click(within(screen.getByRole('dialog', { name: /save workout/i })).getByRole('button', { name: /cancel/i }));
         fireEvent.click(screen.getByTitle('Rename'));
         fireEvent.click(within(screen.getByRole('dialog', { name: /rename workout/i })).getByRole('button', { name: /cancel/i }));

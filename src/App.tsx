@@ -165,7 +165,7 @@ const AppDialog = ({ state, value, onChangeValue, onClose, onConfirm, layout }: 
 export default function App() {
     const {
         settings, sets, reps, seconds, rest, myoReps, myoWorkSecs, setWorkoutConfig,
-        savedWorkouts, savedSessions, selectedSavedWorkoutId, lastImportSummary,
+        editingSessionDraft, savedWorkouts, savedSessions, selectedSavedWorkoutId, lastImportSummary,
         activeSessionId, activeSessionNodeIndex, sessionStatus, isRunningSession, sessionNodeRuntimeType, completeSessionNode,
         appPhase, timerStatus, isTimerRunning, setIsTimerRunning,
         currentSet, currentRep, isMainRep, isWorking, timeLeft, setTotalDuration, setElapsedTime,
@@ -204,6 +204,13 @@ export default function App() {
     const sessionRestDuration = activeSessionNode?.type === 'rest' ? parseInt(activeSessionNode.seconds || '0', 10) : null;
     const canUseSessionBuilder = canAccessSessionBuilder(entitlement);
     const isSessionSetup = appPhase === 'setup' && setupMode === 'session' && canUseSessionBuilder;
+    const nodeCount = editingSessionDraft?.nodes.length ?? 0;
+    const sessionSummary = useMemo(() => {
+        if (!editingSessionDraft) {
+            return 'Create a session, then edit nodes directly in the canvas.';
+        }
+        return `${nodeCount} node${nodeCount === 1 ? '' : 's'} in the chain.`;
+    }, [editingSessionDraft, nodeCount]);
     const isPreparing = timerStatus === 'Preparing';
     const isSidebarOpen = !isSidebarCollapsed;
     const appShellLayout = getResponsiveLayout(isMobileViewport, appShellMobile, appShellDesktop);
@@ -896,35 +903,41 @@ export default function App() {
                         </header>
                     )}
                     {appPhase === 'setup' ? (
-                        isSessionSetup ? (
-                            <div className="flex min-h-0 flex-1 flex-col md:rounded-none">
-                                <SessionBuilder />
+                        <div className="mx-auto flex w-full max-w-[1100px] flex-1 flex-col items-stretch justify-start gap-6 px-1 py-2 sm:px-4 sm:py-4">
+                            {/* Stationary Header & Selector */}
+                            <div className={cn("mx-auto max-w-3xl text-center w-full", isMobileViewport ? "space-y-1.5" : "space-y-2")}>
+                                <h1 className="bg-gradient-to-br from-foreground to-foreground/50 bg-clip-text text-[clamp(2.6rem,11vw,5rem)] font-black italic leading-[1.05] tracking-tighter text-transparent pb-1">
+                                    {isSessionSetup ? 'Build a Session' : 'Build a Workout'}
+                                </h1>
+                                <p className={cn(
+                                    "mx-auto max-w-2xl font-medium leading-relaxed text-muted-foreground",
+                                    isMobileViewport ? "text-xs" : "text-sm",
+                                )}>
+                                    {isSessionSetup ? sessionSummary : 'Configure the hypertrophy block, then save it or launch straight into the timer.'}
+                                </p>
                             </div>
-                        ) : (
-                            <div className="mx-auto flex w-full max-w-[1100px] flex-1 flex-col items-stretch justify-start">
+                            <div className="flex justify-center w-full">
+                                <SetupModeToggle
+                                    mode={setupMode}
+                                    onChange={handleSetupModeChange}
+                                    className="w-full max-w-md justify-center"
+                                    sessionLocked={!canUseSessionBuilder}
+                                />
+                            </div>
+
+                            {/* Sliding Panes Container */}
+                            <div className="relative w-full flex-1 min-h-0 overflow-hidden">
+                                {/* Pane A: Workout Setup */}
                                 <div
                                     data-testid="workout-setup-shell"
-                                    className={appShellLayout.workoutSetupShell}
+                                    className={cn(
+                                        appShellLayout.workoutSetupShell,
+                                        "w-full transition-all duration-300 ease-out transform",
+                                        isSessionSetup
+                                            ? "-translate-x-full opacity-0 pointer-events-none absolute inset-x-0 top-0"
+                                            : "translate-x-0 opacity-100 relative"
+                                    )}
                                 >
-                                    <div className={cn("mx-auto max-w-3xl text-center", isMobileViewport ? "space-y-1.5" : "space-y-2")}>
-                                        <h1 className="bg-gradient-to-br from-foreground to-foreground/50 bg-clip-text text-[clamp(2.6rem,11vw,5rem)] font-black italic tracking-tighter text-transparent">
-                                            Build a Workout
-                                        </h1>
-                                        <p className={cn(
-                                            "mx-auto max-w-2xl font-medium leading-relaxed text-muted-foreground",
-                                            isMobileViewport ? "text-xs" : "text-sm",
-                                        )}>
-                                            Configure the hypertrophy block, then save it or launch straight into the timer.
-                                        </p>
-                                    </div>
-                                    <div className="flex justify-center">
-                                        <SetupModeToggle
-                                            mode={setupMode}
-                                            onChange={handleSetupModeChange}
-                                            className="w-full max-w-md justify-center"
-                                            sessionLocked={!canUseSessionBuilder}
-                                        />
-                                    </div>
                                     <div className={cn(
                                         "grid",
                                         isMobileViewport ? "grid-cols-2 gap-3" : "grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3",
@@ -990,8 +1003,20 @@ export default function App() {
                                         INITIALIZE PROTOCOL <ChevronRight className="transition-transform group-hover:translate-x-1" />
                                     </Button>
                                 </div>
+
+                                {/* Pane B: Session Setup */}
+                                <div
+                                    className={cn(
+                                        "flex min-h-0 flex-1 flex-col md:rounded-none w-full transition-all duration-300 ease-out transform",
+                                        isSessionSetup
+                                            ? "translate-x-0 opacity-100 relative"
+                                            : "translate-x-full opacity-0 pointer-events-none absolute inset-x-0 top-0"
+                                    )}
+                                >
+                                    {canUseSessionBuilder && <SessionBuilder />}
+                                </div>
                             </div>
-                        )
+                        </div>
                     ) : (
                         <div className={cn(
                             "flex flex-1 flex-col items-center",

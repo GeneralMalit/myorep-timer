@@ -89,7 +89,6 @@ describe('SessionBuilder', () => {
     it('covers empty builder actions, draft creation, and invalid save/start branches', () => {
         render(<SessionBuilder />);
 
-        expect(screen.getByText(/Create a session, then edit nodes directly in the canvas/i)).toBeInTheDocument();
         expect(screen.getByText(/Empty canvas/i)).toBeInTheDocument();
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
         expect(screen.getByRole('button', { name: /^new session$/i })).toHaveClass('border-primary/60');
@@ -114,7 +113,7 @@ describe('SessionBuilder', () => {
         expect(within(dialog).getByDisplayValue('New Session')).toBeInTheDocument();
         fireEvent.change(within(dialog).getByLabelText(/session name/i), { target: { value: 'Alpha Session' } });
         fireEvent.click(within(dialog).getByRole('button', { name: /create session/i }));
-        expect(screen.getByText(/0 nodes in the chain/i)).toBeInTheDocument();
+        expect(useWorkoutStore.getState().editingSessionDraft?.nodes).toHaveLength(0);
         expect(screen.getByText('0:00')).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
@@ -138,7 +137,6 @@ describe('SessionBuilder', () => {
     it('keeps the session actions centered in the desktop layout', () => {
         render(<SessionBuilder />);
 
-        expect(screen.getByRole('button', { name: /workout setup/i }).closest('div')).toHaveClass('max-w-md');
         expect(screen.getByRole('button', { name: /save as/i }).parentElement).toHaveClass('max-w-[920px]');
         expect(screen.queryByText(/^End$/i)).not.toBeInTheDocument();
     });
@@ -662,7 +660,7 @@ describe('SessionBuilder', () => {
             ).toBeTruthy();
         }
 
-        expect(screen.getByText(/1 node in the chain/i)).toBeInTheDocument();
+        expect(useWorkoutStore.getState().editingSessionDraft?.nodes).toHaveLength(1);
         expect(screen.getByText('Workout 1')).toBeInTheDocument();
         expect(screen.getByText('10 @ 3s + (1 * 4 @ 2s)')).toBeInTheDocument();
         expect(screen.getByText('1:03')).toBeInTheDocument();
@@ -729,7 +727,7 @@ describe('SessionBuilder', () => {
         expect(screen.queryByRole('dialog', { name: /workout node editor/i })).not.toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: /^Rest$/i }));
-        expect(screen.getByText(/2 nodes in the chain/i)).toBeInTheDocument();
+        expect(useWorkoutStore.getState().editingSessionDraft?.nodes).toHaveLength(2);
         expect(screen.getByText('Rest 1')).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: /edit rest 1/i }));
