@@ -1,3 +1,10 @@
+## [3.7.1](https://github.com/GeneralMalit/myorep-timer/compare/v3.7.0...v3.7.1) (2026-05-28)
+
+
+### Bug Fixes
+
+* skip prep countdown into session workout ([614b23f](https://github.com/GeneralMalit/myorep-timer/commit/614b23f67d44cff4ba72a7f82c71c79897573eba))
+
 # [3.7.0](https://github.com/GeneralMalit/myorep-timer/compare/v3.6.6...v3.7.0) (2026-05-21)
 
 
