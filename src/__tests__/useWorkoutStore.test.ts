@@ -525,6 +525,42 @@ describe('useWorkoutStore', () => {
             expect(state.timeLeft).toBe(6);
         });
 
+        it('should skip a session workout prep countdown into the workout node', () => {
+            const store = useWorkoutStore.getState();
+            seedSelectedWorkout({
+                sets: '1',
+                reps: '2',
+                seconds: '3',
+                rest: '',
+                myoReps: '',
+                myoWorkSecs: '',
+            }, 'Prep Skip Workout');
+
+            let sessionId = '';
+            act(() => {
+                const created = store.createSession('Prep Skip Session');
+                expect(created.ok).toBe(true);
+                sessionId = created.id as string;
+                store.addWorkoutNodeFromCurrentSetup();
+                store.addRestNode('8');
+                store.saveSessionDraft();
+                store.startSession(sessionId);
+            });
+
+            expect(useWorkoutStore.getState().timerStatus).toBe('Preparing');
+
+            act(() => {
+                store.skipSection();
+            });
+
+            const state = useWorkoutStore.getState();
+            expect(state.activeSessionNodeIndex).toBe(0);
+            expect(state.sessionNodeRuntimeType).toBe('workout');
+            expect(state.timerStatus).toBe('Main Set');
+            expect(state.isWorking).toBe(true);
+            expect(state.timeLeft).toBe(3);
+        });
+
         it('should skip a session workout node without recording it as completed', () => {
             const store = useWorkoutStore.getState();
             seedSelectedWorkout({

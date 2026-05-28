@@ -1722,6 +1722,11 @@ export const useWorkoutStore = create<WorkoutState>()(
                     return;
                 }
 
+                if (state.timerStatus === 'Preparing') {
+                    get().advanceCycle();
+                    return;
+                }
+
                 if (state.activeSessionId) {
                     get().advanceSessionNode();
                     return;
