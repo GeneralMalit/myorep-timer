@@ -99,6 +99,8 @@ const resetStore = () => {
             appPhase: 'setup',
             timerStatus: 'Ready',
             isTimerRunning: false,
+            setTotalDuration: 0,
+            setElapsedTime: 0,
             settings: {
             activeColor: '#bb86fc',
             restColor: '#03dac6',
@@ -223,23 +225,25 @@ class ManualWorker {
     onmessage: ((event: MessageEvent) => void) | null = null;
     startMessages = 0;
     stopMessages = 0;
+    startRunIds: number[] = [];
 
     constructor() {
         ManualWorker.instances.push(this);
     }
 
     postMessage(data: unknown) {
-        const message = data as { action?: string };
+        const message = data as { action?: string; runId?: number };
         if (message.action === 'start') {
             this.startMessages += 1;
+            if (typeof message.runId === 'number') this.startRunIds.push(message.runId);
         }
         if (message.action === 'stop') {
             this.stopMessages += 1;
         }
     }
 
-    tick(elapsedMs: number) {
-        this.onmessage?.(new MessageEvent('message', { data: { action: 'tick', elapsed: elapsedMs } }));
+    tick(elapsedMs: number, runId?: number) {
+        this.onmessage?.(new MessageEvent('message', { data: { action: 'tick', elapsed: elapsedMs, runId } }));
     }
 
     terminate() {}
@@ -1004,7 +1008,7 @@ describe('App', () => {
         }
     });
 
-    it('advances from Preparing to Main Set exactly once when the worker countdown completes', async () => {
+    it('advances from Preparing to Main Set without restarting the worker epoch', async () => {
         vi.useFakeTimers();
 
         const originalWorker = global.Worker;
@@ -1079,8 +1083,8 @@ describe('App', () => {
                 await vi.advanceTimersByTimeAsync(5100);
             });
 
-            expect(FinishingWorker.instances[0].startMessages).toBe(2);
-            expect(FinishingWorker.instances[0].stopMessages).toBeGreaterThanOrEqual(1);
+            expect(FinishingWorker.instances[0].startMessages).toBe(1);
+            expect(FinishingWorker.instances[0].stopMessages).toBe(1);
             expect(useWorkoutStore.getState().timerStatus).toBe('Main Set');
             expect(useWorkoutStore.getState().timeLeft).toBeGreaterThan(2.5);
             expect(useWorkoutStore.getState().timeLeft).toBeLessThan(3);
@@ -1168,6 +1172,55 @@ describe('App', () => {
             await waitFor(() => {
                 expect(useWorkoutStore.getState().timeLeft).toBeCloseTo(1.5);
             });
+        } finally {
+            global.Worker = originalWorker;
+        }
+    });
+
+    it('ignores a queued tick from the worker run that was active before pause', async () => {
+        const originalWorker = global.Worker;
+        global.Worker = ManualWorker as unknown as typeof Worker;
+        ManualWorker.instances = [];
+
+        try {
+            useWorkoutStore.setState({
+                appPhase: 'timer',
+                timerStatus: 'Main Set',
+                isTimerRunning: true,
+                currentSet: 1,
+                currentRep: 1,
+                isMainRep: true,
+                isWorking: true,
+                sets: '1',
+                reps: '2',
+                rest: '',
+                myoReps: '',
+                myoWorkSecs: '',
+                seconds: '3',
+                timeLeft: 3,
+                setElapsedTime: 0,
+                setTotalDuration: 6,
+            });
+
+            render(<App />);
+            const worker = ManualWorker.instances[0];
+            const firstRunId = worker.startRunIds[0];
+
+            fireEvent.click(screen.getByRole('button', { name: /pause/i }));
+            fireEvent.click(screen.getByRole('button', { name: /resume/i }));
+
+            const resumedRunId = worker.startRunIds.at(-1);
+            expect(resumedRunId).not.toBe(firstRunId);
+
+            act(() => {
+                worker.tick(2500, firstRunId);
+            });
+            expect(useWorkoutStore.getState().timeLeft).toBe(3);
+
+            act(() => {
+                worker.tick(500, resumedRunId);
+            });
+            expect(useWorkoutStore.getState().timeLeft).toBeCloseTo(2.5);
         } finally {
             global.Worker = originalWorker;
         }
@@ -1508,7 +1561,7 @@ describe('App', () => {
         const { rerender } = render(<App />);
 
         expect(audioEngine.scheduleTickSequence).toHaveBeenCalledTimes(1);
-        expect(audioEngine.scheduleTickSequence).toHaveBeenCalledWith('woodblock', [0, 1, 2, 3]);
+        expect(audioEngine.scheduleTickSequence).toHaveBeenCalledWith('woodblock', [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
 
         act(() => {
             useWorkoutStore.getState().applyTimerElapsed(2.7);
@@ -1518,6 +1571,40 @@ describe('App', () => {
         expect(useWorkoutStore.getState().timeLeft).toBeCloseTo(1.3);
         expect(audioEngine.scheduleTickSequence).toHaveBeenCalledTimes(1);
         expect(audioEngine.playTick).not.toHaveBeenCalled();
+
+        act(() => {
+            useWorkoutStore.getState().applyTimerElapsed(1.3);
+        });
+        rerender(<App />);
+
+        expect(useWorkoutStore.getState().currentRep).toBe(2);
+        expect(audioEngine.scheduleTickSequence).toHaveBeenCalledTimes(1);
+    });
+
+    it('speaks countdowns when voice guidance is enabled and the metronome is disabled', () => {
+        useWorkoutStore.setState({
+            appPhase: 'timer',
+            timerStatus: 'Main Set',
+            isTimerRunning: true,
+            currentSet: 1,
+            currentRep: 1,
+            isMainRep: true,
+            isWorking: true,
+            sets: '1',
+            reps: '2',
+            seconds: '3',
+            timeLeft: 3,
+            settings: {
+                ...useWorkoutStore.getState().settings,
+                ttsEnabled: true,
+                metronomeEnabled: false,
+            },
+        });
+
+        render(<App />);
+
+        expect(audioEngine.speak).toHaveBeenCalledWith(3);
+        expect(audioEngine.scheduleTickSequence).not.toHaveBeenCalled();
     });
 
     it('suppresses speech during a main-set burnout block', () => {

@@ -58,17 +58,24 @@ const isBurnoutRepSet = (params: { timerStatus: string; isWorking: boolean; seco
     return activeRepSeconds === 1;
 };
 
-const getMetronomeOffsets = (timeLeft: number) => {
-    const currentSecond = Math.ceil(timeLeft);
-    if (!Number.isFinite(timeLeft) || currentSecond < 1) {
+const getMetronomeOffsets = (remainingTime: number, includeImmediateBoundary: boolean) => {
+    if (!Number.isFinite(remainingTime) || remainingTime <= 0.001) {
         return [];
     }
 
-    return Array.from({ length: currentSecond }, (_, index) => {
-        const second = currentSecond - index;
-        return Math.max(0, Number((timeLeft - second).toFixed(3)));
-    });
+    const wholeSeconds = Math.floor(remainingTime + 0.001);
+    const fraction = remainingTime - Math.floor(remainingTime);
+    const firstGridOffset = fraction <= 0.001 || fraction >= 0.999 ? 0 : fraction;
+    const offsets = Array.from({ length: wholeSeconds }, (_, index) => Number((firstGridOffset + index).toFixed(3)));
+
+    if (includeImmediateBoundary && offsets[0] !== 0) {
+        offsets.unshift(0);
+    }
+
+    return offsets;
 };
+
+const getMonotonicEpochMs = () => performance.timeOrigin + performance.now();
 
 type AppDialogState =
     | {
@@ -194,8 +201,12 @@ export default function App() {
     const isSingleCycle = parseInt(sets, 10) === 1;
     const workerRef = useRef<Worker | null>(null);
     const lastWorkerElapsedRef = useRef(0);
+    const lastWorkerSampleEpochRef = useRef<number | null>(null);
+    const timerRunIdRef = useRef(0);
+    const activeTimerRunIdRef = useRef<number | null>(null);
     const lastSpokenSecondRef = useRef(-1);
     const metronomeScheduleKeyRef = useRef<string | null>(null);
+    const lastMetronomeSectionKeyRef = useRef<string | null>(null);
     const prepAnnouncedRef = useRef(false);
     const dialogConfirmRef = useRef<((value: string) => void) | null>(null);
     const loadedWorkout = selectedSavedWorkoutId ? savedWorkouts.find((workout) => workout.id === selectedSavedWorkoutId) ?? null : null;
@@ -211,6 +222,32 @@ export default function App() {
         }
         return `${nodeCount} node${nodeCount === 1 ? '' : 's'} in the chain.`;
     }, [editingSessionDraft, nodeCount]);
+
+    const startTimerWorker = useCallback(() => {
+        if (!workerRef.current) return;
+        const runId = timerRunIdRef.current + 1;
+        timerRunIdRef.current = runId;
+        activeTimerRunIdRef.current = runId;
+        lastWorkerElapsedRef.current = 0;
+        lastWorkerSampleEpochRef.current = getMonotonicEpochMs();
+        // Timer correctness and audio boundaries always use the high-precision cadence.
+        workerRef.current.postMessage({ action: 'start', interval: 50, runId });
+    }, []);
+
+    const flushAndStopTimerWorker = useCallback(() => {
+        if (!workerRef.current || activeTimerRunIdRef.current === null) return;
+
+        const now = getMonotonicEpochMs();
+        const lastSample = lastWorkerSampleEpochRef.current;
+        activeTimerRunIdRef.current = null;
+        workerRef.current.postMessage({ action: 'stop' });
+        lastWorkerElapsedRef.current = 0;
+        lastWorkerSampleEpochRef.current = null;
+
+        if (lastSample !== null) {
+            applyTimerElapsed(Math.max(0, (now - lastSample) / 1000));
+        }
+    }, [applyTimerElapsed]);
     const isPreparing = timerStatus === 'Preparing';
     const isSidebarOpen = !isSidebarCollapsed;
     const appShellLayout = getResponsiveLayout(isMobileViewport, appShellMobile, appShellDesktop);
@@ -245,9 +282,16 @@ export default function App() {
         workerRef.current = worker;
         worker.onmessage = (e) => {
             if (e.data.action === 'tick') {
+                if (typeof e.data.runId === 'number' && e.data.runId !== activeTimerRunIdRef.current) {
+                    return;
+                }
                 const elapsedSecs = e.data.elapsed / 1000;
-                const deltaSeconds = Math.max(0, elapsedSecs - lastWorkerElapsedRef.current);
+                const sampleEpochMs = typeof e.data.sampleEpochMs === 'number' ? e.data.sampleEpochMs : null;
+                const deltaSeconds = sampleEpochMs !== null && lastWorkerSampleEpochRef.current !== null
+                    ? Math.max(0, (sampleEpochMs - lastWorkerSampleEpochRef.current) / 1000)
+                    : Math.max(0, elapsedSecs - lastWorkerElapsedRef.current);
                 lastWorkerElapsedRef.current = elapsedSecs;
+                lastWorkerSampleEpochRef.current = sampleEpochMs ?? getMonotonicEpochMs();
                 applyTimerElapsed(deltaSeconds);
             }
         };
@@ -257,19 +301,14 @@ export default function App() {
     useEffect(() => {
         if (!workerRef.current) return;
         if (isTimerRunning) {
-            if (timeLeft > 0.001) {
-                lastWorkerElapsedRef.current = 0;
-                workerRef.current.postMessage({ action: 'start', interval: settings.smoothAnimation ? 50 : 250 });
-            } else if (timerStatus !== 'Finished') {
-                workerRef.current.postMessage({ action: 'stop' });
-                lastWorkerElapsedRef.current = 0;
-                applyTimerElapsed(0.002);
-            }
+            startTimerWorker();
         } else {
+            activeTimerRunIdRef.current = null;
             workerRef.current.postMessage({ action: 'stop' });
             lastWorkerElapsedRef.current = 0;
+            lastWorkerSampleEpochRef.current = null;
         }
-    }, [isTimerRunning, timeLeft <= 0.001, timerStatus, applyTimerElapsed, settings.smoothAnimation]);
+    }, [isTimerRunning, startTimerWorker]);
 
     useEffect(() => {
         if (isRunningSession && sessionNodeRuntimeType === 'workout' && sessionStatus === 'running' && timerStatus === 'Finished') completeSessionNode();
@@ -281,8 +320,15 @@ export default function App() {
 
     useEffect(() => {
         const canScheduleMetronome = isTimerRunning && settings.metronomeEnabled && isWorking && timerStatus !== 'Preparing' && timeLeft > 0.001;
+        const sectionTimeLeft = setTotalDuration > 0
+            ? Math.max(0, setTotalDuration - setElapsedTime)
+            : timeLeft;
+        const scheduleWindow = Math.ceil(sectionTimeLeft / 30);
+        const sectionKey = canScheduleMetronome
+            ? [activeSessionId ?? 'standalone', activeSessionNodeIndex, timerStatus, currentSet, isMainRep ? 'main' : 'myo'].join('|')
+            : null;
         const scheduleKey = canScheduleMetronome
-            ? [timerStatus, currentSet, currentRep, isMainRep ? 'main' : 'myo', settings.metronomeSound].join('|')
+            ? [sectionKey, scheduleWindow, settings.metronomeSound].join('|')
             : null;
 
         if (!canScheduleMetronome || !scheduleKey) {
@@ -297,24 +343,29 @@ export default function App() {
             return;
         }
 
-        const offsets = getMetronomeOffsets(timeLeft);
+        const offsets = getMetronomeOffsets(sectionTimeLeft, lastMetronomeSectionKeyRef.current !== sectionKey).slice(0, 30);
         if (offsets.length > 0) {
             audioEngine.scheduleTickSequence(settings.metronomeSound, offsets);
             metronomeScheduleKeyRef.current = scheduleKey;
+            lastMetronomeSectionKeyRef.current = sectionKey;
         }
-    }, [timeLeft, isTimerRunning, settings.metronomeEnabled, settings.metronomeSound, isWorking, timerStatus, currentSet, currentRep, isMainRep]);
+    }, [timeLeft, setTotalDuration, setElapsedTime, isTimerRunning, settings.metronomeEnabled, settings.metronomeSound, isWorking, timerStatus, currentSet, isMainRep, activeSessionId, activeSessionNodeIndex]);
+
+    useEffect(() => {
+        if (appPhase === 'setup') lastMetronomeSectionKeyRef.current = null;
+    }, [appPhase]);
 
     useEffect(() => () => {
         audioEngine.cancelScheduledTicks();
     }, []);
 
     useEffect(() => {
-        if (isTimerRunning && settings.metronomeEnabled && isWorking && timerStatus !== 'Preparing') {
+        if (isTimerRunning && settings.ttsEnabled && isWorking && timerStatus !== 'Preparing') {
             const currentSecond = Math.ceil(timeLeft);
             if (currentSecond !== lastSpokenSecondRef.current && currentSecond >= 0) {
                 const activeRepTarget = isMainRep ? parseInt(reps || '0', 10) : parseInt(myoReps || '0', 10);
                 const suppressVoice = isBurnoutRepSet({ timerStatus, isWorking, seconds, myoWorkSecs });
-                const shouldSpeakCurrentSecond = settings.ttsEnabled && !suppressVoice && currentSecond >= 1 && (currentSecond > 1 || activeRepTarget !== 1);
+                const shouldSpeakCurrentSecond = !suppressVoice && currentSecond >= 1 && (currentSecond > 1 || activeRepTarget !== 1);
                 if (shouldSpeakCurrentSecond) audioEngine.speak(currentSecond);
                 lastSpokenSecondRef.current = currentSecond;
             }
@@ -1082,11 +1133,27 @@ export default function App() {
                                     isPreparing={timerStatus === 'Preparing'}
                                 />
                                 <div className="flex w-full max-w-md flex-col justify-center gap-3 pb-1 sm:max-w-none sm:flex-row sm:gap-4">
-                                    <Button onClick={() => { audioEngine.init(); if (timerStatus === 'Finished') resetWorkout(); else setIsTimerRunning(!isTimerRunning); }} className="min-h-14 min-w-[200px] rounded-2xl bg-black px-6 text-lg font-black italic tracking-tighter text-white shadow-md hover:bg-black/90 sm:h-16 sm:px-10 sm:text-xl">
+                                    <Button onClick={() => {
+                                        audioEngine.init();
+                                        if (timerStatus === 'Finished') {
+                                            resetWorkout();
+                                        } else if (isTimerRunning) {
+                                            flushAndStopTimerWorker();
+                                            setIsTimerRunning(false);
+                                        } else {
+                                            setIsTimerRunning(true);
+                                        }
+                                    }} className="min-h-14 min-w-[200px] rounded-2xl bg-black px-6 text-lg font-black italic tracking-tighter text-white shadow-md hover:bg-black/90 sm:h-16 sm:px-10 sm:text-xl">
                                         {timerStatus === 'Finished' ? <><RotateCcw className="mr-2" /> NEW SESSION</> : (isTimerRunning ? <><Square className="mr-2" /> PAUSE</> : <><Play className="mr-2" /> RESUME</>)}
                                     </Button>
                                     {timerStatus !== 'Finished' && (
-                                        <Button onClick={() => { audioEngine.init(); skipSection(); }} className="min-h-14 rounded-2xl bg-black px-6 text-lg font-black italic tracking-tighter text-white shadow-md hover:bg-black/90 sm:h-16 sm:px-10 sm:text-xl">
+                                        <Button onClick={() => {
+                                            audioEngine.init();
+                                            const wasRunning = useWorkoutStore.getState().isTimerRunning;
+                                            if (wasRunning) flushAndStopTimerWorker();
+                                            skipSection();
+                                            if (wasRunning && useWorkoutStore.getState().isTimerRunning) startTimerWorker();
+                                        }} className="min-h-14 rounded-2xl bg-black px-6 text-lg font-black italic tracking-tighter text-white shadow-md hover:bg-black/90 sm:h-16 sm:px-10 sm:text-xl">
                                             <SkipForward className="mr-2" /> SKIP SECTION
                                         </Button>
                                     )}

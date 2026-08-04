@@ -164,7 +164,7 @@ export const useSupabaseBootstrap = (): void => {
         let removeUrlListener: (() => void) | null = null;
         if (Capacitor.isNativePlatform()) {
             void App.getLaunchUrl()
-                .then(({ url }) => completeNativeAuthCallback(url))
+                .then((launch) => completeNativeAuthCallback(launch?.url))
                 .catch((error: unknown) => {
                     if (!isActive) {
                         return;

@@ -1,5 +1,6 @@
 ﻿import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import type { PersistStorage, StorageValue } from 'zustand/middleware';
 import {
     SavedWorkout,
     SavedWorkoutConfig,
@@ -163,6 +164,55 @@ const persistWorkoutStoreState = (state: WorkoutState): PersistedWorkoutStoreSta
     theme: state.theme,
 });
 
+const persistedWorkoutStatesAreEqual = (left: PersistedWorkoutStoreState, right: PersistedWorkoutStoreState) => (
+    left.settings === right.settings &&
+    left.sets === right.sets &&
+    left.reps === right.reps &&
+    left.seconds === right.seconds &&
+    left.rest === right.rest &&
+    left.myoReps === right.myoReps &&
+    left.myoWorkSecs === right.myoWorkSecs &&
+    left.savedWorkouts === right.savedWorkouts &&
+    left.selectedSavedWorkoutId === right.selectedSavedWorkoutId &&
+    left.savedSessions === right.savedSessions &&
+    left.selectedSavedSessionId === right.selectedSavedSessionId &&
+    left.setupMode === right.setupMode &&
+    left.isAccountCardCollapsed === right.isAccountCardCollapsed &&
+    left.theme === right.theme
+);
+
+const createWorkoutPersistStorage = (): PersistStorage<PersistedWorkoutStoreState> => {
+    let lastPersistedState: PersistedWorkoutStoreState | null = null;
+
+    return {
+        getItem: (name) => {
+            if (typeof localStorage === 'undefined') return null;
+            const serialized = localStorage.getItem(name);
+            if (!serialized) return null;
+
+            try {
+                const value = JSON.parse(serialized) as StorageValue<PersistedWorkoutStoreState>;
+                lastPersistedState = value.state;
+                return value;
+            } catch {
+                return null;
+            }
+        },
+        setItem: (name, value) => {
+            if (lastPersistedState && persistedWorkoutStatesAreEqual(lastPersistedState, value.state)) {
+                return;
+            }
+            if (typeof localStorage === 'undefined') return;
+            localStorage.setItem(name, JSON.stringify(value));
+            lastPersistedState = value.state;
+        },
+        removeItem: (name) => {
+            if (typeof localStorage !== 'undefined') localStorage.removeItem(name);
+            lastPersistedState = null;
+        },
+    };
+};
+
 const migratePersistedWorkoutStoreState = (persistedState: unknown): PersistedWorkoutStoreState => {
     const defaults = createDefaultPersistedWorkoutState();
     if (!persistedState || typeof persistedState !== 'object') {
@@ -180,7 +230,9 @@ const migratePersistedWorkoutStoreState = (persistedState: unknown): PersistedWo
         concentricColor: typeof persistedSettings.concentricColor === 'string' ? persistedSettings.concentricColor : defaults.settings.concentricColor,
         concentricSecond: typeof persistedSettings.concentricSecond === 'number' ? persistedSettings.concentricSecond : defaults.settings.concentricSecond,
         smoothAnimation: typeof persistedSettings.smoothAnimation === 'boolean' ? persistedSettings.smoothAnimation : defaults.settings.smoothAnimation,
-        prepTime: typeof persistedSettings.prepTime === 'number' ? persistedSettings.prepTime : defaults.settings.prepTime,
+        prepTime: typeof persistedSettings.prepTime === 'number' && Number.isFinite(persistedSettings.prepTime)
+            ? Math.max(0, Math.floor(persistedSettings.prepTime))
+            : defaults.settings.prepTime,
         fullScreenMode: typeof persistedSettings.fullScreenMode === 'boolean' ? persistedSettings.fullScreenMode : defaults.settings.fullScreenMode,
         metronomeEnabled: typeof persistedSettings.metronomeEnabled === 'boolean' ? persistedSettings.metronomeEnabled : defaults.settings.metronomeEnabled,
         metronomeSound: typeof persistedSettings.metronomeSound === 'string' ? persistedSettings.metronomeSound : defaults.settings.metronomeSound,
@@ -419,6 +471,12 @@ export const useWorkoutStore = create<WorkoutState>()(
                     mergedSettings.concentricSecond = clampConcentricSecond(newSettings.concentricSecond, limit);
                 } else {
                     mergedSettings.concentricSecond = clampConcentricSecond(mergedSettings.concentricSecond, limit);
+                }
+
+                if (newSettings.prepTime !== undefined) {
+                    mergedSettings.prepTime = Number.isFinite(newSettings.prepTime)
+                        ? Math.max(0, Math.floor(newSettings.prepTime))
+                        : state.settings.prepTime;
                 }
 
                 return { settings: mergedSettings };
@@ -1363,7 +1421,9 @@ export const useWorkoutStore = create<WorkoutState>()(
             },
 
             startSession: (id) => {
-                const session = get().savedSessions.find((item) => item.id === id) ?? get().editingSessionDraft;
+                const state = get();
+                const matchingDraft = state.editingSessionDraft?.id === id ? state.editingSessionDraft : null;
+                const session = matchingDraft ?? state.savedSessions.find((item) => item.id === id);
                 if (!session) {
                     return { ok: false, error: 'Session not found.' };
                 }
@@ -1480,7 +1540,11 @@ export const useWorkoutStore = create<WorkoutState>()(
                     set({
                         sessionStatus: 'finished',
                         isRunningSession: false,
+                        isTimerRunning: false,
                         sessionNodeRuntimeType: null,
+                        timerStatus: 'Finished',
+                        timeLeft: 0,
+                        setElapsedTime: 0,
                         completedSessionWorkoutNodeIds: [],
                     });
                     return;
@@ -1717,21 +1781,37 @@ export const useWorkoutStore = create<WorkoutState>()(
             },
             skipSection: () => {
                 const state = get();
+                const wasRunning = state.isTimerRunning;
 
                 if (state.timerStatus === 'Finished') {
                     return;
                 }
 
                 if (state.timerStatus === 'Preparing') {
-                    get().advanceCycle();
+                    if (state.activeSessionId) {
+                        get().startSessionNode(state.activeSessionNodeIndex);
+                        if (!wasRunning) get().setIsTimerRunning(false);
+                    } else {
+                        get().advanceCycle();
+                    }
                     return;
                 }
 
                 if (state.activeSessionId) {
                     get().advanceSessionNode();
+                    if (!wasRunning && get().timerStatus !== 'Finished') get().setIsTimerRunning(false);
                     return;
                 }
 
+                if (state.isWorking) {
+                    const finalRep = state.isMainRep
+                        ? Math.max(1, parseInt(state.reps, 10) || 1)
+                        : Math.max(1, parseInt(state.myoReps, 10) || 1);
+                    set({ currentRep: finalRep });
+                }
+
+                // Move from the end of the current activation, rest, or myo-rep block
+                // through the same centralized boundary logic used by natural expiry.
                 get().advanceCycle();
             },
             replaceLibrariesFromSync: ({ workouts, sessions }) => set((state) => {
@@ -1756,6 +1836,7 @@ export const useWorkoutStore = create<WorkoutState>()(
                 const activeSessionId = state.activeSessionId && nextSessions.some((session) => session.id === state.activeSessionId)
                     ? state.activeSessionId
                     : null;
+                const activeSessionWasRemoved = state.activeSessionId !== null && activeSessionId === null;
 
                 return {
                     savedWorkouts: nextWorkouts,
@@ -1767,6 +1848,18 @@ export const useWorkoutStore = create<WorkoutState>()(
                     editingSessionNodeId: editingSessionDraft?.nodes.some((node) => node.id === state.editingSessionNodeId) ? state.editingSessionNodeId : null,
                     activeSessionId,
                     activeSessionNodeIndex: activeSessionId ? Math.min(state.activeSessionNodeIndex, Math.max(0, (nextSessions.find((session) => session.id === activeSessionId)?.nodes.length ?? 1) - 1)) : 0,
+                    ...(activeSessionWasRemoved ? {
+                        appPhase: 'setup' as const,
+                        timerStatus: 'Ready' as const,
+                        isTimerRunning: false,
+                        isRunningSession: false,
+                        sessionStatus: 'idle' as const,
+                        sessionNodeRuntimeType: null,
+                        timeLeft: 0,
+                        setElapsedTime: 0,
+                        sessionRestTimeLeft: 0,
+                        completedSessionWorkoutNodeIds: [],
+                    } : {}),
                 };
             }),
             acknowledgeSyncedWorkout: (workout) => set((state) => ({
@@ -1936,10 +2029,11 @@ export const useWorkoutStore = create<WorkoutState>()(
         }),
         {
             name: 'myorep-workout-storage',
+            storage: createWorkoutPersistStorage(),
             version: WORKOUT_STORE_PERSIST_VERSION,
             migrate: (persistedState, version) => {
                 if (version >= WORKOUT_STORE_PERSIST_VERSION) {
-                    return persistedState as Partial<WorkoutState>;
+                    return persistedState as PersistedWorkoutStoreState;
                 }
 
                 return migratePersistedWorkoutStoreState(persistedState);

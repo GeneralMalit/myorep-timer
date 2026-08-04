@@ -10,6 +10,7 @@ import { getResponsiveLayout } from '@/layout';
 import { sessionBuilderDesktopLayout } from '@/layout/sessionBuilder.desktop';
 import { sessionBuilderMobileLayout } from '@/layout/sessionBuilder.mobile';
 import { estimateSessionDurationSeconds, formatEstimatedSessionDuration } from '@/utils/savedSessions';
+import { audioEngine } from '@/utils/audioEngine';
 import { cn } from '@/lib/utils';
 
 type SessionBuilderDialogState =
@@ -231,6 +232,7 @@ const SessionBuilder = () => {
             return;
         }
 
+        audioEngine.init();
         const result = startSession(editingSessionDraft.id);
         if (!result.ok) {
             setDialogState({

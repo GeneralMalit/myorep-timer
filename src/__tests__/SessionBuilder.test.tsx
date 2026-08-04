@@ -1,7 +1,8 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import SessionBuilder from '@/components/SessionBuilder';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
+import { audioEngine } from '@/utils/audioEngine';
 
 const baseWorkout = {
     id: 'w-1',
@@ -748,7 +749,10 @@ describe('SessionBuilder', () => {
         fireEvent.click(within(saveAsDialog).getByRole('button', { name: /save copy/i }));
         expect(useWorkoutStore.getState().savedSessions).toHaveLength(2);
 
+        const audioInitSpy = vi.spyOn(audioEngine, 'init').mockImplementation(() => {});
         fireEvent.click(screen.getByRole('button', { name: /start/i }));
+        expect(audioInitSpy).toHaveBeenCalledTimes(1);
+        audioInitSpy.mockRestore();
         expect(useWorkoutStore.getState().appPhase).toBe('timer');
         expect(useWorkoutStore.getState().timerStatus).toBe('Preparing');
         expect(useWorkoutStore.getState().timeLeft).toBe(useWorkoutStore.getState().settings.prepTime);

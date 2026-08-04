@@ -309,7 +309,13 @@ describe('timerWorker source module', () => {
         // Start with a new interval to cover timer replacement branch.
         fakeSelf.onmessage?.(new MessageEvent('message', { data: { action: 'start', interval: 250 } }));
         await vi.advanceTimersByTimeAsync(250);
-        expect(postMessage).toHaveBeenCalledWith({ action: 'tick', elapsed: 250 });
+        expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ action: 'tick', elapsed: 250 }));
+
+        postMessage.mockClear();
+        perfSpy.mockReturnValueOnce(3000).mockReturnValueOnce(3250);
+        fakeSelf.onmessage?.(new MessageEvent('message', { data: { action: 'start', interval: 250, runId: 7 } }));
+        await vi.advanceTimersByTimeAsync(250);
+        expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ action: 'tick', elapsed: 250, runId: 7 }));
 
         fakeSelf.onmessage?.(new MessageEvent('message', { data: { action: 'stop' } }));
         postMessage.mockClear();

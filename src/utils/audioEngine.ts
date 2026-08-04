@@ -258,6 +258,9 @@ export class AudioEngine {
         utterance.volume = 1.0;
 
         utterance.onerror = (e) => {
+            if (e.error === 'canceled' || e.error === 'interrupted') {
+                return;
+            }
             console.error("[AudioEngine] Speech error:", e);
         };
 
