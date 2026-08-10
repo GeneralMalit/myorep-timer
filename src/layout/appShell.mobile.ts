@@ -16,7 +16,7 @@ const mobileHeaderParts = {
     layout: 'mb-4 flex items-center justify-between gap-3',
     surface: 'rounded-[1.75rem] border border-border/60 bg-card/80',
     spacing: 'px-4 py-3',
-    effects: 'shadow-lg backdrop-blur-xl',
+    effects: 'shadow-lg',
     responsive: 'md:hidden',
 };
 

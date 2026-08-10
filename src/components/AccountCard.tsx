@@ -715,7 +715,7 @@ const AccountCard = ({
     };
 
     return (
-        <Card className="border-border/60 bg-card/80 shadow-sm backdrop-blur-sm">
+        <Card className="border-border/60 bg-card/80 shadow-sm">
             <CardContent className="space-y-3 p-3 sm:space-y-4 sm:p-4">
                 <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 space-y-1">
