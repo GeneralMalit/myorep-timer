@@ -1,3 +1,10 @@
+## [3.7.3](https://github.com/GeneralMalit/myorep-timer/compare/v3.7.2...v3.7.3) (2026-08-10)
+
+
+### Performance Improvements
+
+* remove persistent backdrop filters ([3c5cc1b](https://github.com/GeneralMalit/myorep-timer/commit/3c5cc1bec91c1a23bd9db2fa35671f512efed75a))
+
 ## [3.7.2](https://github.com/GeneralMalit/myorep-timer/compare/v3.7.1...v3.7.2) (2026-08-04)
 
 
