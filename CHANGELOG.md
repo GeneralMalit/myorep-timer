@@ -1,3 +1,10 @@
+## [3.8.1](https://github.com/GeneralMalit/myorep-timer/compare/v3.8.0...v3.8.1) (2026-08-29)
+
+
+### Bug Fixes
+
+* constrain kinetic session builder viewport ([fab5452](https://github.com/GeneralMalit/myorep-timer/commit/fab54528661a0f97ad8792588678cfa2815bf35c))
+
 # [3.8.0](https://github.com/GeneralMalit/myorep-timer/compare/v3.7.3...v3.8.0) (2026-08-29)
 
 
