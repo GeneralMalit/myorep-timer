@@ -31,7 +31,7 @@ describe('ConcentricTimer', () => {
         resetStore();
     });
 
-    it('does not animate progress from zero on first mount or across phase changes', async () => {
+    it('updates progress without CSS interpolation at the worker cadence', async () => {
         const { container, rerender } = render(
             <ConcentricTimer
                 outerValue={5}
@@ -47,7 +47,7 @@ describe('ConcentricTimer', () => {
         );
 
         const outerProgressCircle = container.querySelectorAll('circle[stroke-dasharray]')[0] as SVGCircleElement;
-        expect(outerProgressCircle).toHaveStyle({ transition: 'none' });
+        expect(outerProgressCircle.style.transition).toBe('none');
 
         await act(async () => {});
 
@@ -65,7 +65,7 @@ describe('ConcentricTimer', () => {
             />,
         );
 
-        expect(outerProgressCircle).toHaveStyle({ transition: 'stroke-dashoffset 0.05s linear' });
+        expect(outerProgressCircle.style.transition).toBe('none');
 
         rerender(
             <ConcentricTimer
@@ -82,6 +82,55 @@ describe('ConcentricTimer', () => {
         );
 
         const nextOuterProgressCircle = container.querySelectorAll('circle[stroke-dasharray]')[0] as SVGCircleElement;
-        expect(nextOuterProgressCircle).toHaveStyle({ transition: 'none' });
+        expect(nextOuterProgressCircle).not.toBe(outerProgressCircle);
+        expect(nextOuterProgressCircle.style.transition).toBe('none');
+    });
+
+    it('does not interpolate a stepped update when fluid animation is disabled', () => {
+        useWorkoutStore.setState((state) => ({
+            settings: { ...state.settings, smoothAnimation: false },
+        }));
+
+        const { container } = render(
+            <ConcentricTimer
+                outerValue={4}
+                outerMax={5}
+                isResting={false}
+                innerValue={4}
+                innerMax={5}
+                textMain="00:04"
+                textSub="Workout"
+                isFinished={false}
+                isPreparing={false}
+            />,
+        );
+
+        const [outerProgressCircle, innerProgressCircle] = container.querySelectorAll('circle[stroke-dasharray]') as unknown as SVGCircleElement[];
+        expect(outerProgressCircle.style.transition).toBe('none');
+        expect(innerProgressCircle.style.transition).toBe('none');
+    });
+
+    it('can keep the kinetic readout visible when global timer info is hidden', () => {
+        useWorkoutStore.setState((state) => ({
+            settings: { ...state.settings, infoVisibility: 'never' },
+        }));
+
+        const { getByText } = render(
+            <ConcentricTimer
+                outerValue={4}
+                outerMax={5}
+                isResting={false}
+                innerValue={4}
+                innerMax={5}
+                textMain="00:04"
+                textSub="Activation pace"
+                isFinished={false}
+                isPreparing={false}
+                forceInfoVisible
+            />,
+        );
+
+        expect(getByText('00:04')).toBeInTheDocument();
+        expect(getByText('Activation pace')).toBeInTheDocument();
     });
 });

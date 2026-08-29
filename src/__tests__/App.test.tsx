@@ -399,7 +399,7 @@ describe('App', () => {
         expect(await screen.findByTestId('kinetic-session-builder')).toBeInTheDocument();
         expect(screen.getByTestId('kinetic-session-builder-viewport')).toHaveClass(
             'overflow-hidden',
-            'md:h-[calc(100dvh-3rem)]',
+            'md:h-[100dvh]',
         );
 
         fireEvent.click(screen.getByRole('button', { name: /^workout setup$/i }));

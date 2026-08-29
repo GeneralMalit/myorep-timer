@@ -533,6 +533,7 @@ const TimerSurface = ({ isMobileViewport, timerScreenShell }: TimerSurfaceProps)
                             textSub={phaseDetail}
                             isFinished={timerStatus === 'Finished'}
                             isPreparing={isPreparing}
+                            forceInfoVisible
                         />
                         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
                             <Button onClick={pauseOrResume} className="h-12 rounded-lg bg-[#ff5b36] px-5 text-sm font-bold text-white hover:bg-[#ff6a47]">

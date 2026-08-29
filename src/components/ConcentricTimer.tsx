@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { getResponsiveLayout } from '@/layout';
 import { concentricTimerDesktopLayout } from '@/layout/concentricTimer.desktop';
 import { concentricTimerMobileLayout } from '@/layout/concentricTimer.mobile';
@@ -15,6 +15,7 @@ interface ConcentricTimerProps {
     textSub: string;
     isFinished: boolean;
     isPreparing: boolean;
+    forceInfoVisible?: boolean;
 }
 
 const ConcentricTimer: React.FC<ConcentricTimerProps> = ({
@@ -26,20 +27,17 @@ const ConcentricTimer: React.FC<ConcentricTimerProps> = ({
     textMain,
     textSub,
     isFinished,
-    isPreparing
+    isPreparing,
+    forceInfoVisible = false,
 }) => {
     const settings = useWorkoutStore((state: any) => state.settings);
     const currentRep = useWorkoutStore((state: any) => state.currentRep);
+    const currentSet = useWorkoutStore((state: any) => state.currentSet);
+    const activeSessionId = useWorkoutStore((state: any) => state.activeSessionId);
+    const activeSessionNodeIndex = useWorkoutStore((state: any) => state.activeSessionNodeIndex);
+    const timerStatus = useWorkoutStore((state: any) => state.timerStatus);
     const isMobileViewport = useMobileViewport();
-    const phaseKey = isPreparing ? 'preparing' : (isFinished ? 'finished' : (isResting ? 'resting' : 'working'));
-    const hasMountedRef = useRef(false);
-    const lastPhaseKeyRef = useRef(phaseKey);
     const layout = getResponsiveLayout(isMobileViewport, concentricTimerMobileLayout, concentricTimerDesktopLayout);
-
-    useEffect(() => {
-        hasMountedRef.current = true;
-        lastPhaseKeyRef.current = phaseKey;
-    }, [phaseKey]);
 
     // Size Conf
     const size = layout.size;
@@ -65,30 +63,47 @@ const ConcentricTimer: React.FC<ConcentricTimerProps> = ({
     const clampedInnerProgress = Math.max(0, Math.min(1, innerProgress));
     const innerDashoffset = innerCircumference - (clampedInnerProgress * innerCircumference);
 
-    // Colors
     const isFullScreen = settings.fullScreenMode;
-    const outerColor = isFullScreen ? '#ffffff' : (isResting ? settings.restColor : settings.activeColor);
-
     const isConcentricPhase = !isResting && innerValue <= settings.concentricSecond && innerValue > 0 && !isPreparing && !isFinished;
+    const visualPhase = isFullScreen
+        ? 'full-screen'
+        : (isPreparing ? 'preparing' : (isFinished ? 'finished' : (isResting ? 'resting' : (isConcentricPhase ? 'concentric' : 'eccentric'))));
+    const phaseColors = useMemo(() => {
+        if (isFullScreen) {
+            return {
+                outer: '#ffffff',
+                inner: '#ffffff',
+                text: '#ffffff',
+            };
+        }
 
-    let innerColor;
-    if (isFullScreen) {
-        innerColor = '#ffffff';
-    } else {
-        innerColor = isConcentricPhase ? settings.concentricColor : settings.activeColor;
-    }
-
-    // Transitions
-    const animateProgress = hasMountedRef.current && settings.smoothAnimation && lastPhaseKeyRef.current === phaseKey;
-    const outerTransition = animateProgress ? 'stroke-dashoffset 0.05s linear' : 'none';
-    const innerTransition = animateProgress ? 'stroke-dashoffset 0.05s linear, stroke 0.3s ease' : 'none';
+        const activeColor = settings.activeColor;
+        const isConcentric = visualPhase === 'concentric';
+        return {
+            outer: visualPhase === 'resting' ? settings.restColor : activeColor,
+            inner: isConcentric ? settings.concentricColor : activeColor,
+            text: isConcentric ? settings.concentricColor : activeColor,
+        };
+    }, [isFullScreen, settings.activeColor, settings.concentricColor, settings.restColor, visualPhase]);
+    // Smooth mode gets its motion from the 50ms worker cadence. CSS transitions
+    // are intentionally disabled in both modes so a new interval never animates
+    // from the prior ring state back to full.
+    const progressStyle = { transition: 'none' };
+    const intervalKey = [
+        isPreparing ? 'preparing' : (isFinished ? 'finished' : (isResting ? 'resting' : 'working')),
+        timerStatus,
+        activeSessionId ?? 'standalone',
+        activeSessionNodeIndex,
+        currentSet,
+        outerMax,
+    ].join(':');
 
     const upDownMode = settings.upDownMode;
-    const isInfoVisible = settings.infoVisibility === 'always' || (settings.infoVisibility === 'resting' && isResting);
+    const isInfoVisible = forceInfoVisible || settings.infoVisibility === 'always' || (settings.infoVisibility === 'resting' && isResting);
 
     // Up/Down Text
     let upDownText = '';
-    let upDownTextColor = isFullScreen ? '#ffffff' : (isResting ? settings.restColor : settings.activeColor);
+    let upDownTextColor = phaseColors.outer;
 
     if (isFinished) {
         upDownText = 'DONE';
@@ -99,12 +114,15 @@ const ConcentricTimer: React.FC<ConcentricTimerProps> = ({
     } else {
         if (isConcentricPhase) {
             upDownText = 'CONCENTRIC';
-            upDownTextColor = isFullScreen ? '#ffffff' : settings.concentricColor;
+            upDownTextColor = phaseColors.text;
         } else {
             upDownText = 'ECCENTRIC';
-            upDownTextColor = isFullScreen ? '#ffffff' : settings.activeColor;
+            upDownTextColor = phaseColors.text;
         }
     }
+
+    const upDownTextStyle = useMemo(() => ({ color: upDownTextColor }), [upDownTextColor]);
+    const mainTextStyle = useMemo(() => ({ color: phaseColors.text }), [phaseColors.text]);
 
     const shouldPulse = settings.pulseEffect === 'always' || (settings.pulseEffect === 'resting' && (isResting || isPreparing || isFinished));
 
@@ -123,7 +141,7 @@ const ConcentricTimer: React.FC<ConcentricTimerProps> = ({
                 >
                     {/* Tracks */}
                     <circle
-                        key={phaseKey}
+                        key={`outer-track-${intervalKey}`}
                         cx={center}
                         cy={center}
                         r={outerRadius}
@@ -144,30 +162,31 @@ const ConcentricTimer: React.FC<ConcentricTimerProps> = ({
 
                     {/* Progress */}
                     <circle
+                        key={`outer-progress-${intervalKey}`}
                         cx={center}
                         cy={center}
                         r={outerRadius}
-                        stroke={outerColor}
+                        stroke={phaseColors.outer}
                         strokeWidth={strokeWidth}
                         fill="none"
                         strokeDasharray={outerCircumference}
                         strokeDashoffset={outerDashoffset}
                         strokeLinecap="round"
-                        style={{ transition: outerTransition }}
+                        style={progressStyle}
                     />
                     {!isResting && !isFinished && (
                         <circle
-                            key={currentRep}
+                            key={`inner-progress-${intervalKey}-${currentRep}`}
                             cx={center}
                             cy={center}
                             r={innerRadius}
-                            stroke={innerColor}
+                            stroke={phaseColors.inner}
                             strokeWidth={strokeWidth}
                             fill="none"
                             strokeDasharray={innerCircumference}
                             strokeDashoffset={innerDashoffset}
                             strokeLinecap="round"
-                            style={{ transition: innerTransition }}
+                            style={progressStyle}
                         />
                     )}
                 </svg>
@@ -177,7 +196,7 @@ const ConcentricTimer: React.FC<ConcentricTimerProps> = ({
                 {upDownMode && (
                     <div
                         className={cn(layout.upDownText, shouldPulse && 'animate-pulse')}
-                        style={{ color: upDownTextColor }}
+                        style={upDownTextStyle}
                     >
                         {upDownText}
                     </div>
@@ -187,7 +206,7 @@ const ConcentricTimer: React.FC<ConcentricTimerProps> = ({
                     <div className={layout.infoWrap}>
                         <div
                             className="text-[clamp(3rem,15vw,6rem)] font-black tabular-nums leading-none transition-colors duration-300"
-                            style={{ color: isFullScreen ? '#ffffff' : (isConcentricPhase ? settings.concentricColor : settings.activeColor) }}
+                            style={mainTextStyle}
                         >
                             {textMain}
                         </div>
