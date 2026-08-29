@@ -1,3 +1,10 @@
+## [3.8.3](https://github.com/GeneralMalit/myorep-timer/compare/v3.8.2...v3.8.3) (2026-08-29)
+
+
+### Bug Fixes
+
+* streamline kinetic session builder viewport ([6dd4ef1](https://github.com/GeneralMalit/myorep-timer/commit/6dd4ef123457c243bdf80b65bcf233c0f6366ef0))
+
 ## [3.8.2](https://github.com/GeneralMalit/myorep-timer/compare/v3.8.1...v3.8.2) (2026-08-29)
 
 
