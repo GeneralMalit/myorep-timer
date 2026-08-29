@@ -1,3 +1,10 @@
+## [3.8.2](https://github.com/GeneralMalit/myorep-timer/compare/v3.8.1...v3.8.2) (2026-08-29)
+
+
+### Bug Fixes
+
+* use full kinetic session timeline width ([fd12202](https://github.com/GeneralMalit/myorep-timer/commit/fd12202ef1d1aa382a674dff8f7f322aab6f30e6))
+
 ## [3.8.1](https://github.com/GeneralMalit/myorep-timer/compare/v3.8.0...v3.8.1) (2026-08-29)
 
 
