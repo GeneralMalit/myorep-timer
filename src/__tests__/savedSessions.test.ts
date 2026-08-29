@@ -6,6 +6,7 @@ import {
     createRestSessionNode,
     createSavedSession,
     createWorkoutSessionNode,
+    estimateWorkoutDurationSeconds,
     estimateSessionDurationSeconds,
     formatEstimatedSessionDuration,
     isValidRestNode,
@@ -171,6 +172,14 @@ describe('savedSessions utilities', () => {
 
         const durationSeconds = estimateSessionDurationSeconds(session, 5);
 
+        expect(estimateWorkoutDurationSeconds({
+            sets: '2',
+            reps: '10',
+            seconds: '3',
+            rest: '20',
+            myoReps: '4',
+            myoWorkSecs: '2',
+        })).toBe(58);
         expect(durationSeconds).toBe(78);
         expect(formatEstimatedSessionDuration(durationSeconds)).toBe('1:18');
     });

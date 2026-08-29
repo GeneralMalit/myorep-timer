@@ -49,10 +49,10 @@ const formatClockTime = (totalSeconds: number): string => {
     return `${minutes}:${String(seconds).padStart(2, '0')}`;
 };
 
-const estimateWorkoutNodeDurationSeconds = (node: WorkoutSessionNode): number | null => {
-    const sets = parsePositiveInt(node.config.sets);
-    const reps = parsePositiveInt(node.config.reps);
-    const seconds = parsePositiveInt(node.config.seconds);
+export const estimateWorkoutDurationSeconds = (config: Pick<SavedWorkoutConfig, typeof SESSION_NODE_KEYS[number]>): number | null => {
+    const sets = parsePositiveInt(config.sets);
+    const reps = parsePositiveInt(config.reps);
+    const seconds = parsePositiveInt(config.seconds);
 
     if (sets === null || reps === null || seconds === null) {
         return null;
@@ -62,9 +62,9 @@ const estimateWorkoutNodeDurationSeconds = (node: WorkoutSessionNode): number | 
         return reps * seconds;
     }
 
-    const rest = parsePositiveInt(node.config.rest);
-    const myoReps = parsePositiveInt(node.config.myoReps);
-    const myoWorkSecs = parsePositiveInt(node.config.myoWorkSecs);
+    const rest = parsePositiveInt(config.rest);
+    const myoReps = parsePositiveInt(config.myoReps);
+    const myoWorkSecs = parsePositiveInt(config.myoWorkSecs);
 
     if (rest === null || myoReps === null || myoWorkSecs === null) {
         return null;
@@ -72,6 +72,10 @@ const estimateWorkoutNodeDurationSeconds = (node: WorkoutSessionNode): number | 
 
     return (reps * seconds) + ((sets - 1) * (rest + (myoReps * myoWorkSecs)));
 };
+
+const estimateWorkoutNodeDurationSeconds = (node: WorkoutSessionNode): number | null => (
+    estimateWorkoutDurationSeconds(node.config)
+);
 
 export const estimateSessionDurationSeconds = (
     session: Pick<SavedSession, 'nodes'>,

@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@500;600;700&display=swap');
 @import "tailwindcss";
 
 @theme {
@@ -219,4 +220,40 @@
   --color-primary: hsl(151 100% 45%) !important;
   --color-ring: hsl(151 100% 45%) !important;
   --primary: 151 100% 45%;
+}
+
+/* The Kinetic Console is intentionally isolated from the user's existing theme
+   choices. It is a comparable design variant, not another accent-color theme. */
+.design-kinetic,
+.design-kinetic.theme-ocean,
+.design-kinetic.theme-fire,
+.design-kinetic.theme-forest {
+  --background: 210 8% 6%;
+  --foreground: 0 0% 96%;
+  --card: 210 7% 9%;
+  --card-foreground: 0 0% 96%;
+  --popover: 210 7% 9%;
+  --popover-foreground: 0 0% 96%;
+  --primary: 11 100% 60%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 210 6% 14%;
+  --secondary-foreground: 0 0% 96%;
+  --muted: 210 6% 14%;
+  --muted-foreground: 220 8% 62%;
+  --accent: 210 6% 16%;
+  --accent-foreground: 0 0% 96%;
+  --border: 210 7% 17%;
+  --input: 210 7% 17%;
+  --ring: 11 100% 60%;
+  --color-primary: hsl(11 100% 60%);
+  --color-ring: hsl(11 100% 60%);
+  --radius: 0.625rem;
+  font-family: 'Manrope', ui-sans-serif, system-ui, sans-serif;
+}
+
+.design-kinetic.theme-ocean,
+.design-kinetic.theme-fire,
+.design-kinetic.theme-forest {
+  --color-primary: hsl(11 100% 60%) !important;
+  --color-ring: hsl(11 100% 60%) !important;
 }

@@ -22,6 +22,7 @@ const setMobileViewport = (matches: boolean) => {
 describe('SettingsPanel', () => {
     beforeEach(() => {
         setMobileViewport(false);
+        useWorkoutStore.setState({ designVariant: 'classic' });
         useWorkoutStore.setState((state) => ({
             settings: {
                 ...state.settings,
@@ -57,5 +58,25 @@ describe('SettingsPanel', () => {
 
         fireEvent.click(screen.getByRole('button', { name: /close settings/i }));
         expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('allows selecting Classic or Kinetic Console and updates the persisted store setting', async () => {
+        render(<SettingsPanel isOpen onClose={vi.fn()} />);
+
+        const classic = await screen.findByRole('radio', { name: /classic/i });
+        const kinetic = screen.getByRole('radio', { name: /kinetic console/i });
+
+        expect(classic).toBeChecked();
+        expect(kinetic).not.toBeChecked();
+
+        fireEvent.click(kinetic);
+        expect(kinetic).toBeChecked();
+        expect(useWorkoutStore.getState().designVariant).toBe('kinetic');
+        expect(screen.getByTestId('settings-drawer-panel')).toHaveClass('bg-[#111412]');
+
+        fireEvent.click(classic);
+        expect(classic).toBeChecked();
+        expect(useWorkoutStore.getState().designVariant).toBe('classic');
+        expect(screen.getByTestId('settings-drawer-panel')).not.toHaveClass('bg-[#111412]');
     });
 });

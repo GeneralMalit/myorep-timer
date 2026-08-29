@@ -39,6 +39,13 @@ import { useSyncStore } from '@/store/useSyncStore';
 
 export type AppPhase = 'setup' | 'timer';
 export type TimerStatus = 'Ready' | 'Preparing' | 'Main Set' | 'Resting' | 'Myo Reps' | 'Finished';
+export type DesignMode = 'classic' | 'kinetic';
+
+const DEFAULT_DESIGN_MODE: DesignMode = 'classic';
+
+const normalizeDesignMode = (value: unknown): DesignMode => (
+    value === 'kinetic' ? 'kinetic' : DEFAULT_DESIGN_MODE
+);
 
 const parsePositiveInt = (value: string | number): number | null => {
     const parsed = typeof value === 'number' ? value : parseInt(value, 10);
@@ -85,7 +92,7 @@ const enqueueSyncChangeIfEnabled = (params: {
     syncState.enqueueEntityChange(params);
 };
 
-const WORKOUT_STORE_PERSIST_VERSION = 3;
+const WORKOUT_STORE_PERSIST_VERSION = 4;
 
 type PersistedWorkoutStoreState = {
     settings: WorkoutSettings;
@@ -102,6 +109,7 @@ type PersistedWorkoutStoreState = {
     setupMode: 'workout' | 'session';
     isAccountCardCollapsed: boolean;
     theme: string;
+    designVariant: DesignMode;
 };
 
 const createDefaultPersistedWorkoutState = (): PersistedWorkoutStoreState => ({
@@ -135,6 +143,7 @@ const createDefaultPersistedWorkoutState = (): PersistedWorkoutStoreState => ({
     setupMode: 'workout',
     isAccountCardCollapsed: false,
     theme: 'theme-default',
+    designVariant: DEFAULT_DESIGN_MODE,
 });
 
 const normalizePersistedWorkout = (workout: SavedWorkout, nowIso: string): SavedWorkout => ({
@@ -162,6 +171,7 @@ const persistWorkoutStoreState = (state: WorkoutState): PersistedWorkoutStoreSta
     setupMode: state.setupMode,
     isAccountCardCollapsed: state.isAccountCardCollapsed,
     theme: state.theme,
+    designVariant: state.designVariant,
 });
 
 const persistedWorkoutStatesAreEqual = (left: PersistedWorkoutStoreState, right: PersistedWorkoutStoreState) => (
@@ -178,7 +188,8 @@ const persistedWorkoutStatesAreEqual = (left: PersistedWorkoutStoreState, right:
     left.selectedSavedSessionId === right.selectedSavedSessionId &&
     left.setupMode === right.setupMode &&
     left.isAccountCardCollapsed === right.isAccountCardCollapsed &&
-    left.theme === right.theme
+    left.theme === right.theme &&
+    left.designVariant === right.designVariant
 );
 
 const createWorkoutPersistStorage = (): PersistStorage<PersistedWorkoutStoreState> => {
@@ -291,6 +302,7 @@ const migratePersistedWorkoutStoreState = (persistedState: unknown): PersistedWo
         setupMode: state.setupMode === 'session' ? 'session' : defaults.setupMode,
         isAccountCardCollapsed,
         theme: typeof state.theme === 'string' && state.theme.trim() ? state.theme : defaults.theme,
+        designVariant: normalizeDesignMode(state.designVariant),
     };
 };
 
@@ -359,12 +371,14 @@ interface WorkoutState {
     isSidebarCollapsed: boolean;
     isAccountCardCollapsed: boolean;
     theme: string;
+    designVariant: DesignMode;
 
     // Actions
     setShowSettings: (show: boolean) => void;
     setIsSidebarCollapsed: (collapsed: boolean) => void;
     setIsAccountCardCollapsed: (collapsed: boolean) => void;
     setTheme: (theme: string) => void;
+    setDesignVariant: (variant: DesignMode) => void;
     setSetupMode: (mode: 'workout' | 'session') => void;
     setSettings: (settings: Partial<WorkoutSettings>) => void;
     setWorkoutConfig: (config: Partial<Pick<WorkoutState, 'sets' | 'reps' | 'seconds' | 'rest' | 'myoReps' | 'myoWorkSecs'>>) => void;
@@ -457,11 +471,13 @@ export const useWorkoutStore = create<WorkoutState>()(
             isSidebarCollapsed: false,
             isAccountCardCollapsed: false,
             theme: 'theme-default',
+            designVariant: DEFAULT_DESIGN_MODE,
 
             setShowSettings: (show: boolean) => set({ showSettings: show }),
             setIsSidebarCollapsed: (collapsed: boolean) => set({ isSidebarCollapsed: collapsed }),
             setIsAccountCardCollapsed: (collapsed: boolean) => set({ isAccountCardCollapsed: collapsed }),
             setTheme: (theme: string) => set({ theme }),
+            setDesignVariant: (variant) => set({ designVariant: normalizeDesignMode(variant) }),
             setSetupMode: (mode) => set({ setupMode: mode }),
             setSettings: (newSettings) => set((state) => {
                 const limit = getConcentricLimitFromPaces(state.seconds, state.myoWorkSecs);

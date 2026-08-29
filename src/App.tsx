@@ -1,37 +1,18 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
 import { useAccountStore } from '@/store/useAccountStore';
 import { audioEngine } from '@/utils/audioEngine';
 import TimerWorker from '@/utils/timerWorker?worker&inline';
 import Sidebar from '@/components/Sidebar';
-import SettingsPanel from '@/components/SettingsPanel';
-import ProtocolIntelModal from '@/components/ProtocolIntelModal';
+import type { SidebarProps } from '@/components/Sidebar';
 import ConcentricTimer from '@/components/ConcentricTimer';
-import SessionBuilder from '@/components/SessionBuilder';
+import KineticWorkoutSetup from '@/components/kinetic/KineticWorkoutSetup';
+import KineticSidebar from '@/components/kinetic/KineticSidebar';
 import SetupModeToggle from '@/components/SetupModeToggle';
-import SupabaseBootstrap from '@/components/SupabaseBootstrap';
 import { getResponsiveLayout } from '@/layout';
 import { appShellMobile } from '@/layout/appShell.mobile';
 import { appShellDesktop } from '@/layout/appShell.desktop';
-import { useSyncController } from '@/hooks/useSyncController';
-import { Capacitor } from '@capacitor/core';
-import {
-    openBillingPortal,
-    refreshBillingEntitlementState,
-    startBillingCheckout,
-} from '@/lib/billing';
-import { initializePaddleCheckoutFromQuery } from '@/lib/paddle';
-import { getSupabaseAuthRedirectUrl, getSupabaseClient } from '@/lib/supabase';
-import {
-    loadSupabaseAccountState,
-    resendSupabaseSignUpConfirmation,
-    sendSupabasePasswordReset,
-    signInSupabaseWithPassword,
-    signOutSupabase,
-    signUpSupabaseWithPassword,
-    updateSupabaseUsername,
-    updateSupabasePassword,
-} from '@/lib/supabaseAccount';
 import { Play, Square, RotateCcw, ChevronRight, Zap, Activity, Volume2, Menu, Settings2, SkipForward } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -42,6 +23,48 @@ import { APP_VERSION } from '@/constants/version';
 import { canAccessSessionBuilder } from '@/utils/account';
 import { normalizeSetsInput } from '@/utils/savedWorkouts';
 import type { AccountActionResult, AccountSnapshot } from '@/types/account';
+
+const LazySettingsPanel = lazy(() => import('@/components/SettingsPanel'));
+const LazyProtocolIntelModal = lazy(() => import('@/components/ProtocolIntelModal'));
+const LazySessionBuilder = lazy(() => import('@/components/SessionBuilder'));
+const LazyKineticSessionBuilder = lazy(() => import('@/components/kinetic/KineticSessionBuilder'));
+const LazySupabaseBootstrap = lazy(() => import('@/components/SupabaseBootstrap'));
+const shouldBootstrapSupabase = import.meta.env.VITE_ENABLE_SUPABASE === 'true';
+// Development-only visual preview. This unlocks local UI paths without ever
+// altering real entitlement data, production builds, or Capacitor releases.
+const isLocalPlusPreview = import.meta.env.DEV
+    && import.meta.env.MODE !== 'test'
+    && import.meta.env.VITE_LOCAL_PLUS_PREVIEW !== 'false';
+
+const LazySyncedSidebar = lazy(async () => {
+    const { useSyncController } = await import('@/hooks/useSyncController');
+
+    const SyncedSidebar = (props: SidebarProps) => {
+        const account = props.account as AccountSnapshot;
+        const {
+            visibleWorkouts,
+            visibleSessions,
+            syncSnapshot,
+            syncActions,
+        } = useSyncController({
+            account,
+            savedWorkouts: props.savedWorkouts,
+            savedSessions: props.savedSessions,
+        });
+
+        return (
+            <Sidebar
+                {...props}
+                savedWorkouts={visibleWorkouts}
+                savedSessions={visibleSessions}
+                syncSnapshot={syncSnapshot}
+                syncActions={syncActions}
+            />
+        );
+    };
+
+    return { default: SyncedSidebar };
+});
 
 const formatTime = (totalSeconds: number) => {
     const minutes = Math.floor(totalSeconds / 60);
@@ -169,59 +192,104 @@ const AppDialog = ({ state, value, onChangeValue, onClose, onConfirm, layout }: 
     );
 };
 
-export default function App() {
+interface TimerSurfaceProps {
+    isMobileViewport: boolean;
+    timerScreenShell: string;
+}
+
+const TimerSurface = ({ isMobileViewport, timerScreenShell }: TimerSurfaceProps) => {
     const {
-        settings, sets, reps, seconds, rest, myoReps, myoWorkSecs, setWorkoutConfig,
-        editingSessionDraft, savedWorkouts, savedSessions, selectedSavedWorkoutId, lastImportSummary,
-        activeSessionId, activeSessionNodeIndex, sessionStatus, isRunningSession, sessionNodeRuntimeType, completeSessionNode,
-        appPhase, timerStatus, isTimerRunning, setIsTimerRunning,
-        currentSet, currentRep, isMainRep, isWorking, timeLeft, setTotalDuration, setElapsedTime,
-        startWorkout, resetWorkout, applyTimerElapsed, skipSection,
-        saveCurrentWorkout, saveCurrentWorkoutAs, loadWorkout, renameWorkout, deleteWorkout, exportSavedLibrary, importSavedLibrary, clearImportSummary,
-        createSession, loadSessionForEditing, duplicateSession, renameSession, deleteSession,
-        setupMode, setSetupMode, showSettings, setShowSettings, setSettings,
-        isSidebarCollapsed, setIsSidebarCollapsed, isAccountCardCollapsed, setIsAccountCardCollapsed, theme, setTheme
-    } = useWorkoutStore();
-    const {
-        applyAccountState,
-        bootstrapStatus,
-        mode,
-        session,
-        profile,
-        entitlement,
-        syncStatus,
-        error,
-        requiresPasswordReset,
-        setPasswordRecoveryMode,
-    } = useAccountStore();
-    const [showProtocolIntel, setShowProtocolIntel] = useState(false);
-    const [isMobileViewport, setIsMobileViewport] = useState(false);
-    const [dialogState, setDialogState] = useState<AppDialogState>(null);
-    const [dialogValue, setDialogValue] = useState('');
-    const isSingleCycle = parseInt(sets, 10) === 1;
+        settings,
+        sets,
+        reps,
+        seconds,
+        rest,
+        myoReps,
+        myoWorkSecs,
+        activeSessionId,
+        activeSessionNodeIndex,
+        sessionStatus,
+        isRunningSession,
+        sessionNodeRuntimeType,
+        timerStatus,
+        isTimerRunning,
+        currentSet,
+        currentRep,
+        isMainRep,
+        isWorking,
+        timeLeft,
+        setTotalDuration,
+        setElapsedTime,
+        savedSessions,
+        designVariant,
+        setIsTimerRunning,
+        completeSessionNode,
+        resetWorkout,
+        applyTimerElapsed,
+        skipSection,
+    } = useWorkoutStore(useShallow((state) => ({
+        settings: state.settings,
+        sets: state.sets,
+        reps: state.reps,
+        seconds: state.seconds,
+        rest: state.rest,
+        myoReps: state.myoReps,
+        myoWorkSecs: state.myoWorkSecs,
+        activeSessionId: state.activeSessionId,
+        activeSessionNodeIndex: state.activeSessionNodeIndex,
+        sessionStatus: state.sessionStatus,
+        isRunningSession: state.isRunningSession,
+        sessionNodeRuntimeType: state.sessionNodeRuntimeType,
+        timerStatus: state.timerStatus,
+        isTimerRunning: state.isTimerRunning,
+        currentSet: state.currentSet,
+        currentRep: state.currentRep,
+        isMainRep: state.isMainRep,
+        isWorking: state.isWorking,
+        timeLeft: state.timeLeft,
+        setTotalDuration: state.setTotalDuration,
+        setElapsedTime: state.setElapsedTime,
+        savedSessions: state.savedSessions,
+        designVariant: state.designVariant,
+        setIsTimerRunning: state.setIsTimerRunning,
+        completeSessionNode: state.completeSessionNode,
+        resetWorkout: state.resetWorkout,
+        applyTimerElapsed: state.applyTimerElapsed,
+        skipSection: state.skipSection,
+    })));
     const workerRef = useRef<Worker | null>(null);
     const lastWorkerElapsedRef = useRef(0);
     const lastWorkerSampleEpochRef = useRef<number | null>(null);
     const timerRunIdRef = useRef(0);
     const activeTimerRunIdRef = useRef<number | null>(null);
+    const smoothAnimationRef = useRef(settings.smoothAnimation);
     const lastSpokenSecondRef = useRef(-1);
     const metronomeScheduleKeyRef = useRef<string | null>(null);
     const lastMetronomeSectionKeyRef = useRef<string | null>(null);
     const prepAnnouncedRef = useRef(false);
-    const dialogConfirmRef = useRef<((value: string) => void) | null>(null);
-    const loadedWorkout = selectedSavedWorkoutId ? savedWorkouts.find((workout) => workout.id === selectedSavedWorkoutId) ?? null : null;
-    const activeSession = activeSessionId ? savedSessions.find((session) => session.id === activeSessionId) ?? null : null;
+    const activeSession = activeSessionId
+        ? savedSessions.find((session) => session.id === activeSessionId) ?? null
+        : null;
     const activeSessionNode = activeSession?.nodes[activeSessionNodeIndex] ?? null;
-    const sessionRestDuration = activeSessionNode?.type === 'rest' ? parseInt(activeSessionNode.seconds || '0', 10) : null;
-    const canUseSessionBuilder = canAccessSessionBuilder(entitlement);
-    const isSessionSetup = appPhase === 'setup' && setupMode === 'session' && canUseSessionBuilder;
-    const nodeCount = editingSessionDraft?.nodes.length ?? 0;
-    const sessionSummary = useMemo(() => {
-        if (!editingSessionDraft) {
-            return 'Create a session, then edit nodes directly in the canvas.';
-        }
-        return `${nodeCount} node${nodeCount === 1 ? '' : 's'} in the chain.`;
-    }, [editingSessionDraft, nodeCount]);
+    const sessionRestDuration = activeSessionNode?.type === 'rest'
+        ? parseInt(activeSessionNode.seconds || '0', 10)
+        : null;
+    const isPreparing = timerStatus === 'Preparing';
+    const fullScreenBackgroundColor = timerStatus === 'Finished'
+        ? settings.finishedColor
+        : (isPreparing || !isWorking)
+            ? settings.restColor
+            : (timeLeft <= settings.concentricSecond && timeLeft > 0
+                ? settings.concentricColor
+                : settings.activeColor);
+    const fullScreenBackgroundStyle = useMemo(
+        () => ({ backgroundColor: fullScreenBackgroundColor }),
+        [fullScreenBackgroundColor],
+    );
+
+    useEffect(() => {
+        smoothAnimationRef.current = settings.smoothAnimation;
+    }, [settings.smoothAnimation]);
 
     const startTimerWorker = useCallback(() => {
         if (!workerRef.current) return;
@@ -230,8 +298,7 @@ export default function App() {
         activeTimerRunIdRef.current = runId;
         lastWorkerElapsedRef.current = 0;
         lastWorkerSampleEpochRef.current = getMonotonicEpochMs();
-        // Timer correctness and audio boundaries always use the high-precision cadence.
-        workerRef.current.postMessage({ action: 'start', interval: 50, runId });
+        workerRef.current.postMessage({ action: 'start', interval: smoothAnimationRef.current ? 50 : 250, runId });
     }, []);
 
     const flushAndStopTimerWorker = useCallback(() => {
@@ -248,78 +315,74 @@ export default function App() {
             applyTimerElapsed(Math.max(0, (now - lastSample) / 1000));
         }
     }, [applyTimerElapsed]);
-    const isPreparing = timerStatus === 'Preparing';
-    const isSidebarOpen = !isSidebarCollapsed;
-    const appShellLayout = getResponsiveLayout(isMobileViewport, appShellMobile, appShellDesktop);
-    const account = useMemo<AccountSnapshot>(() => ({
-        bootstrapStatus,
-        mode,
-        session,
-        profile,
-        entitlement,
-        syncStatus,
-        error,
-        requiresPasswordReset,
-    }), [bootstrapStatus, entitlement, error, mode, profile, requiresPasswordReset, session, syncStatus]);
-    useEffect(() => {
-        if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
-        const mediaQuery = window.matchMedia('(max-width: 767px)');
-        const handleViewportChange = (event: MediaQueryListEvent | MediaQueryList) => {
-            setIsMobileViewport(event.matches);
-            if (event.matches) setIsSidebarCollapsed(true);
-        };
-        handleViewportChange(mediaQuery);
-        if (typeof mediaQuery.addEventListener === 'function') {
-            mediaQuery.addEventListener('change', handleViewportChange);
-            return () => mediaQuery.removeEventListener('change', handleViewportChange);
-        }
-        mediaQuery.addListener(handleViewportChange);
-        return () => mediaQuery.removeListener(handleViewportChange);
-    }, [setIsSidebarCollapsed]);
 
     useEffect(() => {
         const worker = new TimerWorker();
         workerRef.current = worker;
-        worker.onmessage = (e) => {
-            if (e.data.action === 'tick') {
-                if (typeof e.data.runId === 'number' && e.data.runId !== activeTimerRunIdRef.current) {
-                    return;
-                }
-                const elapsedSecs = e.data.elapsed / 1000;
-                const sampleEpochMs = typeof e.data.sampleEpochMs === 'number' ? e.data.sampleEpochMs : null;
-                const deltaSeconds = sampleEpochMs !== null && lastWorkerSampleEpochRef.current !== null
-                    ? Math.max(0, (sampleEpochMs - lastWorkerSampleEpochRef.current) / 1000)
-                    : Math.max(0, elapsedSecs - lastWorkerElapsedRef.current);
-                lastWorkerElapsedRef.current = elapsedSecs;
-                lastWorkerSampleEpochRef.current = sampleEpochMs ?? getMonotonicEpochMs();
-                applyTimerElapsed(deltaSeconds);
+        worker.postMessage({ action: 'stop' });
+        worker.onmessage = (event) => {
+            if (event.data.action !== 'tick') return;
+            if (typeof event.data.runId === 'number' && event.data.runId !== activeTimerRunIdRef.current) {
+                return;
             }
+
+            const elapsedSecs = event.data.elapsed / 1000;
+            const sampleEpochMs = typeof event.data.sampleEpochMs === 'number' ? event.data.sampleEpochMs : null;
+            const deltaSeconds = sampleEpochMs !== null && lastWorkerSampleEpochRef.current !== null
+                ? Math.max(0, (sampleEpochMs - lastWorkerSampleEpochRef.current) / 1000)
+                : Math.max(0, elapsedSecs - lastWorkerElapsedRef.current);
+            lastWorkerElapsedRef.current = elapsedSecs;
+            lastWorkerSampleEpochRef.current = sampleEpochMs ?? getMonotonicEpochMs();
+            applyTimerElapsed(deltaSeconds);
         };
-        return () => worker.terminate();
+
+        return () => {
+            activeTimerRunIdRef.current = null;
+            worker.terminate();
+        };
     }, [applyTimerElapsed]);
 
     useEffect(() => {
         if (!workerRef.current) return;
         if (isTimerRunning) {
             startTimerWorker();
-        } else {
-            activeTimerRunIdRef.current = null;
-            workerRef.current.postMessage({ action: 'stop' });
-            lastWorkerElapsedRef.current = 0;
-            lastWorkerSampleEpochRef.current = null;
+            return;
         }
+
+        activeTimerRunIdRef.current = null;
+        workerRef.current.postMessage({ action: 'stop' });
+        lastWorkerElapsedRef.current = 0;
+        lastWorkerSampleEpochRef.current = null;
     }, [isTimerRunning, startTimerWorker]);
 
     useEffect(() => {
-        if (isRunningSession && sessionNodeRuntimeType === 'workout' && sessionStatus === 'running' && timerStatus === 'Finished') completeSessionNode();
+        if (
+            isRunningSession
+            && sessionNodeRuntimeType === 'workout'
+            && sessionStatus === 'running'
+            && timerStatus === 'Finished'
+        ) {
+            completeSessionNode();
+        }
     }, [completeSessionNode, isRunningSession, sessionNodeRuntimeType, sessionStatus, timerStatus]);
 
     useEffect(() => {
+        audioEngine.cancelSpeech();
         lastSpokenSecondRef.current = -1;
     }, [timerStatus, currentRep, isWorking, isMainRep]);
 
     useEffect(() => {
-        const canScheduleMetronome = isTimerRunning && settings.metronomeEnabled && isWorking && timerStatus !== 'Preparing' && timeLeft > 0.001;
+        if (!isTimerRunning || !settings.ttsEnabled || timerStatus === 'Finished') {
+            audioEngine.cancelSpeech();
+        }
+    }, [isTimerRunning, settings.ttsEnabled, timerStatus]);
+
+    useEffect(() => {
+        const canScheduleMetronome = isTimerRunning
+            && settings.metronomeEnabled
+            && isWorking
+            && timerStatus !== 'Preparing'
+            && timeLeft > 0.001;
         const sectionTimeLeft = setTotalDuration > 0
             ? Math.max(0, setTotalDuration - setElapsedTime)
             : timeLeft;
@@ -343,20 +406,20 @@ export default function App() {
             return;
         }
 
-        const offsets = getMetronomeOffsets(sectionTimeLeft, lastMetronomeSectionKeyRef.current !== sectionKey).slice(0, 30);
+        const offsets = getMetronomeOffsets(
+            sectionTimeLeft,
+            lastMetronomeSectionKeyRef.current !== sectionKey,
+        ).slice(0, 30);
         if (offsets.length > 0) {
             audioEngine.scheduleTickSequence(settings.metronomeSound, offsets);
             metronomeScheduleKeyRef.current = scheduleKey;
             lastMetronomeSectionKeyRef.current = sectionKey;
         }
-    }, [timeLeft, setTotalDuration, setElapsedTime, isTimerRunning, settings.metronomeEnabled, settings.metronomeSound, isWorking, timerStatus, currentSet, isMainRep, activeSessionId, activeSessionNodeIndex]);
-
-    useEffect(() => {
-        if (appPhase === 'setup') lastMetronomeSectionKeyRef.current = null;
-    }, [appPhase]);
+    }, [activeSessionId, activeSessionNodeIndex, currentSet, isMainRep, isTimerRunning, isWorking, setElapsedTime, setTotalDuration, settings.metronomeEnabled, settings.metronomeSound, timeLeft, timerStatus]);
 
     useEffect(() => () => {
         audioEngine.cancelScheduledTicks();
+        audioEngine.cancelSpeech();
     }, []);
 
     useEffect(() => {
@@ -365,25 +428,371 @@ export default function App() {
             if (currentSecond !== lastSpokenSecondRef.current && currentSecond >= 0) {
                 const activeRepTarget = isMainRep ? parseInt(reps || '0', 10) : parseInt(myoReps || '0', 10);
                 const suppressVoice = isBurnoutRepSet({ timerStatus, isWorking, seconds, myoWorkSecs });
-                const shouldSpeakCurrentSecond = !suppressVoice && currentSecond >= 1 && (currentSecond > 1 || activeRepTarget !== 1);
+                const shouldSpeakCurrentSecond = !suppressVoice
+                    && currentSecond >= 1
+                    && (currentSecond > 1 || activeRepTarget !== 1);
                 if (shouldSpeakCurrentSecond) audioEngine.speak(currentSecond);
                 lastSpokenSecondRef.current = currentSecond;
             }
         } else if (timerStatus !== 'Preparing') {
             lastSpokenSecondRef.current = -1;
         }
-    }, [timeLeft, isTimerRunning, settings, isWorking, timerStatus, isMainRep, reps, myoReps]);
+    }, [isMainRep, isTimerRunning, isWorking, myoReps, myoWorkSecs, reps, seconds, settings.ttsEnabled, timeLeft, timerStatus]);
 
     useEffect(() => {
         if (timerStatus !== 'Preparing' || !isTimerRunning) {
             prepAnnouncedRef.current = false;
             return;
         }
+
         if (!prepAnnouncedRef.current) {
             if (settings.ttsEnabled) audioEngine.speak('Ready');
             prepAnnouncedRef.current = true;
         }
-    }, [timerStatus, isTimerRunning, settings.ttsEnabled]);
+    }, [isTimerRunning, settings.ttsEnabled, timerStatus]);
+
+    const pauseOrResume = () => {
+        audioEngine.init();
+        if (timerStatus === 'Finished') {
+            audioEngine.cancelSpeech();
+            resetWorkout();
+            return;
+        }
+
+        if (isTimerRunning) {
+            flushAndStopTimerWorker();
+            audioEngine.cancelSpeech();
+            setIsTimerRunning(false);
+            return;
+        }
+
+        setIsTimerRunning(true);
+    };
+
+    const skipActiveSection = () => {
+        audioEngine.init();
+        audioEngine.cancelSpeech();
+        const wasRunning = useWorkoutStore.getState().isTimerRunning;
+        if (wasRunning) flushAndStopTimerWorker();
+        skipSection();
+        if (wasRunning && useWorkoutStore.getState().isTimerRunning) startTimerWorker();
+    };
+
+    const terminateWorkout = () => {
+        audioEngine.cancelSpeech();
+        audioEngine.cancelScheduledTicks();
+        resetWorkout();
+    };
+
+    if (designVariant === 'kinetic') {
+        const isSessionRunner = Boolean(isRunningSession && activeSession);
+        const phaseLabel = timerStatus === 'Finished'
+            ? 'Protocol complete'
+            : (isPreparing ? 'Get ready' : (!isWorking ? (isSessionRunner ? 'Transition rest' : 'Recovery') : (isMainRep ? 'Activation pace' : 'Myo pace')));
+        const phaseDetail = timerStatus === 'Finished'
+            ? 'Great work. Start a fresh workout when ready.'
+            : (isRunningSession && sessionNodeRuntimeType === 'rest'
+                ? (activeSessionNode?.name ?? 'Session rest')
+                : (isWorking ? `Rep ${currentRep} / ${isMainRep ? reps : myoReps}` : `Next: ${isMainRep ? 'work interval' : 'myo work'}`));
+
+        return (
+            <section data-testid="kinetic-timer-surface" className="flex min-h-full w-full flex-1 flex-col bg-[#0e1012] px-4 py-5 text-white sm:px-7 lg:px-10 lg:py-7">
+                <header className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-white/10 pb-4 text-sm">
+                    <div className="font-['Sora'] font-semibold tracking-[-0.025em] text-white">
+                        {isSessionRunner ? activeSession?.name : 'Workout'}
+                    </div>
+                    <span className="h-4 border-l border-white/15" />
+                    <span className="text-zinc-400">{isSessionRunner ? `Block ${activeSessionNodeIndex + 1} / ${activeSession?.nodes.length ?? 0}` : `Set ${currentSet} / ${sets}`}</span>
+                    <span className="h-4 border-l border-white/15" />
+                    <span className="text-zinc-400">{timerStatus}</span>
+                    <button type="button" className="ml-auto text-xs font-medium text-zinc-400 transition-colors hover:text-white" onClick={terminateWorkout}>End {isSessionRunner ? 'session' : 'workout'}</button>
+                </header>
+
+                <div className="mx-auto grid w-full max-w-[1120px] flex-1 items-center gap-8 py-8 lg:grid-cols-[minmax(0,1fr)_300px]">
+                    <div className="flex flex-col items-center justify-center">
+                        <div className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">
+                            {phaseLabel}
+                        </div>
+                        <ConcentricTimer
+                            outerValue={isPreparing
+                                ? timeLeft
+                                : (timerStatus === 'Finished'
+                                    ? 0
+                                    : (isWorking
+                                        ? Math.max(0, setTotalDuration - setElapsedTime)
+                                        : timeLeft))}
+                            outerMax={isPreparing
+                                ? settings.prepTime
+                                : (isRunningSession && sessionNodeRuntimeType === 'rest' && sessionRestDuration !== null
+                                    ? sessionRestDuration
+                                    : (isWorking ? Math.max(setTotalDuration, 1) : parseInt(rest || '1', 10)))}
+                            isResting={!isWorking}
+                            innerValue={timeLeft}
+                            innerMax={timerStatus === 'Preparing' ? settings.prepTime : (isMainRep ? parseInt(seconds || '0', 10) : parseInt(myoWorkSecs || '0', 10))}
+                            textMain={formatTime(Math.ceil(timeLeft))}
+                            textSub={phaseDetail}
+                            isFinished={timerStatus === 'Finished'}
+                            isPreparing={isPreparing}
+                        />
+                        <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+                            <Button onClick={pauseOrResume} className="h-12 rounded-lg bg-[#ff5b36] px-5 text-sm font-bold text-white hover:bg-[#ff6a47]">
+                                {timerStatus === 'Finished' ? <><RotateCcw size={16} /> New workout</> : (isTimerRunning ? <><Square size={15} /> Pause</> : <><Play size={16} /> Resume</>)}
+                            </Button>
+                            {timerStatus !== 'Finished' && (
+                                <Button onClick={skipActiveSection} variant="outline" className="h-12 rounded-lg border-white/15 bg-transparent px-4 text-sm text-zinc-300 hover:bg-white/8 hover:text-white">
+                                    <SkipForward size={16} /> Skip {isSessionRunner ? 'block' : 'phase'}
+                                </Button>
+                            )}
+                        </div>
+                    </div>
+
+                    {isSessionRunner ? (
+                        <aside className="border-l border-white/10 pl-5">
+                            <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">Session timeline</div>
+                            <ol className="mt-5 space-y-1">
+                                {activeSession?.nodes.map((node, index) => {
+                                    const isComplete = index < activeSessionNodeIndex;
+                                    const isActive = index === activeSessionNodeIndex;
+                                    return (
+                                        <li key={node.id} className={cn('border-l-2 py-3 pl-4 text-sm', isComplete ? 'border-[#a8ff5a] text-zinc-500' : (isActive ? 'border-[#74c7ff] text-white' : 'border-white/15 text-zinc-500'))}>
+                                            <div className="font-medium">{node.name}</div>
+                                            <div className="mt-1 text-xs text-zinc-500">{node.type === 'rest' ? `${node.seconds} sec rest` : `${node.config.sets} cycles · ${node.config.reps} reps`}</div>
+                                        </li>
+                                    );
+                                })}
+                            </ol>
+                        </aside>
+                    ) : (
+                        <aside className="border-l border-white/10 pl-5">
+                            <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">Protocol</div>
+                            <div className="mt-5 space-y-4 text-sm">
+                                <div className={cn('border-l-2 pl-4', isPreparing ? 'border-[#ff5b36] text-white' : 'border-[#a8ff5a] text-zinc-500')}>Preparation</div>
+                                <div className={cn('border-l-2 pl-4', timerStatus === 'Main Set' ? 'border-[#a8ff5a] text-white' : 'border-white/15 text-zinc-500')}>Activation · {reps} reps</div>
+                                <div className={cn('border-l-2 pl-4', timerStatus === 'Resting' ? 'border-[#74c7ff] text-white' : 'border-white/15 text-zinc-500')}>Rest · {rest || '0'} sec</div>
+                                <div className={cn('border-l-2 pl-4', timerStatus === 'Myo Reps' ? 'border-[#a8ff5a] text-white' : 'border-white/15 text-zinc-500')}>Myo clusters · {myoReps} reps</div>
+                            </div>
+                        </aside>
+                    )}
+                </div>
+            </section>
+        );
+    }
+
+    return (
+        <div className={cn(
+            "flex flex-1 flex-col items-center",
+            isMobileViewport ? "justify-start overflow-y-auto" : "justify-center",
+        )}>
+            <div data-testid="timer-screen-shell" className={timerScreenShell}>
+                {settings.fullScreenMode && (
+                    <div aria-hidden="true" className="fixed inset-0 -z-10" style={fullScreenBackgroundStyle} />
+                )}
+                <div className="w-full space-y-4 text-center">
+                    <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
+                        {isRunningSession && activeSession && !isMobileViewport && <div className="rounded-full border border-primary/30 bg-primary/20 px-4 py-1.5 text-[10px] font-black italic tracking-[0.2em] text-primary sm:text-xs sm:tracking-widest">{activeSession.name}</div>}
+                        <div className="rounded-full border border-primary/30 bg-primary/20 px-4 py-1.5 text-[10px] font-black italic tracking-[0.2em] text-primary sm:text-xs sm:tracking-widest">SET {currentSet} / {sets}</div>
+                        <div className="rounded-full border border-border bg-muted px-4 py-1.5 text-[10px] font-black italic tracking-[0.2em] text-muted-foreground sm:text-xs sm:tracking-widest">{isMainRep ? 'ACTIVATION' : 'MYO REPS'}</div>
+                        {isRunningSession && activeSessionNode && !isMobileViewport && <div className="rounded-full border border-border bg-muted px-4 py-1.5 text-[10px] font-black italic tracking-[0.2em] text-muted-foreground sm:text-xs sm:tracking-widest">NODE {activeSessionNodeIndex + 1} {activeSessionNode.type === 'rest' ? 'REST' : 'WORKOUT'}</div>}
+                    </div>
+                    <h2 className="text-4xl font-black italic uppercase tracking-tighter text-foreground drop-shadow-sm sm:text-5xl">{timerStatus}</h2>
+                    {isMobileViewport && (
+                        <div className="mx-auto flex w-full max-w-md items-center justify-between gap-4 rounded-[1.75rem] border border-border/60 bg-card px-4 py-3 text-left shadow-sm">
+                            <div className="min-w-0">
+                                <div className="text-[10px] font-black uppercase tracking-[0.26em] text-primary">
+                                    {isRunningSession && activeSession ? activeSession.name : 'Current Block'}
+                                </div>
+                                <div className="mt-1 truncate text-sm font-semibold text-foreground">
+                                    {isRunningSession && activeSessionNode
+                                        ? `${activeSessionNodeIndex + 1}. ${activeSessionNode.name}`
+                                        : (isPreparing ? 'Get ready for the next effort.' : (isWorking ? `Rep ${currentRep}` : 'Recovery before the next effort.'))}
+                                </div>
+                            </div>
+                            <div className="shrink-0 text-right">
+                                <div className="text-[10px] font-black uppercase tracking-[0.22em] text-muted-foreground">Next</div>
+                                <div className="mt-1 text-sm font-black italic tracking-tight text-foreground">
+                                    {timerStatus === 'Finished'
+                                        ? 'Done'
+                                        : (isPreparing ? 'Main Set' : (isWorking ? 'Rest' : 'Work'))}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+                <ConcentricTimer
+                    outerValue={isPreparing
+                        ? timeLeft
+                        : (timerStatus === 'Finished'
+                            ? 0
+                            : (isWorking
+                                ? Math.max(0, setTotalDuration - setElapsedTime)
+                                : timeLeft))}
+                    outerMax={isPreparing
+                        ? settings.prepTime
+                        : (isRunningSession && sessionNodeRuntimeType === 'rest' && sessionRestDuration !== null
+                            ? sessionRestDuration
+                            : (isWorking ? Math.max(setTotalDuration, 1) : parseInt(rest || '1', 10)))}
+                    isResting={!isWorking}
+                    innerValue={timeLeft}
+                    innerMax={timerStatus === 'Preparing' ? settings.prepTime : (isMainRep ? parseInt(seconds || '0', 10) : parseInt(myoWorkSecs || '0', 10))}
+                    textMain={formatTime(Math.ceil(timeLeft))}
+                    textSub={timerStatus === 'Preparing' ? "Get Ready" : (isRunningSession && sessionNodeRuntimeType === 'rest' ? (activeSessionNode?.name ?? 'Session Rest') : (!isWorking ? "Rest Period" : (timerStatus === 'Finished' ? "Protocol Clear" : `Rep ${currentRep}`)))}
+                    isFinished={timerStatus === 'Finished'}
+                    isPreparing={timerStatus === 'Preparing'}
+                />
+                <div className="flex w-full max-w-md flex-col justify-center gap-3 pb-1 sm:max-w-none sm:flex-row sm:gap-4">
+                    <Button onClick={pauseOrResume} className="min-h-14 min-w-[200px] rounded-2xl bg-black px-6 text-lg font-black italic tracking-tighter text-white shadow-md hover:bg-black/90 sm:h-16 sm:px-10 sm:text-xl">
+                        {timerStatus === 'Finished' ? <><RotateCcw className="mr-2" /> NEW SESSION</> : (isTimerRunning ? <><Square className="mr-2" /> PAUSE</> : <><Play className="mr-2" /> RESUME</>)}
+                    </Button>
+                    {timerStatus !== 'Finished' && (
+                        <Button onClick={skipActiveSection} className="min-h-14 rounded-2xl bg-black px-6 text-lg font-black italic tracking-tighter text-white shadow-md hover:bg-black/90 sm:h-16 sm:px-10 sm:text-xl">
+                            <SkipForward className="mr-2" /> SKIP SECTION
+                        </Button>
+                    )}
+                    <Button onClick={terminateWorkout} className="min-h-14 rounded-2xl bg-black px-6 text-lg font-black italic tracking-tighter text-white shadow-md hover:bg-black/90 sm:h-16 sm:px-10 sm:text-xl">
+                        TERMINATE
+                    </Button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+export default function App() {
+    const {
+        settings, sets, reps, seconds, rest, myoReps, myoWorkSecs, setWorkoutConfig,
+        editingSessionDraft, savedWorkouts, savedSessions, selectedSavedWorkoutId, lastImportSummary,
+        appPhase, timerStatus, isWorking, startWorkout,
+        saveCurrentWorkout, saveCurrentWorkoutAs, loadWorkout, renameWorkout, deleteWorkout, exportSavedLibrary, importSavedLibrary, clearImportSummary,
+        createSession, loadSessionForEditing, duplicateSession, renameSession, deleteSession,
+        setupMode, setSetupMode, showSettings, setShowSettings, setSettings,
+        isSidebarCollapsed, setIsSidebarCollapsed, isAccountCardCollapsed, setIsAccountCardCollapsed, theme, setTheme, designVariant
+    } = useWorkoutStore(useShallow((state) => ({
+        settings: state.settings,
+        sets: state.sets,
+        reps: state.reps,
+        seconds: state.seconds,
+        rest: state.rest,
+        myoReps: state.myoReps,
+        myoWorkSecs: state.myoWorkSecs,
+        setWorkoutConfig: state.setWorkoutConfig,
+        editingSessionDraft: state.editingSessionDraft,
+        savedWorkouts: state.savedWorkouts,
+        savedSessions: state.savedSessions,
+        selectedSavedWorkoutId: state.selectedSavedWorkoutId,
+        lastImportSummary: state.lastImportSummary,
+        appPhase: state.appPhase,
+        timerStatus: state.timerStatus,
+        isWorking: state.isWorking,
+        startWorkout: state.startWorkout,
+        saveCurrentWorkout: state.saveCurrentWorkout,
+        saveCurrentWorkoutAs: state.saveCurrentWorkoutAs,
+        loadWorkout: state.loadWorkout,
+        renameWorkout: state.renameWorkout,
+        deleteWorkout: state.deleteWorkout,
+        exportSavedLibrary: state.exportSavedLibrary,
+        importSavedLibrary: state.importSavedLibrary,
+        clearImportSummary: state.clearImportSummary,
+        createSession: state.createSession,
+        loadSessionForEditing: state.loadSessionForEditing,
+        duplicateSession: state.duplicateSession,
+        renameSession: state.renameSession,
+        deleteSession: state.deleteSession,
+        setupMode: state.setupMode,
+        setSetupMode: state.setSetupMode,
+        showSettings: state.showSettings,
+        setShowSettings: state.setShowSettings,
+        setSettings: state.setSettings,
+        isSidebarCollapsed: state.isSidebarCollapsed,
+        setIsSidebarCollapsed: state.setIsSidebarCollapsed,
+        isAccountCardCollapsed: state.isAccountCardCollapsed,
+        setIsAccountCardCollapsed: state.setIsAccountCardCollapsed,
+        theme: state.theme,
+        setTheme: state.setTheme,
+        designVariant: state.designVariant,
+    })));
+    const {
+        applyAccountState,
+        bootstrapStatus,
+        mode,
+        session,
+        profile,
+        entitlement,
+        syncStatus,
+        error,
+        requiresPasswordReset,
+        setPasswordRecoveryMode,
+    } = useAccountStore(useShallow((state) => ({
+        applyAccountState: state.applyAccountState,
+        bootstrapStatus: state.bootstrapStatus,
+        mode: state.mode,
+        session: state.session,
+        profile: state.profile,
+        entitlement: state.entitlement,
+        syncStatus: state.syncStatus,
+        error: state.error,
+        requiresPasswordReset: state.requiresPasswordReset,
+        setPasswordRecoveryMode: state.setPasswordRecoveryMode,
+    })));
+    const [showProtocolIntel, setShowProtocolIntel] = useState(false);
+    const [isMobileViewport, setIsMobileViewport] = useState(false);
+    const [dialogState, setDialogState] = useState<AppDialogState>(null);
+    const [dialogValue, setDialogValue] = useState('');
+    const [kineticSidebarWidth, setKineticSidebarWidth] = useState(248);
+    const isSingleCycle = parseInt(sets, 10) === 1;
+    const dialogConfirmRef = useRef<((value: string) => void) | null>(null);
+    const loadedWorkout = selectedSavedWorkoutId ? savedWorkouts.find((workout) => workout.id === selectedSavedWorkoutId) ?? null : null;
+    const canUseSessionBuilder = isLocalPlusPreview || canAccessSessionBuilder(entitlement);
+    const canUseCloudSync = mode === 'signed-in-plus' && entitlement?.cloudSyncEnabled === true;
+    const isSessionSetup = appPhase === 'setup' && setupMode === 'session' && canUseSessionBuilder;
+    const nodeCount = editingSessionDraft?.nodes.length ?? 0;
+    const sessionSummary = useMemo(() => {
+        if (!editingSessionDraft) {
+            return 'Create a session, then edit nodes directly in the canvas.';
+        }
+        return `${nodeCount} node${nodeCount === 1 ? '' : 's'} in the chain.`;
+    }, [editingSessionDraft, nodeCount]);
+
+    const isSidebarOpen = !isSidebarCollapsed;
+    const appShellLayout = getResponsiveLayout(isMobileViewport, appShellMobile, appShellDesktop);
+    const desktopTimerAccentStyle = useMemo(() => ({
+        '--timer-phase-color': timerStatus === 'Preparing' || !isWorking
+            ? settings.restColor
+            : settings.activeColor,
+    } as CSSProperties), [isWorking, settings.activeColor, settings.restColor, timerStatus]);
+    const account = useMemo<AccountSnapshot>(() => ({
+        bootstrapStatus,
+        mode,
+        session,
+        profile,
+        entitlement,
+        syncStatus,
+        error,
+        requiresPasswordReset,
+    }), [bootstrapStatus, entitlement, error, mode, profile, requiresPasswordReset, session, syncStatus]);
+    const visibleWorkouts = useMemo(
+        () => savedWorkouts.filter((workout) => !workout.sync?.pendingDelete),
+        [savedWorkouts],
+    );
+    const visibleSessions = useMemo(
+        () => savedSessions.filter((savedSession) => !savedSession.sync?.pendingDelete),
+        [savedSessions],
+    );
+    useEffect(() => {
+        if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+        const mediaQuery = window.matchMedia('(max-width: 767px)');
+        const handleViewportChange = (event: MediaQueryListEvent | MediaQueryList) => {
+            setIsMobileViewport(event.matches);
+            if (event.matches) setIsSidebarCollapsed(true);
+        };
+        handleViewportChange(mediaQuery);
+        if (typeof mediaQuery.addEventListener === 'function') {
+            mediaQuery.addEventListener('change', handleViewportChange);
+            return () => mediaQuery.removeEventListener('change', handleViewportChange);
+        }
+        mediaQuery.addListener(handleViewportChange);
+        return () => mediaQuery.removeListener(handleViewportChange);
+    }, [setIsSidebarCollapsed]);
+
     const closeDialog = useCallback(() => {
         setDialogState(null);
         setDialogValue('');
@@ -535,6 +944,7 @@ export default function App() {
             };
         }
 
+        const { startBillingCheckout } = await import('@/lib/billing');
         return startBillingCheckout();
     }, [account.mode, setIsSidebarCollapsed]);
     const handleManageSubscription = useCallback(async (): Promise<AccountActionResult> => {
@@ -545,6 +955,7 @@ export default function App() {
             };
         }
 
+        const { openBillingPortal } = await import('@/lib/billing');
         return openBillingPortal();
     }, [account.mode]);
     const handleSessionBuilderLocked = useCallback(() => {
@@ -666,6 +1077,10 @@ export default function App() {
         setSetupMode(nextMode);
     }, [canUseSessionBuilder, handleSessionBuilderLocked, setSetupMode]);
     const handleSignOut = useCallback(async (): Promise<AccountActionResult> => {
+        const [{ getSupabaseClient }, { signOutSupabase }] = await Promise.all([
+            import('@/lib/supabase'),
+            import('@/lib/supabaseAccount'),
+        ]);
         const client = getSupabaseClient();
         if (!client) {
             return { ok: false, message: 'Supabase is not configured for this build.' };
@@ -679,6 +1094,10 @@ export default function App() {
         return { ok: true, message: 'Signed out.' };
     }, []);
     const handleSignInWithPassword = useCallback(async (email: string, password: string): Promise<AccountActionResult> => {
+        const [{ getSupabaseClient }, { signInSupabaseWithPassword }] = await Promise.all([
+            import('@/lib/supabase'),
+            import('@/lib/supabaseAccount'),
+        ]);
         const client = getSupabaseClient();
         if (!client) {
             return { ok: false, message: 'Supabase is not configured for this build.' };
@@ -692,6 +1111,15 @@ export default function App() {
         return { ok: true, message: 'Signed in with password.' };
     }, []);
     const handleSignUpWithPassword = useCallback(async (username: string, email: string, password: string) => {
+        const [
+            { Capacitor },
+            { getSupabaseAuthRedirectUrl, getSupabaseClient },
+            { signUpSupabaseWithPassword },
+        ] = await Promise.all([
+            import('@capacitor/core'),
+            import('@/lib/supabase'),
+            import('@/lib/supabaseAccount'),
+        ]);
         const client = getSupabaseClient();
         if (!client) {
             return { ok: false, message: 'Supabase is not configured for this build.' };
@@ -721,6 +1149,15 @@ export default function App() {
         };
     }, []);
     const handleResendSignUpConfirmation = useCallback(async (email: string): Promise<AccountActionResult> => {
+        const [
+            { Capacitor },
+            { getSupabaseAuthRedirectUrl, getSupabaseClient },
+            { resendSupabaseSignUpConfirmation },
+        ] = await Promise.all([
+            import('@capacitor/core'),
+            import('@/lib/supabase'),
+            import('@/lib/supabaseAccount'),
+        ]);
         const client = getSupabaseClient();
         if (!client) {
             return { ok: false, message: 'Supabase is not configured for this build.' };
@@ -738,6 +1175,13 @@ export default function App() {
         return { ok: true, message: `Confirmation magic link sent to ${email}.` };
     }, []);
     const handleUpdateUsername = useCallback(async (username: string): Promise<AccountActionResult> => {
+        const [
+            { getSupabaseClient },
+            { loadSupabaseAccountState, updateSupabaseUsername },
+        ] = await Promise.all([
+            import('@/lib/supabase'),
+            import('@/lib/supabaseAccount'),
+        ]);
         const client = getSupabaseClient();
         if (!client) {
             return { ok: false, message: 'Supabase is not configured for this build.' };
@@ -757,6 +1201,15 @@ export default function App() {
         return { ok: true, message: 'Username updated.' };
     }, [applyAccountState, session]);
     const handleSendPasswordReset = useCallback(async (email: string): Promise<AccountActionResult> => {
+        const [
+            { Capacitor },
+            { getSupabaseAuthRedirectUrl, getSupabaseClient },
+            { sendSupabasePasswordReset },
+        ] = await Promise.all([
+            import('@capacitor/core'),
+            import('@/lib/supabase'),
+            import('@/lib/supabaseAccount'),
+        ]);
         const client = getSupabaseClient();
         if (!client) {
             return { ok: false, message: 'Supabase is not configured for this build.' };
@@ -778,6 +1231,10 @@ export default function App() {
         return { ok: true, message: `Password reset sent to ${normalizedEmail}.` };
     }, []);
     const handleUpdatePassword = useCallback(async (password: string): Promise<AccountActionResult> => {
+        const [{ getSupabaseClient }, { updateSupabasePassword }] = await Promise.all([
+            import('@/lib/supabase'),
+            import('@/lib/supabaseAccount'),
+        ]);
         const client = getSupabaseClient();
         if (!client) {
             return { ok: false, message: 'Supabase is not configured for this build.' };
@@ -791,16 +1248,6 @@ export default function App() {
         setPasswordRecoveryMode(false);
         return { ok: true, message: 'Password updated. You can keep using this account normally now.' };
     }, [setPasswordRecoveryMode]);
-    const {
-        visibleWorkouts,
-        visibleSessions,
-        syncSnapshot,
-        syncActions,
-    } = useSyncController({
-        account,
-        savedWorkouts,
-        savedSessions,
-    });
 
     useEffect(() => {
         if (setupMode === 'session' && !canUseSessionBuilder) {
@@ -818,12 +1265,14 @@ export default function App() {
             return;
         }
 
-        void initializePaddleCheckoutFromQuery().catch((error: unknown) => {
-            openMessageDialog(
-                'Could not open checkout',
-                error instanceof Error ? error.message : 'Paddle checkout could not start from this billing link.',
-            );
-        });
+        void import('@/lib/paddle')
+            .then(({ initializePaddleCheckoutFromQuery }) => initializePaddleCheckoutFromQuery())
+            .catch((error: unknown) => {
+                openMessageDialog(
+                    'Could not open checkout',
+                    error instanceof Error ? error.message : 'Paddle checkout could not start from this billing link.',
+                );
+            });
     }, [openMessageDialog]);
 
     useEffect(() => {
@@ -848,21 +1297,25 @@ export default function App() {
             return;
         }
 
-        if (billingState === 'portal') {
-            openMessageDialog('Subscription updated', 'Your subscription settings were updated. We refreshed your account state.');
+        if (billingState !== 'success' && billingState !== 'portal') {
             clearBillingParam();
             return;
         }
 
-        if (billingState !== 'success') {
-            clearBillingParam();
-            return;
-        }
-
-        void refreshBillingEntitlementState()
+        const isPortalReturn = billingState === 'portal';
+        void import('@/lib/billing')
+            .then(({ refreshBillingEntitlementState }) => refreshBillingEntitlementState())
             .then((resolvedState) => {
                 if (resolvedState) {
                     applyAccountState(resolvedState);
+                }
+
+                if (isPortalReturn) {
+                    openMessageDialog(
+                        'Subscription updated',
+                        'Your subscription settings were updated and your account access has been refreshed.',
+                    );
+                    return;
                 }
 
                 const hasPlus = resolvedState ? canAccessSessionBuilder(resolvedState.entitlement) : canUseSessionBuilder;
@@ -874,72 +1327,115 @@ export default function App() {
                 );
             })
             .catch(() => {
-                openMessageDialog('Purchase received', 'Your purchase was received. If Plus does not appear yet, refresh the app in a moment.');
+                openMessageDialog(
+                    isPortalReturn ? 'Subscription updated' : 'Purchase received',
+                    isPortalReturn
+                        ? 'Your subscription settings were updated, but account access could not be refreshed. Refresh the app in a moment.'
+                        : 'Your purchase was received. If Plus does not appear yet, refresh the app in a moment.',
+                );
             })
             .finally(() => {
                 clearBillingParam();
             });
     }, [applyAccountState, canUseSessionBuilder, openMessageDialog]);
 
+    const sidebarProps: SidebarProps = {
+        currentTheme: theme,
+        setTheme,
+        setShowSettings,
+        onOpenProtocolIntel: () => setShowProtocolIntel(true),
+        showSettings,
+        isMobileViewport,
+        isCollapsed: isSidebarCollapsed,
+        toggleSidebar,
+        appPhase,
+        savedWorkouts: visibleWorkouts,
+        onSaveCurrent: handleSaveWorkout,
+        onSaveAsCurrent: handleSaveWorkoutAs,
+        onLoadWorkout: handleLoadWorkout,
+        onRenameWorkout: handleRenameWorkout,
+        onDeleteWorkout: handleDeleteWorkout,
+        onExportLibrary: handleExportLibrary,
+        onImportLibrary: importSavedLibrary,
+        importSummary: lastImportSummary,
+        clearImportSummary,
+        savedSessions: visibleSessions,
+        onCreateSession: handleCreateSession,
+        onLoadSession: handleLoadSession,
+        onDuplicateSession: handleDuplicateSession,
+        onRenameSession: handleRenameSession,
+        onDeleteSession: handleDeleteSession,
+        account,
+        isAccountCardCollapsed,
+        onToggleAccountCardCollapsed: () => setIsAccountCardCollapsed(!isAccountCardCollapsed),
+        onSignInWithPassword: handleSignInWithPassword,
+        onSignUpWithPassword: handleSignUpWithPassword,
+        onResendSignUpConfirmation: handleResendSignUpConfirmation,
+        onUpdateUsername: handleUpdateUsername,
+        onSendPasswordReset: handleSendPasswordReset,
+        onUpdatePassword: handleUpdatePassword,
+        onSignOut: handleSignOut,
+        canAccessSessionBuilder: canUseSessionBuilder,
+        onUpgradeToPlus: handleUpgradeToPlus,
+        onManageSubscription: handleManageSubscription,
+    };
+
     return (
-        <div className={cn("min-h-[100dvh] bg-background text-foreground font-sans selection:bg-primary/30 transition-colors duration-500", theme)}>
-            <SupabaseBootstrap />
+        <div
+            className={cn("min-h-[100dvh] bg-background text-foreground font-sans selection:bg-primary/30 transition-colors duration-500", theme, designVariant === 'kinetic' && 'design-kinetic')}
+            data-design-variant={designVariant}
+            style={{ '--kinetic-sidebar-width': `${kineticSidebarWidth}px` } as CSSProperties}
+        >
+            {shouldBootstrapSupabase && (
+                <Suspense fallback={null}>
+                    <LazySupabaseBootstrap />
+                </Suspense>
+            )}
             {isMobileViewport && isSidebarOpen && (
                 <button type="button" className="fixed inset-0 z-40 bg-black/60 md:hidden" onClick={toggleSidebar} aria-label="Close Navigation Overlay" />
             )}
-            <Sidebar
-                currentTheme={theme}
-                setTheme={setTheme}
-                setShowSettings={setShowSettings}
-                onOpenProtocolIntel={() => setShowProtocolIntel(true)}
-                showSettings={showSettings}
-                isMobileViewport={isMobileViewport}
-                isCollapsed={isSidebarCollapsed}
-                toggleSidebar={toggleSidebar}
-                appPhase={appPhase}
-                savedWorkouts={visibleWorkouts}
-                onSaveCurrent={handleSaveWorkout}
-                onSaveAsCurrent={handleSaveWorkoutAs}
-                onLoadWorkout={handleLoadWorkout}
-                onRenameWorkout={handleRenameWorkout}
-                onDeleteWorkout={handleDeleteWorkout}
-                onExportLibrary={handleExportLibrary}
-                onImportLibrary={importSavedLibrary}
-                importSummary={lastImportSummary}
-                clearImportSummary={clearImportSummary}
-                savedSessions={visibleSessions}
-                onCreateSession={handleCreateSession}
-                onLoadSession={handleLoadSession}
-                onDuplicateSession={handleDuplicateSession}
-                onRenameSession={handleRenameSession}
-                onDeleteSession={handleDeleteSession}
-                account={account}
-                syncSnapshot={syncSnapshot}
-                syncActions={syncActions}
-                isAccountCardCollapsed={isAccountCardCollapsed}
-                onToggleAccountCardCollapsed={() => setIsAccountCardCollapsed(!isAccountCardCollapsed)}
-                onSignInWithPassword={handleSignInWithPassword}
-                onSignUpWithPassword={handleSignUpWithPassword}
-                onResendSignUpConfirmation={handleResendSignUpConfirmation}
-                onUpdateUsername={handleUpdateUsername}
-                onSendPasswordReset={handleSendPasswordReset}
-                onUpdatePassword={handleUpdatePassword}
-                onSignOut={handleSignOut}
-                canAccessSessionBuilder={canUseSessionBuilder}
-                onUpgradeToPlus={handleUpgradeToPlus}
-                onManageSubscription={handleManageSubscription}
-            />
-            <SettingsPanel isOpen={showSettings} onClose={() => setShowSettings(false)} />
-            <ProtocolIntelModal isOpen={showProtocolIntel} onClose={() => setShowProtocolIntel(false)} />
+            {designVariant === 'kinetic' ? (
+                <KineticSidebar
+                    {...sidebarProps}
+                    setupMode={setupMode}
+                    onNavigate={handleSetupModeChange}
+                    width={kineticSidebarWidth}
+                    onWidthChange={setKineticSidebarWidth}
+                />
+            ) : canUseCloudSync ? (
+                <Suspense fallback={<Sidebar {...sidebarProps} />}>
+                    <LazySyncedSidebar
+                        {...sidebarProps}
+                        savedWorkouts={savedWorkouts}
+                        savedSessions={savedSessions}
+                    />
+                </Suspense>
+            ) : (
+                <Sidebar {...sidebarProps} />
+            )}
+            {showSettings && (
+                <Suspense fallback={null}>
+                    <LazySettingsPanel isOpen onClose={() => setShowSettings(false)} />
+                </Suspense>
+            )}
+            {showProtocolIntel && (
+                <Suspense fallback={null}>
+                    <LazyProtocolIntelModal isOpen onClose={() => setShowProtocolIntel(false)} />
+                </Suspense>
+            )}
             <main
                 data-testid="app-main-shell"
                 className={cn(
                     appShellLayout.mainShell,
-                    isSidebarCollapsed ? "md:ml-[4.5rem]" : "md:ml-72",
+                    isSidebarCollapsed ? "md:ml-[4.5rem]" : (designVariant === 'kinetic' ? "md:ml-[var(--kinetic-sidebar-width)]" : "md:ml-72"),
                     isSessionSetup ? "md:px-10 md:pt-0" : "",
                 )}
             >
-                <div className="pointer-events-none absolute left-1/2 top-1/2 h-[32rem] w-[32rem] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-10 blur-[120px] transition-colors duration-1000" style={{ backgroundColor: timerStatus === 'Preparing' || !isWorking ? settings.restColor : settings.activeColor }} />
+                {designVariant !== 'kinetic' && <div
+                    aria-hidden="true"
+                    className="pointer-events-none absolute left-1/2 top-1/2 hidden h-[32rem] w-[32rem] -translate-x-1/2 -translate-y-1/2 bg-[radial-gradient(circle_at_center,var(--timer-phase-color)_0%,transparent_70%)] opacity-10 md:block"
+                    style={desktopTimerAccentStyle}
+                />}
                 <div className={cn(
                     appShellLayout.contentShell,
                 )}>
@@ -954,6 +1450,19 @@ export default function App() {
                         </header>
                     )}
                     {appPhase === 'setup' ? (
+                        designVariant === 'kinetic' ? (
+                            isSessionSetup ? (
+                                <Suspense fallback={null}>
+                                    <LazyKineticSessionBuilder />
+                                </Suspense>
+                            ) : (
+                                <KineticWorkoutSetup
+                                    onStart={startWorkout}
+                                    onSelectSession={() => handleSetupModeChange('session')}
+                                    canUseSessionBuilder={canUseSessionBuilder}
+                                />
+                            )
+                        ) : (
                         <div className="mx-auto flex w-full max-w-[1100px] flex-1 flex-col items-stretch justify-start gap-6 px-1 py-2 sm:px-4 sm:py-4">
                             {/* Stationary Header & Selector */}
                             <div className={cn("mx-auto max-w-3xl text-center w-full", isMobileViewport ? "space-y-1.5" : "space-y-2")}>
@@ -1064,107 +1573,22 @@ export default function App() {
                                             : "translate-x-full opacity-0 pointer-events-none absolute inset-x-0 top-0"
                                     )}
                                 >
-                                    {canUseSessionBuilder && <SessionBuilder />}
+                                    {isSessionSetup && (
+                                        <Suspense fallback={null}>
+                                            <LazySessionBuilder />
+                                        </Suspense>
+                                    )}
                                 </div>
                             </div>
                         </div>
+                        )
                     ) : (
-                        <div className={cn(
-                            "flex flex-1 flex-col items-center",
-                            isMobileViewport ? "justify-start overflow-y-auto" : "justify-center",
-                        )}>
-                            <div
-                                data-testid="timer-screen-shell"
-                                className={appShellLayout.timerScreenShell}
-                            >
-                                {settings.fullScreenMode && (
-                                    <div className="fixed inset-0 -z-10 transition-colors duration-1000" style={{ backgroundColor: timerStatus === 'Finished' ? settings.finishedColor : (timerStatus === 'Preparing' || !isWorking) ? settings.restColor : (timeLeft <= settings.concentricSecond && timeLeft > 0 ? settings.concentricColor : settings.activeColor) }} />
-                                )}
-                                <div className="w-full space-y-4 text-center">
-                                    <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
-                                        {isRunningSession && activeSession && !isMobileViewport && <div className="rounded-full border border-primary/30 bg-primary/20 px-4 py-1.5 text-[10px] font-black italic tracking-[0.2em] text-primary sm:text-xs sm:tracking-widest">{activeSession.name}</div>}
-                                        <div className="rounded-full border border-primary/30 bg-primary/20 px-4 py-1.5 text-[10px] font-black italic tracking-[0.2em] text-primary sm:text-xs sm:tracking-widest">SET {currentSet} / {sets}</div>
-                                        <div className="rounded-full border border-border bg-muted px-4 py-1.5 text-[10px] font-black italic tracking-[0.2em] text-muted-foreground sm:text-xs sm:tracking-widest">{isMainRep ? 'ACTIVATION' : 'MYO REPS'}</div>
-                                        {isRunningSession && activeSessionNode && !isMobileViewport && <div className="rounded-full border border-border bg-muted px-4 py-1.5 text-[10px] font-black italic tracking-[0.2em] text-muted-foreground sm:text-xs sm:tracking-widest">NODE {activeSessionNodeIndex + 1} {activeSessionNode.type === 'rest' ? 'REST' : 'WORKOUT'}</div>}
-                                    </div>
-                                    <h2 className="text-4xl font-black italic uppercase tracking-tighter text-foreground drop-shadow-sm sm:text-5xl">{timerStatus}</h2>
-                                    {isMobileViewport && (
-                                        <div className="mx-auto flex w-full max-w-md items-center justify-between gap-4 rounded-[1.75rem] border border-border/60 bg-card/80 px-4 py-3 text-left shadow-lg backdrop-blur-xl">
-                                            <div className="min-w-0">
-                                                <div className="text-[10px] font-black uppercase tracking-[0.26em] text-primary">
-                                                    {isRunningSession && activeSession ? activeSession.name : 'Current Block'}
-                                                </div>
-                                                <div className="mt-1 truncate text-sm font-semibold text-foreground">
-                                                    {isRunningSession && activeSessionNode
-                                                        ? `${activeSessionNodeIndex + 1}. ${activeSessionNode.name}`
-                                                        : (isPreparing ? 'Get ready for the next effort.' : (isWorking ? `Rep ${currentRep}` : 'Recovery before the next effort.'))}
-                                                </div>
-                                            </div>
-                                            <div className="shrink-0 text-right">
-                                                <div className="text-[10px] font-black uppercase tracking-[0.22em] text-muted-foreground">Next</div>
-                                                <div className="mt-1 text-sm font-black italic tracking-tight text-foreground">
-                                                    {timerStatus === 'Finished'
-                                                        ? 'Done'
-                                                        : (isPreparing ? 'Main Set' : (isWorking ? 'Rest' : 'Work'))}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                                <ConcentricTimer
-                                    outerValue={isPreparing
-                                        ? timeLeft
-                                        : (timerStatus === 'Finished'
-                                            ? 0
-                                            : (isWorking
-                                                ? Math.max(0, setTotalDuration - setElapsedTime)
-                                                : timeLeft))}
-                                    outerMax={isPreparing
-                                        ? settings.prepTime
-                                        : (isRunningSession && sessionNodeRuntimeType === 'rest' && sessionRestDuration !== null
-                                            ? sessionRestDuration
-                                            : (isWorking ? Math.max(setTotalDuration, 1) : parseInt(rest || '1', 10)))}
-                                    isResting={!isWorking}
-                                    innerValue={timeLeft}
-                                    innerMax={timerStatus === 'Preparing' ? settings.prepTime : (isMainRep ? parseInt(seconds || '0', 10) : parseInt(myoWorkSecs || '0', 10))}
-                                    textMain={formatTime(Math.ceil(timeLeft))}
-                                    textSub={timerStatus === 'Preparing' ? "Get Ready" : (isRunningSession && sessionNodeRuntimeType === 'rest' ? (activeSessionNode?.name ?? 'Session Rest') : (!isWorking ? "Rest Period" : (timerStatus === 'Finished' ? "Protocol Clear" : `Rep ${currentRep}`)))}
-                                    isFinished={timerStatus === 'Finished'}
-                                    isPreparing={timerStatus === 'Preparing'}
-                                />
-                                <div className="flex w-full max-w-md flex-col justify-center gap-3 pb-1 sm:max-w-none sm:flex-row sm:gap-4">
-                                    <Button onClick={() => {
-                                        audioEngine.init();
-                                        if (timerStatus === 'Finished') {
-                                            resetWorkout();
-                                        } else if (isTimerRunning) {
-                                            flushAndStopTimerWorker();
-                                            setIsTimerRunning(false);
-                                        } else {
-                                            setIsTimerRunning(true);
-                                        }
-                                    }} className="min-h-14 min-w-[200px] rounded-2xl bg-black px-6 text-lg font-black italic tracking-tighter text-white shadow-md hover:bg-black/90 sm:h-16 sm:px-10 sm:text-xl">
-                                        {timerStatus === 'Finished' ? <><RotateCcw className="mr-2" /> NEW SESSION</> : (isTimerRunning ? <><Square className="mr-2" /> PAUSE</> : <><Play className="mr-2" /> RESUME</>)}
-                                    </Button>
-                                    {timerStatus !== 'Finished' && (
-                                        <Button onClick={() => {
-                                            audioEngine.init();
-                                            const wasRunning = useWorkoutStore.getState().isTimerRunning;
-                                            if (wasRunning) flushAndStopTimerWorker();
-                                            skipSection();
-                                            if (wasRunning && useWorkoutStore.getState().isTimerRunning) startTimerWorker();
-                                        }} className="min-h-14 rounded-2xl bg-black px-6 text-lg font-black italic tracking-tighter text-white shadow-md hover:bg-black/90 sm:h-16 sm:px-10 sm:text-xl">
-                                            <SkipForward className="mr-2" /> SKIP SECTION
-                                        </Button>
-                                    )}
-                                    <Button onClick={resetWorkout} className="min-h-14 rounded-2xl bg-black px-6 text-lg font-black italic tracking-tighter text-white shadow-md hover:bg-black/90 sm:h-16 sm:px-10 sm:text-xl">
-                                        TERMINATE
-                                    </Button>
-                                </div>
-                            </div>
-                        </div>
+                        <TimerSurface
+                            isMobileViewport={isMobileViewport}
+                            timerScreenShell={appShellLayout.timerScreenShell}
+                        />
                     )}
-                    {!isSessionSetup && (
+                    {!isSessionSetup && designVariant !== 'kinetic' && (
                         <footer className={appShellLayout.footerShell}>
                             <div className="text-[10px] font-black uppercase tracking-[0.5em] text-muted-foreground">MYOREP v{APP_VERSION}</div>
                             <div className="mt-2 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/60">Engineered by General Malit</div>

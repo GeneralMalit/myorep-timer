@@ -38,6 +38,7 @@ vi.mock('@/utils/audioEngine', () => ({
         playTick: vi.fn(),
         scheduleTickSequence: vi.fn(),
         cancelScheduledTicks: vi.fn(),
+        cancelSpeech: vi.fn(),
     },
 }));
 
@@ -126,6 +127,7 @@ const resetStore = () => {
         myoWorkSecs: '',
         showSettings: false,
         isSidebarCollapsed: false,
+        isAccountCardCollapsed: false,
         savedWorkouts: [],
         selectedSavedWorkoutId: null,
         lastImportSummary: null,
@@ -142,6 +144,7 @@ const resetStore = () => {
         sessionNodeRuntimeType: null,
         sessionRestTimeLeft: 0,
         sessionLastTickSecond: -1,
+        designVariant: 'classic',
     });
 };
 
@@ -264,6 +267,7 @@ describe('App', () => {
         vi.mocked(audioEngine.playTick).mockClear();
         vi.mocked(audioEngine.scheduleTickSequence).mockClear();
         vi.mocked(audioEngine.cancelScheduledTicks).mockClear();
+        vi.mocked(audioEngine.cancelSpeech).mockClear();
         concentricTimerMock.mockClear();
         getSupabaseClientMock.mockReset();
         getSupabaseEnvironmentMock.mockReset();
@@ -343,7 +347,7 @@ describe('App', () => {
         expect(screen.getByTestId('workout-setup-shell')).toHaveClass('space-y-4');
     });
 
-    it('renders the session builder when setup mode is session', () => {
+    it('renders the session builder when setup mode is session', async () => {
         grantPlusAccess();
         useWorkoutStore.setState({
             setupMode: 'session',
@@ -363,13 +367,75 @@ describe('App', () => {
         render(<App />);
 
         expect(screen.getByRole('heading', { name: /build a session/i })).toBeInTheDocument();
-        expect(screen.getByText(/Session Canvas/i)).toBeInTheDocument();
+        expect(await screen.findByText(/Session Canvas/i)).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /workout setup/i })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /session builder/i })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /^workout$/i })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /^rest$/i })).toBeInTheDocument();
         expect(screen.queryByText(/^End$/i)).not.toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /add workout node/i })).not.toBeInTheDocument();
+    });
+
+    it('switches the Kinetic Console setup and session-builder surfaces through its navigation', async () => {
+        grantPlusAccess();
+        useWorkoutStore.setState({
+            designVariant: 'kinetic',
+            sets: '3',
+            reps: '12',
+            seconds: '3',
+            rest: '20',
+            myoReps: '4',
+            myoWorkSecs: '2',
+        });
+
+        render(<App />);
+
+        expect(screen.getByTestId('kinetic-workout-setup')).toBeInTheDocument();
+        expect(screen.getByTestId('kinetic-sidebar')).toBeInTheDocument();
+        expect(screen.getByRole('spinbutton', { name: /total cycles/i })).toHaveValue(3);
+        expect(screen.getByText('1:37 est.')).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: /^session builder$/i }));
+        expect(await screen.findByTestId('kinetic-session-builder')).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: /^workout setup$/i }));
+        expect(screen.getByTestId('kinetic-workout-setup')).toBeInTheDocument();
+    });
+
+    it('keeps the timer controller operational in the Kinetic Console presentation', () => {
+        useWorkoutStore.setState({
+            designVariant: 'kinetic',
+            appPhase: 'timer',
+            timerStatus: 'Main Set',
+            isTimerRunning: true,
+            currentSet: 1,
+            currentRep: 2,
+            isMainRep: true,
+            isWorking: true,
+            sets: '3',
+            reps: '12',
+            seconds: '3',
+            rest: '20',
+            myoReps: '4',
+            myoWorkSecs: '2',
+            timeLeft: 2.5,
+            setTotalDuration: 36,
+            setElapsedTime: 3.5,
+        });
+
+        render(<App />);
+
+        expect(screen.getByTestId('kinetic-timer-surface')).toBeInTheDocument();
+        expect(screen.getByText(/activation pace/i)).toBeInTheDocument();
+        expect(concentricTimerMock).toHaveBeenCalledWith(expect.objectContaining({
+            outerValue: 32.5,
+            innerValue: 2.5,
+            innerMax: 3,
+            isResting: false,
+        }));
+
+        fireEvent.click(screen.getByRole('button', { name: /pause/i }));
+        expect(useWorkoutStore.getState().isTimerRunning).toBe(false);
     });
 
     it('initializes audio and starts the timer when the protocol is started from setup', () => {
@@ -477,6 +543,45 @@ describe('App', () => {
         });
 
         expect(replaceStateSpy).toHaveBeenCalled();
+        window.history.replaceState({}, '', 'http://localhost:3000/');
+    });
+
+    it('refreshes account state when returning from the billing portal', async () => {
+        window.history.replaceState({}, '', 'http://localhost:3000/?billing=portal');
+        refreshBillingEntitlementStateMock.mockResolvedValue({
+            session: {
+                user: {
+                    id: 'user-1',
+                    email: 'athlete@example.com',
+                },
+            },
+            profile: {
+                userId: 'user-1',
+                email: 'athlete@example.com',
+                displayName: 'Athlete One',
+                createdAt: '2026-03-01T00:00:00.000Z',
+                updatedAt: '2026-03-01T00:00:00.000Z',
+            },
+            entitlement: {
+                userId: 'user-1',
+                plan: 'free',
+                cloudSyncEnabled: false,
+                updatedAt: '2026-03-01T00:00:00.000Z',
+                source: 'supabase',
+            },
+            mode: 'signed-in-free',
+            syncStatus: 'disabled',
+        });
+
+        render(<App />);
+
+        await waitFor(() => {
+            expect(refreshBillingEntitlementStateMock).toHaveBeenCalledTimes(1);
+            expect(screen.getByRole('dialog', { name: /subscription updated/i })).toBeInTheDocument();
+            expect(useAccountStore.getState().mode).toBe('signed-in-free');
+        });
+
+        expect(window.location.search).toBe('');
         window.history.replaceState({}, '', 'http://localhost:3000/');
     });
 
@@ -884,7 +989,7 @@ describe('App', () => {
         expect(timerProps.outerMax).toBe(8);
     });
 
-    it('lets users toggle voice guidance and open myo-rep info from setup', () => {
+    it('lets users toggle voice guidance and open myo-rep info from setup', async () => {
         render(<App />);
 
         const voiceToggle = screen.getByRole('switch', { name: /voice guidance/i });
@@ -894,7 +999,7 @@ describe('App', () => {
         expect(useWorkoutStore.getState().settings.ttsEnabled).toBe(false);
 
         fireEvent.click(screen.getByRole('button', { name: /what are "myo-reps"\?/i }));
-        expect(screen.getByRole('dialog', { name: /protocol intel/i })).toBeInTheDocument();
+        expect(await screen.findByRole('dialog', { name: /protocol intel/i })).toBeInTheDocument();
         expect(screen.getByText(/what myo-reps actually are/i)).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: /close protocol intel/i }));
@@ -1250,11 +1355,11 @@ describe('App', () => {
         expect(screen.getByRole('button', { name: /terminate/i })).toBeInTheDocument();
     });
 
-    it('opens and closes the myo-rep info modal from the sidebar link', () => {
+    it('opens and closes the myo-rep info modal from the sidebar link', async () => {
         render(<App />);
 
         fireEvent.click(screen.getByRole('button', { name: /what are "myo-reps"\?/i }));
-        expect(screen.getByRole('dialog')).toBeInTheDocument();
+        expect(await screen.findByRole('dialog')).toBeInTheDocument();
         expect(screen.getByText(/what myo-reps actually are/i)).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: /close protocol intel/i }));
@@ -1368,7 +1473,7 @@ describe('App', () => {
         expect(screen.queryByRole('button', { name: /launch pip/i })).not.toBeInTheDocument();
     });
 
-    it('renders preparing, resting, and myo-rep branches', () => {
+    it('renders preparing, resting, and myo-rep branches', async () => {
         useWorkoutStore.setState({
             appPhase: 'timer',
             timerStatus: 'Preparing',
@@ -1388,7 +1493,7 @@ describe('App', () => {
         });
         const { rerender } = render(<App />);
         expect(screen.getByText('Get Ready')).toBeInTheDocument();
-        expect(screen.getByText('Settings Open')).toBeInTheDocument();
+        expect(await screen.findByText('Settings Open')).toBeInTheDocument();
 
         act(() => {
             useWorkoutStore.setState({
@@ -1531,6 +1636,58 @@ describe('App', () => {
 
         expect(audioEngine.scheduleTickSequence).toHaveBeenCalledTimes(1);
         expect(audioEngine.cancelScheduledTicks).toHaveBeenCalled();
+    });
+
+    it('cancels active speech when pausing, disabling TTS, finishing, and terminating', () => {
+        useWorkoutStore.setState({
+            appPhase: 'timer',
+            timerStatus: 'Main Set',
+            isTimerRunning: true,
+            currentSet: 1,
+            currentRep: 1,
+            isMainRep: true,
+            isWorking: true,
+            sets: '1',
+            reps: '10',
+            rest: '10',
+            myoReps: '4',
+            myoWorkSecs: '2',
+            seconds: '2',
+            timeLeft: 1.9,
+            settings: {
+                ...useWorkoutStore.getState().settings,
+                ttsEnabled: true,
+                metronomeEnabled: false,
+            },
+        });
+
+        render(<App />);
+        vi.mocked(audioEngine.cancelSpeech).mockClear();
+
+        fireEvent.click(screen.getByRole('button', { name: /pause/i }));
+        expect(audioEngine.cancelSpeech).toHaveBeenCalled();
+
+        act(() => {
+            useWorkoutStore.setState({ isTimerRunning: true });
+        });
+        vi.mocked(audioEngine.cancelSpeech).mockClear();
+        act(() => {
+            useWorkoutStore.getState().setSettings({ ttsEnabled: false });
+        });
+        expect(audioEngine.cancelSpeech).toHaveBeenCalled();
+
+        act(() => {
+            useWorkoutStore.setState({
+                timerStatus: 'Finished',
+                isTimerRunning: false,
+                timeLeft: 0,
+            });
+        });
+        expect(audioEngine.cancelSpeech).toHaveBeenCalled();
+
+        vi.mocked(audioEngine.cancelSpeech).mockClear();
+        fireEvent.click(screen.getByRole('button', { name: /terminate/i }));
+        expect(audioEngine.cancelSpeech).toHaveBeenCalled();
     });
 
     it('keeps metronome beats pre-scheduled when a delayed worker tick skips countdown seconds', () => {
