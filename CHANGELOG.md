@@ -1,3 +1,10 @@
+## [3.8.4](https://github.com/GeneralMalit/myorep-timer/compare/v3.8.3...v3.8.4) (2026-08-29)
+
+
+### Bug Fixes
+
+* stabilize kinetic timer rendering ([0a5c4f7](https://github.com/GeneralMalit/myorep-timer/commit/0a5c4f724b785be4c84c1fb5f3bb5436ec6bccfe))
+
 ## [3.8.3](https://github.com/GeneralMalit/myorep-timer/compare/v3.8.2...v3.8.3) (2026-08-29)
 
 
