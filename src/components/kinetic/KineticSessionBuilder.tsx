@@ -630,7 +630,7 @@ const KineticSessionBuilder = ({ className }: KineticSessionBuilderProps) => {
                                 </div>
                             </div>
                         ) : (
-                            <div className="relative ml-8 max-w-[760px] space-y-3 border-l border-[#384039] pl-5">
+                            <div data-testid="kinetic-session-timeline" className="relative ml-8 w-full space-y-3 border-l border-[#384039] pl-5">
                                 {nodes.map((node, index) => (
                                     <KineticNodeCard
                                         key={node.id}
