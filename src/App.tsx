@@ -1428,7 +1428,9 @@ export default function App() {
                 className={cn(
                     appShellLayout.mainShell,
                     isSidebarCollapsed ? "md:ml-[4.5rem]" : (designVariant === 'kinetic' ? "md:ml-[var(--kinetic-sidebar-width)]" : "md:ml-72"),
-                    isSessionSetup ? "md:px-10 md:pt-0" : "",
+                    isSessionSetup
+                        ? (designVariant === 'kinetic' ? '!px-0 !pt-0' : 'md:px-10 md:pt-0')
+                        : '',
                 )}
             >
                 {designVariant !== 'kinetic' && <div
@@ -1454,7 +1456,7 @@ export default function App() {
                             isSessionSetup ? (
                                 <div
                                     data-testid="kinetic-session-builder-viewport"
-                                    className="flex h-[calc(var(--viewport-dynamic)-var(--safe-top)-var(--safe-bottom)-7.5rem)] min-h-[20rem] w-full min-w-0 flex-col overflow-hidden md:h-[calc(100dvh-3rem)] md:min-h-0"
+                                    className="flex h-[calc(var(--viewport-dynamic)-var(--safe-top)-var(--safe-bottom)-7.5rem)] min-h-[20rem] w-full min-w-0 flex-col overflow-hidden md:h-[100dvh] md:min-h-0"
                                 >
                                     <Suspense fallback={null}>
                                         <LazyKineticSessionBuilder className="min-h-0 flex-1" />

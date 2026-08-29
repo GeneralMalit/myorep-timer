@@ -5,7 +5,6 @@ import {
     ArrowUp,
     Check,
     ChevronDown,
-    Clock3,
     Copy,
     Dumbbell,
     GripVertical,
@@ -277,10 +276,10 @@ const NodeInspector = ({
     if (!node) {
         return (
             <aside className="flex min-h-[240px] flex-col justify-center border-l border-[#2C322D] px-5 py-6 lg:min-h-0" style={{ backgroundColor: KINETIC.surface }}>
-                <div className="mx-auto max-w-[240px] text-center">
-                    <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-[10px] border border-[#384039] bg-[#20251F] text-[#A8FF5A]"><ListPlus size={20} /></div>
-                    <div className="mt-4 text-sm font-semibold" style={{ color: KINETIC.cream }}>Select a block</div>
-                    <p className="mt-2 text-xs leading-relaxed" style={{ color: KINETIC.muted }}>Choose a timeline block to edit its timing, name, or notes.</p>
+                <div className="mx-auto max-w-[220px] text-center">
+                    <ListPlus size={20} className="mx-auto" style={{ color: KINETIC.lime }} />
+                    <div className="mt-3 text-sm font-semibold" style={{ color: KINETIC.cream }}>Select a block</div>
+                    <p className="mt-1 text-xs leading-relaxed" style={{ color: KINETIC.muted }}>Choose one to edit.</p>
                 </div>
             </aside>
         );
@@ -584,7 +583,7 @@ const KineticSessionBuilder = ({ className }: KineticSessionBuilderProps) => {
                 <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b px-4 py-3 sm:px-6" style={{ borderColor: KINETIC.border, backgroundColor: '#131614' }}>
                     <div className="flex flex-wrap items-center gap-2">
                         <Button type="button" className="h-10 gap-2 rounded-[9px] border-0 bg-[#FF5B36] px-4 text-sm font-semibold text-[#151411] hover:bg-[#FF795B]" onClick={() => handleAddResult(addWorkoutNodeFromCurrentSetup())}><Plus size={15} /> Add workout</Button>
-                        <Button type="button" variant="ghost" className={cn(quietButtonClassName, 'h-10 gap-2')} onClick={() => handleAddResult(addRestNode('60'))}><Plus size={15} /> Add 60s rest</Button>
+                        <Button type="button" variant="ghost" className={cn(quietButtonClassName, 'h-10 gap-2')} onClick={() => handleAddResult(addRestNode('60'))}><Plus size={15} /> Add rest</Button>
                         {savedWorkouts.length > 0 && (
                             <select aria-label="Add saved workout" defaultValue="" onChange={(event) => {
                                 if (event.target.value) {
@@ -598,7 +597,6 @@ const KineticSessionBuilder = ({ className }: KineticSessionBuilderProps) => {
                         )}
                     </div>
                     <div className="flex items-center gap-2">
-                        <div className="mr-1 hidden items-center gap-2 text-xs sm:flex" style={{ color: KINETIC.muted }}><Clock3 size={14} style={{ color: KINETIC.blue }} /><span>{duration}</span></div>
                         <Button type="button" variant="ghost" className={cn(quietButtonClassName, 'h-10 gap-2')} onClick={handleSave}><Save size={15} /> Save</Button>
                         <Button type="button" variant="ghost" className={cn(quietButtonClassName, 'h-10 w-10 p-0')} onClick={handleSaveAs} aria-label="Save session as copy" title="Save session as copy"><Copy size={15} /></Button>
                         <Button type="button" className="h-10 gap-2 rounded-[9px] border-0 bg-[#A8FF5A] px-4 text-sm font-semibold text-[#151411] hover:bg-[#B9FF7A]" onClick={handleStart}><Play size={15} fill="currentColor" /> Start</Button>
@@ -607,51 +605,44 @@ const KineticSessionBuilder = ({ className }: KineticSessionBuilderProps) => {
 
                 <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1fr)_360px]">
                     <main className="min-h-0 overflow-y-auto px-4 py-5 sm:px-6 lg:py-6">
-                        <div className="mb-5 flex items-end justify-between gap-4">
-                            <div>
-                                <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: KINETIC.coral }}><Activity size={13} /> Timeline</div>
-                                <div className="mt-1 text-xs" style={{ color: KINETIC.muted }}>{nodes.length === 0 ? 'Add the first block to start shaping this session.' : `${nodes.length} blocks · ${workoutCount} work · ${restCount} recovery`}</div>
-                            </div>
-                            <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em]" style={{ color: hasUnsavedChanges ? KINETIC.coralSoft : KINETIC.lime }}>
-                                {hasUnsavedChanges ? 'Pending save' : editingSessionDraft ? 'Up to date' : 'No draft'}
-                            </div>
+                        <div className="mb-4 flex items-baseline gap-3">
+                            <h2 className="flex items-center gap-2 text-sm font-semibold" style={{ color: KINETIC.cream }}><Activity size={15} style={{ color: KINETIC.coral }} /> Timeline</h2>
+                            {nodes.length > 0 && <span className="text-xs" style={{ color: KINETIC.muted }}>{`${nodes.length} blocks · ${workoutCount} work · ${restCount} recovery`}</span>}
                         </div>
 
                         {nodes.length === 0 ? (
-                            <div className="flex min-h-[330px] items-center justify-center border border-dashed border-[#414A40] bg-[#141715] p-8 text-center" style={{ borderRadius: 10 }}>
-                                <div className="max-w-[300px]">
-                                    <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-[10px] border border-[#FF5B36]/50 bg-[#FF5B36]/10 text-[#FF8A6E]"><ListPlus size={21} /></div>
-                                    <div className="mt-4 text-sm font-semibold" style={{ color: KINETIC.cream }}>Empty timeline</div>
-                                    <p className="mt-2 text-xs leading-relaxed" style={{ color: KINETIC.muted }}>Add a workout from your current setup, pull one from the library, or place a recovery block.</p>
-                                    <div className="mt-5 flex flex-wrap justify-center gap-2">
-                                        <Button type="button" className="h-9 rounded-[9px] border-0 bg-[#FF5B36] text-xs font-semibold text-[#151411] hover:bg-[#FF795B]" onClick={() => handleAddResult(addWorkoutNodeFromCurrentSetup())}><Plus size={14} /> Workout</Button>
-                                        <Button type="button" variant="ghost" className={cn(quietButtonClassName, 'h-9 text-xs')} onClick={() => handleAddResult(addRestNode('60'))}><Plus size={14} /> 60s rest</Button>
-                                    </div>
+                            <div className="flex min-h-[260px] items-center justify-center py-10 text-center">
+                                <div className="max-w-[260px]">
+                                    <ListPlus size={22} className="mx-auto" style={{ color: KINETIC.coralSoft }} />
+                                    <div className="mt-3 text-sm font-semibold" style={{ color: KINETIC.cream }}>No blocks yet</div>
+                                    <p className="mt-1 text-xs leading-relaxed" style={{ color: KINETIC.muted }}>Use the toolbar above to add a workout or recovery block.</p>
                                 </div>
                             </div>
                         ) : (
-                            <div data-testid="kinetic-session-timeline" className="relative ml-8 w-full space-y-3 border-l border-[#384039] pl-5">
-                                {nodes.map((node, index) => (
-                                    <KineticNodeCard
-                                        key={node.id}
-                                        node={node}
-                                        index={index}
-                                        total={nodes.length}
-                                        selected={node.id === editingSessionNodeId}
-                                        onSelect={() => setEditingSessionNodeId(node.id)}
-                                        onMove={(direction) => moveSessionNode(node.id, direction === 'left' ? 'left' : 'right')}
-                                        onDelete={() => handleDeleteNode(node.id)}
-                                        onDragStart={() => setDraggedNodeId(node.id)}
-                                        onDrop={() => {
-                                            if (draggedNodeId && draggedNodeId !== node.id) moveSessionNodeToIndex(draggedNodeId, index);
-                                            setDraggedNodeId(null);
-                                        }}
-                                    />
-                                ))}
-                                <div className="flex items-center gap-3 pt-1">
-                                    <div className="h-px flex-1 bg-[#2C322D]" />
-                                    <Button type="button" variant="ghost" className="h-8 rounded-[8px] border border-dashed border-[#485346] px-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#9EA69B] hover:border-[#FF5B36] hover:text-[#FF8A6E]" onClick={() => handleAddResult(addWorkoutNodeFromCurrentSetup())}><Plus size={13} /> Add block</Button>
-                                    <div className="h-px flex-1 bg-[#2C322D]" />
+                            <div className="pl-8">
+                                <div data-testid="kinetic-session-timeline" className="relative w-full space-y-3 border-l border-[#384039] pl-5">
+                                    {nodes.map((node, index) => (
+                                        <KineticNodeCard
+                                            key={node.id}
+                                            node={node}
+                                            index={index}
+                                            total={nodes.length}
+                                            selected={node.id === editingSessionNodeId}
+                                            onSelect={() => setEditingSessionNodeId(node.id)}
+                                            onMove={(direction) => moveSessionNode(node.id, direction === 'left' ? 'left' : 'right')}
+                                            onDelete={() => handleDeleteNode(node.id)}
+                                            onDragStart={() => setDraggedNodeId(node.id)}
+                                            onDrop={() => {
+                                                if (draggedNodeId && draggedNodeId !== node.id) moveSessionNodeToIndex(draggedNodeId, index);
+                                                setDraggedNodeId(null);
+                                            }}
+                                        />
+                                    ))}
+                                    <div className="flex items-center gap-3 pt-1">
+                                        <div className="h-px flex-1 bg-[#2C322D]" />
+                                        <Button type="button" variant="ghost" className="h-8 rounded-[8px] border border-dashed border-[#485346] px-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#9EA69B] hover:border-[#FF5B36] hover:text-[#FF8A6E]" onClick={() => handleAddResult(addWorkoutNodeFromCurrentSetup())}><Plus size={13} /> Add block</Button>
+                                        <div className="h-px flex-1 bg-[#2C322D]" />
+                                    </div>
                                 </div>
                             </div>
                         )}
@@ -669,9 +660,8 @@ const KineticSessionBuilder = ({ className }: KineticSessionBuilderProps) => {
                 </div>
             </div>
 
-            <footer className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t px-4 py-2.5 text-[10px] font-medium uppercase tracking-[0.14em] sm:px-6" style={{ borderColor: KINETIC.border, backgroundColor: '#131614', color: KINETIC.muted }}>
+            <footer className="flex shrink-0 items-center border-t px-4 py-2.5 text-[10px] font-medium uppercase tracking-[0.14em] sm:px-6" style={{ borderColor: KINETIC.border, backgroundColor: '#131614', color: KINETIC.muted }}>
                 <div className="flex items-center gap-3"><span>Prep {prepTime}s</span><span className="text-[#4D574C]">/</span><span>{duration} estimated</span></div>
-                <div className="flex items-center gap-2"><span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: KINETIC.lime }} aria-hidden="true" /> Local session library</div>
             </footer>
 
             <BuilderDialog dialog={dialog} value={dialogValue} onChangeValue={setDialogValue} onClose={() => setDialog(null)} onConfirm={handleDialogConfirm} />
