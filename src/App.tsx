@@ -1452,9 +1452,14 @@ export default function App() {
                     {appPhase === 'setup' ? (
                         designVariant === 'kinetic' ? (
                             isSessionSetup ? (
-                                <Suspense fallback={null}>
-                                    <LazyKineticSessionBuilder />
-                                </Suspense>
+                                <div
+                                    data-testid="kinetic-session-builder-viewport"
+                                    className="flex h-[calc(var(--viewport-dynamic)-var(--safe-top)-var(--safe-bottom)-7.5rem)] min-h-[20rem] w-full min-w-0 flex-col overflow-hidden md:h-[calc(100dvh-3rem)] md:min-h-0"
+                                >
+                                    <Suspense fallback={null}>
+                                        <LazyKineticSessionBuilder className="min-h-0 flex-1" />
+                                    </Suspense>
+                                </div>
                             ) : (
                                 <KineticWorkoutSetup
                                     onStart={startWorkout}
