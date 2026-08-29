@@ -1,3 +1,10 @@
+# [3.8.0](https://github.com/GeneralMalit/myorep-timer/compare/v3.7.3...v3.8.0) (2026-08-29)
+
+
+### Features
+
+* add kinetic console redesign ([5851f62](https://github.com/GeneralMalit/myorep-timer/commit/5851f62e610dc806563c2f8e306630b854a93160))
+
 ## [3.7.3](https://github.com/GeneralMalit/myorep-timer/compare/v3.7.2...v3.7.3) (2026-08-10)
 
 
