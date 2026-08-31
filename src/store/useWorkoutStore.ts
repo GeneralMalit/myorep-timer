@@ -92,7 +92,15 @@ const enqueueSyncChangeIfEnabled = (params: {
     syncState.enqueueEntityChange(params);
 };
 
-const WORKOUT_STORE_PERSIST_VERSION = 5;
+const DEFAULT_KINETIC_PALETTE = {
+    kineticThemeColor: '#FF5B36',
+    kineticActiveColor: '#FF6A47',
+    kineticRestColor: '#74C7FF',
+    kineticConcentricColor: '#A8FF5A',
+    kineticFinishedColor: '#A8FF5A',
+} as const;
+
+const WORKOUT_STORE_PERSIST_VERSION = 6;
 
 type PersistedWorkoutStoreState = {
     settings: WorkoutSettings;
@@ -117,10 +125,7 @@ const createDefaultPersistedWorkoutState = (): PersistedWorkoutStoreState => ({
         activeColor: '#bb86fc',
         restColor: '#03dac6',
         concentricColor: '#cf6679',
-        kineticThemeColor: '#ffffff',
-        kineticActiveColor: '#ffffff',
-        kineticRestColor: '#ffffff',
-        kineticConcentricColor: '#ffffff',
+        ...DEFAULT_KINETIC_PALETTE,
         concentricSecond: 1,
         smoothAnimation: true,
         prepTime: 5,
@@ -133,7 +138,6 @@ const createDefaultPersistedWorkoutState = (): PersistedWorkoutStoreState => ({
         ttsEnabled: true,
         pulseEffect: 'always',
         finishedColor: '#4caf50',
-        kineticFinishedColor: '#ffffff',
     },
     sets: '',
     reps: '',
@@ -2067,7 +2071,17 @@ export const useWorkoutStore = create<WorkoutState>()(
                     return persistedState as PersistedWorkoutStoreState;
                 }
 
-                return migratePersistedWorkoutStoreState(persistedState);
+                const migrated = migratePersistedWorkoutStoreState(persistedState);
+                const hasTemporaryWhiteKineticPalette = version < 6
+                    && migrated.settings.kineticThemeColor === '#ffffff'
+                    && migrated.settings.kineticActiveColor === '#ffffff'
+                    && migrated.settings.kineticRestColor === '#ffffff'
+                    && migrated.settings.kineticConcentricColor === '#ffffff'
+                    && migrated.settings.kineticFinishedColor === '#ffffff';
+
+                return hasTemporaryWhiteKineticPalette
+                    ? { ...migrated, settings: { ...migrated.settings, ...DEFAULT_KINETIC_PALETTE } }
+                    : migrated;
             },
             // Persist the setup/preferences surface and library data only.
             // Timer/session runtime is intentionally transient and rehydrates fresh.
