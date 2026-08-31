@@ -102,7 +102,13 @@ const KineticWorkoutSetup = ({ onStart, onSelectSession, canUseSessionBuilder }:
                 <div className="flex items-center gap-2 border-l border-white/10 pl-4 text-zinc-300">
                     <Mic2 size={15} />
                     <Label htmlFor="kinetic-voice-guidance" className="cursor-pointer text-sm">Voice guidance</Label>
-                    <Switch id="kinetic-voice-guidance" checked={settings.ttsEnabled} onCheckedChange={(ttsEnabled) => setSettings({ ttsEnabled })} className="data-[state=checked]:bg-[#4dabf7]" />
+                    <Switch
+                        id="kinetic-voice-guidance"
+                        checked={settings.ttsEnabled}
+                        onCheckedChange={(ttsEnabled) => setSettings({ ttsEnabled })}
+                        className="data-[state=unchecked]:bg-[#272c27] data-[state=checked]:[&>span]:bg-[#111412]"
+                        style={{ backgroundColor: settings.ttsEnabled ? (settings.kineticThemeColor ?? '#FF5B36') : '#272c27' }}
+                    />
                 </div>
             </div>
 

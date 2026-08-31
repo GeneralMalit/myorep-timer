@@ -85,11 +85,11 @@ describe('SettingsPanel', () => {
         useWorkoutStore.setState((state) => ({
             settings: {
                 ...state.settings,
-                kineticThemeColor: '#ffffff',
-                kineticActiveColor: '#ffffff',
-                kineticRestColor: '#ffffff',
-                kineticConcentricColor: '#ffffff',
-                kineticFinishedColor: '#ffffff',
+                kineticThemeColor: '#FF5B36',
+                kineticActiveColor: '#FF6A47',
+                kineticRestColor: '#74C7FF',
+                kineticConcentricColor: '#A8FF5A',
+                kineticFinishedColor: '#A8FF5A',
             },
         }));
 
@@ -103,11 +103,11 @@ describe('SettingsPanel', () => {
             finished: screen.getByLabelText('Finished'),
         };
 
-        expect(colorInputs.theme).toHaveValue('#ffffff');
-        expect(colorInputs.active).toHaveValue('#ffffff');
-        expect(colorInputs.resting).toHaveValue('#ffffff');
-        expect(colorInputs.concentric).toHaveValue('#ffffff');
-        expect(colorInputs.finished).toHaveValue('#ffffff');
+        expect(colorInputs.theme).toHaveValue('#ff5b36');
+        expect(colorInputs.active).toHaveValue('#ff6a47');
+        expect(colorInputs.resting).toHaveValue('#74c7ff');
+        expect(colorInputs.concentric).toHaveValue('#a8ff5a');
+        expect(colorInputs.finished).toHaveValue('#a8ff5a');
 
         fireEvent.change(colorInputs.theme, { target: { value: '#102030' } });
         fireEvent.change(colorInputs.active, { target: { value: '#203040' } });
