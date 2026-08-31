@@ -95,6 +95,14 @@ describe('audioEngine', () => {
         expect(audioContextSpy).not.toHaveBeenCalled();
     });
 
+    it('cancels active or queued speech on demand', async () => {
+        const audioEngine = await loadAudioEngine();
+
+        audioEngine.cancelSpeech();
+
+        expect(window.speechSynthesis.cancel).toHaveBeenCalledTimes(1);
+    });
+
     it('schedules metronome ticks on the audio context clock with stable offsets', async () => {
         const oscillatorStarts: number[] = [];
         const oscillatorStops: number[] = [];

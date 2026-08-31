@@ -222,6 +222,16 @@ export class AudioEngine {
         return { oscillator: osc, envelope };
     }
 
+    cancelSpeech() {
+        if (!this.speech) return;
+
+        try {
+            this.speech.cancel();
+        } catch (error) {
+            console.error("[AudioEngine] Speech cancellation failed:", error);
+        }
+    }
+
     speak(text: string | number) {
         if (!this.speech || this.isDocumentHidden()) return;
 
