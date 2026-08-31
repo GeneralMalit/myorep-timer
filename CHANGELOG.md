@@ -1,3 +1,10 @@
+## [3.8.5](https://github.com/GeneralMalit/myorep-timer/compare/v3.8.4...v3.8.5) (2026-08-31)
+
+
+### Bug Fixes
+
+* prevent workout start speech crash ([1e7a172](https://github.com/GeneralMalit/myorep-timer/commit/1e7a172c14bd79b98b68109f0babcc5f1d3478d7))
+
 ## [3.8.4](https://github.com/GeneralMalit/myorep-timer/compare/v3.8.3...v3.8.4) (2026-08-29)
 
 
