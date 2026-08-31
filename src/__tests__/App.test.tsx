@@ -442,6 +442,162 @@ describe('App', () => {
         expect(useWorkoutStore.getState().isTimerRunning).toBe(false);
     });
 
+    it('keeps the Kinetic runner context visible while a session is running', () => {
+        useWorkoutStore.setState({
+            designVariant: 'kinetic',
+            appPhase: 'timer',
+            timerStatus: 'Main Set',
+            isTimerRunning: true,
+            currentSet: 2,
+            currentRep: 3,
+            isMainRep: true,
+            isWorking: true,
+            sets: '9',
+            reps: '12',
+            seconds: '3',
+            rest: '20',
+            myoReps: '4',
+            myoWorkSecs: '2',
+            timeLeft: 2.5,
+            setTotalDuration: 36,
+            setElapsedTime: 3.5,
+            activeSessionId: 'session-kinetic',
+            activeSessionNodeIndex: 1,
+            sessionStatus: 'running',
+            isRunningSession: true,
+            sessionNodeRuntimeType: 'workout',
+            savedSessions: [
+                {
+                    id: 'session-kinetic',
+                    name: 'Upper Body Flow',
+                    nodes: [
+                        {
+                            id: 'node-one',
+                            type: 'workout',
+                            name: 'Pull-ups',
+                            config: {
+                                sets: '2',
+                                reps: '10',
+                                seconds: '3',
+                                rest: '20',
+                                myoReps: '4',
+                                myoWorkSecs: '2',
+                            },
+                            sourceWorkoutId: null,
+                            createdAt: '2026-03-01T00:00:00.000Z',
+                            updatedAt: '2026-03-01T00:00:00.000Z',
+                        },
+                        {
+                            id: 'node-two',
+                            type: 'workout',
+                            name: 'Rows',
+                            config: {
+                                sets: '4',
+                                reps: '12',
+                                seconds: '3',
+                                rest: '20',
+                                myoReps: '4',
+                                myoWorkSecs: '2',
+                            },
+                            sourceWorkoutId: null,
+                            createdAt: '2026-03-01T00:00:00.000Z',
+                            updatedAt: '2026-03-01T00:00:00.000Z',
+                        },
+                        {
+                            id: 'node-three',
+                            type: 'rest',
+                            name: 'Cooldown',
+                            seconds: '30',
+                            createdAt: '2026-03-01T00:00:00.000Z',
+                            updatedAt: '2026-03-01T00:00:00.000Z',
+                        },
+                    ],
+                    timesUsed: 0,
+                    lastUsedAt: null,
+                    createdAt: '2026-03-01T00:00:00.000Z',
+                    updatedAt: '2026-03-01T00:00:00.000Z',
+                },
+            ],
+        });
+
+        const { rerender } = render(<App />);
+
+        const timerSurface = screen.getByTestId('kinetic-timer-surface');
+        expect(within(timerSurface).getByText('Upper Body Flow')).toBeInTheDocument();
+        expect(within(timerSurface).getByText('Block 2 / 3')).toBeInTheDocument();
+        expect(within(timerSurface).getByText('Set 2 / 4')).toBeInTheDocument();
+        expect(within(timerSurface).getByText('Main set')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /pause/i })).toBeInTheDocument();
+
+        act(() => {
+            useWorkoutStore.setState({
+                timerStatus: 'Myo Reps',
+                isMainRep: false,
+                currentRep: 1,
+            });
+        });
+        rerender(<App />);
+
+        const updatedTimerSurface = screen.getByTestId('kinetic-timer-surface');
+        expect(within(updatedTimerSurface).getByText('Upper Body Flow')).toBeInTheDocument();
+        expect(within(updatedTimerSurface).getByText('Block 2 / 3')).toBeInTheDocument();
+        expect(within(updatedTimerSurface).getByText('Set 2 / 4')).toBeInTheDocument();
+        expect(within(updatedTimerSurface).getByText('Myo-rep set')).toBeInTheDocument();
+
+        act(() => {
+            useWorkoutStore.setState({ isTimerRunning: false });
+        });
+        rerender(<App />);
+
+        const pausedTimerSurface = screen.getByTestId('kinetic-timer-surface');
+        expect(within(pausedTimerSurface).getByText('Upper Body Flow')).toBeInTheDocument();
+        expect(within(pausedTimerSurface).getByText('Block 2 / 3')).toBeInTheDocument();
+        expect(within(pausedTimerSurface).getByText('Set 2 / 4')).toBeInTheDocument();
+        expect(within(pausedTimerSurface).getByText('Myo-rep set')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /resume/i })).toBeInTheDocument();
+    });
+
+    it('uses the configured Kinetic palette for the fullscreen timer surface', () => {
+        useWorkoutStore.setState({
+            designVariant: 'kinetic',
+            appPhase: 'timer',
+            timerStatus: 'Main Set',
+            isTimerRunning: true,
+            currentSet: 1,
+            currentRep: 1,
+            isMainRep: true,
+            isWorking: true,
+            sets: '2',
+            reps: '10',
+            seconds: '3',
+            rest: '20',
+            myoReps: '4',
+            myoWorkSecs: '2',
+            timeLeft: 3,
+            setTotalDuration: 30,
+            setElapsedTime: 4,
+            settings: {
+                ...useWorkoutStore.getState().settings,
+                activeColor: '#ff00ff',
+                fullScreenMode: true,
+                kineticThemeColor: '#0f172a',
+                kineticActiveColor: '#16a085',
+                kineticRestColor: '#2d7dd2',
+                kineticConcentricColor: '#f39c12',
+                kineticFinishedColor: '#27ae60',
+            },
+        });
+
+        render(<App />);
+
+        const surface = screen.getByTestId('kinetic-timer-surface');
+        expect(surface).toHaveStyle({ backgroundColor: '#16a085' });
+        expect(surface).not.toHaveStyle({ backgroundColor: '#ff00ff' });
+        expect(concentricTimerMock).toHaveBeenCalledWith(expect.objectContaining({
+            fullScreenForegroundColor: expect.any(String),
+        }));
+    });
+
     it('initializes audio and starts the timer when the protocol is started from setup', () => {
         render(<App />);
 
