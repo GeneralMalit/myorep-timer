@@ -92,7 +92,7 @@ const enqueueSyncChangeIfEnabled = (params: {
     syncState.enqueueEntityChange(params);
 };
 
-const WORKOUT_STORE_PERSIST_VERSION = 4;
+const WORKOUT_STORE_PERSIST_VERSION = 5;
 
 type PersistedWorkoutStoreState = {
     settings: WorkoutSettings;
@@ -117,6 +117,10 @@ const createDefaultPersistedWorkoutState = (): PersistedWorkoutStoreState => ({
         activeColor: '#bb86fc',
         restColor: '#03dac6',
         concentricColor: '#cf6679',
+        kineticThemeColor: '#ffffff',
+        kineticActiveColor: '#ffffff',
+        kineticRestColor: '#ffffff',
+        kineticConcentricColor: '#ffffff',
         concentricSecond: 1,
         smoothAnimation: true,
         prepTime: 5,
@@ -129,6 +133,7 @@ const createDefaultPersistedWorkoutState = (): PersistedWorkoutStoreState => ({
         ttsEnabled: true,
         pulseEffect: 'always',
         finishedColor: '#4caf50',
+        kineticFinishedColor: '#ffffff',
     },
     sets: '',
     reps: '',
@@ -239,6 +244,10 @@ const migratePersistedWorkoutStoreState = (persistedState: unknown): PersistedWo
         activeColor: typeof persistedSettings.activeColor === 'string' ? persistedSettings.activeColor : defaults.settings.activeColor,
         restColor: typeof persistedSettings.restColor === 'string' ? persistedSettings.restColor : defaults.settings.restColor,
         concentricColor: typeof persistedSettings.concentricColor === 'string' ? persistedSettings.concentricColor : defaults.settings.concentricColor,
+        kineticThemeColor: typeof persistedSettings.kineticThemeColor === 'string' ? persistedSettings.kineticThemeColor : defaults.settings.kineticThemeColor,
+        kineticActiveColor: typeof persistedSettings.kineticActiveColor === 'string' ? persistedSettings.kineticActiveColor : defaults.settings.kineticActiveColor,
+        kineticRestColor: typeof persistedSettings.kineticRestColor === 'string' ? persistedSettings.kineticRestColor : defaults.settings.kineticRestColor,
+        kineticConcentricColor: typeof persistedSettings.kineticConcentricColor === 'string' ? persistedSettings.kineticConcentricColor : defaults.settings.kineticConcentricColor,
         concentricSecond: typeof persistedSettings.concentricSecond === 'number' ? persistedSettings.concentricSecond : defaults.settings.concentricSecond,
         smoothAnimation: typeof persistedSettings.smoothAnimation === 'boolean' ? persistedSettings.smoothAnimation : defaults.settings.smoothAnimation,
         prepTime: typeof persistedSettings.prepTime === 'number' && Number.isFinite(persistedSettings.prepTime)
@@ -259,6 +268,7 @@ const migratePersistedWorkoutStoreState = (persistedState: unknown): PersistedWo
             ? persistedSettings.pulseEffect
             : defaults.settings.pulseEffect,
         finishedColor: typeof persistedSettings.finishedColor === 'string' ? persistedSettings.finishedColor : defaults.settings.finishedColor,
+        kineticFinishedColor: typeof persistedSettings.kineticFinishedColor === 'string' ? persistedSettings.kineticFinishedColor : defaults.settings.kineticFinishedColor,
     };
     const sets = typeof state.sets === 'string' ? normalizeSetsInput(state.sets) : defaults.sets;
     const reps = typeof state.reps === 'string' ? state.reps : defaults.reps;
@@ -310,6 +320,10 @@ export interface WorkoutSettings {
     activeColor: string;
     restColor: string;
     concentricColor: string;
+    kineticThemeColor: string;
+    kineticActiveColor: string;
+    kineticRestColor: string;
+    kineticConcentricColor: string;
     concentricSecond: number;
     smoothAnimation: boolean;
     prepTime: number;
@@ -322,6 +336,7 @@ export interface WorkoutSettings {
     ttsEnabled: boolean;
     pulseEffect: 'always' | 'resting' | 'never';
     finishedColor: string;
+    kineticFinishedColor: string;
 }
 
 interface WorkoutState {
