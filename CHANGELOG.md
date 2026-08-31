@@ -1,3 +1,11 @@
+# [3.9.0](https://github.com/GeneralMalit/myorep-timer/compare/v3.8.5...v3.9.0) (2026-08-31)
+
+
+### Features
+
+* persist kinetic visual identity ([ebc0de9](https://github.com/GeneralMalit/myorep-timer/commit/ebc0de97bf4acb7e0ae62478b9a5a498f6f4abb1))
+* personalize kinetic console visuals ([ff6d74d](https://github.com/GeneralMalit/myorep-timer/commit/ff6d74ddbb3a671401e71656e6e67a7683b1a338))
+
 ## [3.8.5](https://github.com/GeneralMalit/myorep-timer/compare/v3.8.4...v3.8.5) (2026-08-31)
 
 
