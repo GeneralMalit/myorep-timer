@@ -9,6 +9,10 @@ const resetStore = () => {
             activeColor: '#bb86fc',
             restColor: '#03dac6',
             concentricColor: '#cf6679',
+            kineticThemeColor: '#ffffff',
+            kineticActiveColor: '#ffffff',
+            kineticRestColor: '#ffffff',
+            kineticConcentricColor: '#ffffff',
             concentricSecond: 1,
             smoothAnimation: true,
             prepTime: 5,
@@ -21,8 +25,12 @@ const resetStore = () => {
             ttsEnabled: true,
             pulseEffect: 'always',
             finishedColor: '#4caf50',
+            kineticFinishedColor: '#ffffff',
         },
         currentRep: 1,
+        currentSet: 1,
+        timerStatus: 'Ready',
+        designVariant: 'classic',
     });
 };
 
@@ -132,5 +140,106 @@ describe('ConcentricTimer', () => {
 
         expect(getByText('00:04')).toBeInTheDocument();
         expect(getByText('Activation pace')).toBeInTheDocument();
+    });
+
+    it('uses the configured Kinetic palette for active, rest, and concentric phases', () => {
+        useWorkoutStore.setState((state) => ({
+            designVariant: 'kinetic',
+            settings: {
+                ...state.settings,
+                kineticActiveColor: '#123456',
+                kineticRestColor: '#654321',
+                kineticConcentricColor: '#abcdef',
+                concentricSecond: 1,
+                fullScreenMode: false,
+            },
+        }));
+
+        const { container, rerender } = render(
+            <ConcentricTimer
+                outerValue={5}
+                outerMax={5}
+                isResting={false}
+                innerValue={5}
+                innerMax={5}
+                textMain="00:05"
+                textSub="Activation pace"
+                isFinished={false}
+                isPreparing={false}
+            />,
+        );
+
+        const getProgressCircles = () => Array.from(container.querySelectorAll('circle[stroke]')) as SVGCircleElement[];
+
+        expect(getProgressCircles()[0]).toHaveAttribute('stroke', '#123456');
+        expect(getProgressCircles()[1]).toHaveAttribute('stroke', '#123456');
+
+        rerender(
+            <ConcentricTimer
+                outerValue={5}
+                outerMax={5}
+                isResting
+                innerValue={5}
+                innerMax={5}
+                textMain="00:05"
+                textSub="Rest"
+                isFinished={false}
+                isPreparing={false}
+            />,
+        );
+
+        expect(getProgressCircles()).toHaveLength(1);
+        expect(getProgressCircles()[0]).toHaveAttribute('stroke', '#654321');
+
+        rerender(
+            <ConcentricTimer
+                outerValue={5}
+                outerMax={5}
+                isResting={false}
+                innerValue={1}
+                innerMax={5}
+                textMain="00:01"
+                textSub="Concentric"
+                isFinished={false}
+                isPreparing={false}
+            />,
+        );
+
+        expect(getProgressCircles()[0]).toHaveAttribute('stroke', '#123456');
+        expect(getProgressCircles()[1]).toHaveAttribute('stroke', '#abcdef');
+    });
+
+    it('uses a readable dark foreground for a light Kinetic fullscreen palette', () => {
+        useWorkoutStore.setState((state) => ({
+            designVariant: 'kinetic',
+            settings: {
+                ...state.settings,
+                fullScreenMode: true,
+                kineticActiveColor: '#f4e1c1',
+                kineticRestColor: '#f4e1c1',
+                kineticConcentricColor: '#f4e1c1',
+            },
+        }));
+
+        const { container } = render(
+            <ConcentricTimer
+                outerValue={5}
+                outerMax={5}
+                isResting={false}
+                innerValue={5}
+                innerMax={5}
+                textMain="00:05"
+                textSub="Activation pace"
+                isFinished={false}
+                isPreparing={false}
+                fullScreenForegroundColor="#0e1012"
+            />,
+        );
+
+        const progressCircles = Array.from(container.querySelectorAll('circle[stroke]')) as SVGCircleElement[];
+        expect(progressCircles[0]).toHaveAttribute('stroke', '#0e1012');
+        expect(progressCircles[0]).not.toHaveAttribute('stroke', '#ffffff');
+        expect(progressCircles[1]).toHaveAttribute('stroke', '#0e1012');
+        expect(container.querySelector('[style*="color"]')).toHaveStyle({ color: '#0e1012' });
     });
 });

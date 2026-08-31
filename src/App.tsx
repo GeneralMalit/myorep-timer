@@ -98,6 +98,24 @@ const getMetronomeOffsets = (remainingTime: number, includeImmediateBoundary: bo
     return offsets;
 };
 
+const getReadableForeground = (color: string): '#0e1012' | '#ffffff' => {
+    const normalized = color.replace('#', '');
+    const expanded = normalized.length === 3
+        ? normalized.split('').map((part) => `${part}${part}`).join('')
+        : normalized;
+
+    if (!/^[\da-f]{6}$/i.test(expanded)) {
+        return '#ffffff';
+    }
+
+    const red = parseInt(expanded.slice(0, 2), 16);
+    const green = parseInt(expanded.slice(2, 4), 16);
+    const blue = parseInt(expanded.slice(4, 6), 16);
+    const luminance = ((red * 299) + (green * 587) + (blue * 114)) / 1000;
+
+    return luminance >= 150 ? '#0e1012' : '#ffffff';
+};
+
 const getMonotonicEpochMs = () => performance.timeOrigin + performance.now();
 
 type AppDialogState =
@@ -275,13 +293,30 @@ const TimerSurface = ({ isMobileViewport, timerScreenShell }: TimerSurfaceProps)
         ? parseInt(activeSessionNode.seconds || '0', 10)
         : null;
     const isPreparing = timerStatus === 'Preparing';
+    const isKinetic = designVariant === 'kinetic';
+    const kineticPalette = {
+        theme: settings.kineticThemeColor ?? '#ffffff',
+        active: settings.kineticActiveColor ?? '#ffffff',
+        rest: settings.kineticRestColor ?? '#ffffff',
+        concentric: settings.kineticConcentricColor ?? '#ffffff',
+        finished: settings.kineticFinishedColor ?? '#ffffff',
+    };
+    const visualPalette = isKinetic
+        ? kineticPalette
+        : {
+            theme: settings.activeColor,
+            active: settings.activeColor,
+            rest: settings.restColor,
+            concentric: settings.concentricColor,
+            finished: settings.finishedColor,
+        };
     const fullScreenBackgroundColor = timerStatus === 'Finished'
-        ? settings.finishedColor
+        ? visualPalette.finished
         : (isPreparing || !isWorking)
-            ? settings.restColor
+            ? visualPalette.rest
             : (timeLeft <= settings.concentricSecond && timeLeft > 0
-                ? settings.concentricColor
-                : settings.activeColor);
+                ? visualPalette.concentric
+                : visualPalette.active);
     const fullScreenBackgroundStyle = useMemo(
         () => ({ backgroundColor: fullScreenBackgroundColor }),
         [fullScreenBackgroundColor],
@@ -484,8 +519,18 @@ const TimerSurface = ({ isMobileViewport, timerScreenShell }: TimerSurfaceProps)
         resetWorkout();
     };
 
-    if (designVariant === 'kinetic') {
+    if (isKinetic) {
         const isSessionRunner = Boolean(isRunningSession && activeSession);
+        const hasActiveSession = Boolean(activeSessionId && activeSession);
+        const headerBlockIndex = activeSession
+            ? Math.min(activeSessionNodeIndex + 1, activeSession.nodes.length)
+            : 1;
+        const headerSetTotal = activeSessionNode?.type === 'workout'
+            ? activeSessionNode.config.sets
+            : sets;
+        const kineticFullScreenForeground = getReadableForeground(fullScreenBackgroundColor);
+        const kineticSurfaceForeground = settings.fullScreenMode ? kineticFullScreenForeground : '#ffffff';
+        const kineticMutedForeground = settings.fullScreenMode ? kineticFullScreenForeground : '#a1a1aa';
         const phaseLabel = timerStatus === 'Finished'
             ? 'Protocol complete'
             : (isPreparing ? 'Get ready' : (!isWorking ? (isSessionRunner ? 'Transition rest' : 'Recovery') : (isMainRep ? 'Activation pace' : 'Myo pace')));
@@ -496,21 +541,27 @@ const TimerSurface = ({ isMobileViewport, timerScreenShell }: TimerSurfaceProps)
                 : (isWorking ? `Rep ${currentRep} / ${isMainRep ? reps : myoReps}` : `Next: ${isMainRep ? 'work interval' : 'myo work'}`));
 
         return (
-            <section data-testid="kinetic-timer-surface" className="flex min-h-full w-full flex-1 flex-col bg-[#0e1012] px-4 py-5 text-white sm:px-7 lg:px-10 lg:py-7">
+            <section
+                data-testid="kinetic-timer-surface"
+                className="flex min-h-full w-full flex-1 flex-col px-4 py-5 text-white sm:px-7 lg:px-10 lg:py-7"
+                style={{ backgroundColor: settings.fullScreenMode ? fullScreenBackgroundColor : '#0e1012', color: settings.fullScreenMode ? kineticFullScreenForeground : '#ffffff' }}
+            >
                 <header className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-white/10 pb-4 text-sm">
-                    <div className="font-['Sora'] font-semibold tracking-[-0.025em] text-white">
-                        {isSessionRunner ? activeSession?.name : 'Workout'}
+                    <div className="font-['Sora'] font-semibold tracking-[-0.025em]" style={{ color: kineticSurfaceForeground }}>
+                        {hasActiveSession ? activeSession?.name : 'Workout'}
                     </div>
                     <span className="h-4 border-l border-white/15" />
-                    <span className="text-zinc-400">{isSessionRunner ? `Block ${activeSessionNodeIndex + 1} / ${activeSession?.nodes.length ?? 0}` : `Set ${currentSet} / ${sets}`}</span>
+                    <span style={{ color: kineticMutedForeground }}>Block {hasActiveSession ? headerBlockIndex : 1} / {hasActiveSession ? activeSession?.nodes.length ?? 0 : 1}</span>
                     <span className="h-4 border-l border-white/15" />
-                    <span className="text-zinc-400">{timerStatus}</span>
-                    <button type="button" className="ml-auto text-xs font-medium text-zinc-400 transition-colors hover:text-white" onClick={terminateWorkout}>End {isSessionRunner ? 'session' : 'workout'}</button>
+                    <span style={{ color: kineticMutedForeground }}>Set {currentSet} / {headerSetTotal || 0}</span>
+                    <span className="h-4 border-l border-white/15" />
+                    <span style={{ color: kineticMutedForeground }}>{isMainRep ? 'Main set' : 'Myo-rep set'}</span>
+                    <button type="button" className="ml-auto text-xs font-medium transition-opacity hover:opacity-100" style={{ color: kineticMutedForeground }} onClick={terminateWorkout}>End {isSessionRunner ? 'session' : 'workout'}</button>
                 </header>
 
                 <div className="mx-auto grid w-full max-w-[1120px] flex-1 items-center gap-8 py-8 lg:grid-cols-[minmax(0,1fr)_300px]">
                     <div className="flex flex-col items-center justify-center">
-                        <div className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">
+                        <div className="mb-3 text-xs font-semibold uppercase tracking-[0.14em]" style={{ color: kineticMutedForeground }}>
                             {phaseLabel}
                         </div>
                         <ConcentricTimer
@@ -534,9 +585,10 @@ const TimerSurface = ({ isMobileViewport, timerScreenShell }: TimerSurfaceProps)
                             isFinished={timerStatus === 'Finished'}
                             isPreparing={isPreparing}
                             forceInfoVisible
+                            fullScreenForegroundColor={isKinetic ? kineticFullScreenForeground : undefined}
                         />
                         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-                            <Button onClick={pauseOrResume} className="h-12 rounded-lg bg-[#ff5b36] px-5 text-sm font-bold text-white hover:bg-[#ff6a47]">
+                            <Button onClick={pauseOrResume} className="h-12 rounded-lg px-5 text-sm font-bold hover:brightness-110" style={{ backgroundColor: kineticPalette.theme, color: getReadableForeground(kineticPalette.theme) }}>
                                 {timerStatus === 'Finished' ? <><RotateCcw size={16} /> New workout</> : (isTimerRunning ? <><Square size={15} /> Pause</> : <><Play size={16} /> Resume</>)}
                             </Button>
                             {timerStatus !== 'Finished' && (
@@ -549,13 +601,13 @@ const TimerSurface = ({ isMobileViewport, timerScreenShell }: TimerSurfaceProps)
 
                     {isSessionRunner ? (
                         <aside className="border-l border-white/10 pl-5">
-                            <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">Session timeline</div>
+                                <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">Session timeline</div>
                             <ol className="mt-5 space-y-1">
                                 {activeSession?.nodes.map((node, index) => {
                                     const isComplete = index < activeSessionNodeIndex;
                                     const isActive = index === activeSessionNodeIndex;
                                     return (
-                                        <li key={node.id} className={cn('border-l-2 py-3 pl-4 text-sm', isComplete ? 'border-[#a8ff5a] text-zinc-500' : (isActive ? 'border-[#74c7ff] text-white' : 'border-white/15 text-zinc-500'))}>
+                                        <li key={node.id} className="border-l-2 py-3 pl-4 text-sm" style={{ borderColor: isComplete ? kineticPalette.finished : (isActive ? kineticPalette.theme : 'rgba(255,255,255,0.15)'), color: isActive ? kineticSurfaceForeground : kineticMutedForeground }}>
                                             <div className="font-medium">{node.name}</div>
                                             <div className="mt-1 text-xs text-zinc-500">{node.type === 'rest' ? `${node.seconds} sec rest` : `${node.config.sets} cycles · ${node.config.reps} reps`}</div>
                                         </li>
@@ -567,10 +619,10 @@ const TimerSurface = ({ isMobileViewport, timerScreenShell }: TimerSurfaceProps)
                         <aside className="border-l border-white/10 pl-5">
                             <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">Protocol</div>
                             <div className="mt-5 space-y-4 text-sm">
-                                <div className={cn('border-l-2 pl-4', isPreparing ? 'border-[#ff5b36] text-white' : 'border-[#a8ff5a] text-zinc-500')}>Preparation</div>
-                                <div className={cn('border-l-2 pl-4', timerStatus === 'Main Set' ? 'border-[#a8ff5a] text-white' : 'border-white/15 text-zinc-500')}>Activation · {reps} reps</div>
-                                <div className={cn('border-l-2 pl-4', timerStatus === 'Resting' ? 'border-[#74c7ff] text-white' : 'border-white/15 text-zinc-500')}>Rest · {rest || '0'} sec</div>
-                                <div className={cn('border-l-2 pl-4', timerStatus === 'Myo Reps' ? 'border-[#a8ff5a] text-white' : 'border-white/15 text-zinc-500')}>Myo clusters · {myoReps} reps</div>
+                                <div className={cn('border-l-2 pl-4', isPreparing ? 'text-white' : 'text-zinc-500')} style={{ borderColor: isPreparing ? kineticPalette.theme : kineticPalette.finished }}>Preparation</div>
+                                <div className={cn('border-l-2 pl-4', timerStatus === 'Main Set' ? 'text-white' : 'text-zinc-500')} style={{ borderColor: timerStatus === 'Main Set' ? kineticPalette.active : 'rgba(255,255,255,0.15)' }}>Activation · {reps} reps</div>
+                                <div className={cn('border-l-2 pl-4', timerStatus === 'Resting' ? 'text-white' : 'text-zinc-500')} style={{ borderColor: timerStatus === 'Resting' ? kineticPalette.rest : 'rgba(255,255,255,0.15)' }}>Rest · {rest || '0'} sec</div>
+                                <div className={cn('border-l-2 pl-4', timerStatus === 'Myo Reps' ? 'text-white' : 'text-zinc-500')} style={{ borderColor: timerStatus === 'Myo Reps' ? kineticPalette.concentric : 'rgba(255,255,255,0.15)' }}>Myo clusters · {myoReps} reps</div>
                             </div>
                         </aside>
                     )}
@@ -1385,7 +1437,14 @@ export default function App() {
         <div
             className={cn("min-h-[100dvh] bg-background text-foreground font-sans selection:bg-primary/30 transition-colors duration-500", theme, designVariant === 'kinetic' && 'design-kinetic')}
             data-design-variant={designVariant}
-            style={{ '--kinetic-sidebar-width': `${kineticSidebarWidth}px` } as CSSProperties}
+            style={{
+                '--kinetic-sidebar-width': `${kineticSidebarWidth}px`,
+                '--kinetic-theme-color': settings.kineticThemeColor ?? '#ffffff',
+                '--kinetic-active-color': settings.kineticActiveColor ?? '#ffffff',
+                '--kinetic-rest-color': settings.kineticRestColor ?? '#ffffff',
+                '--kinetic-concentric-color': settings.kineticConcentricColor ?? '#ffffff',
+                '--kinetic-finished-color': settings.kineticFinishedColor ?? '#ffffff',
+            } as CSSProperties}
         >
             {shouldBootstrapSupabase && (
                 <Suspense fallback={null}>

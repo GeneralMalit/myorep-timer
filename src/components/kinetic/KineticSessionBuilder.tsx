@@ -35,8 +35,14 @@ const KINETIC = {
     borderStrong: '#414A40',
     cream: '#F3F0E6',
     muted: '#9EA69B',
-    coral: '#FF5B36',
-    coralSoft: '#FF8A6E',
+    // The builder follows the selected visual identity. App.tsx provides this
+    // variable for the Kinetic shell; the light fallback keeps this component
+    // legible when rendered in isolation (for example, in a story or test).
+    theme: 'var(--kinetic-theme-color, #F3F0E6)',
+    themeSoft: 'color-mix(in srgb, var(--kinetic-theme-color, #F3F0E6) 72%, white)',
+    themeWash: 'color-mix(in srgb, var(--kinetic-theme-color, #F3F0E6) 11%, transparent)',
+    themeBorder: 'color-mix(in srgb, var(--kinetic-theme-color, #F3F0E6) 70%, transparent)',
+    error: '#F28B82',
     lime: '#A8FF5A',
     blue: '#74C7FF',
     ink: '#151411',
@@ -47,9 +53,9 @@ const surfaceStyle = {
     borderColor: KINETIC.border,
 } satisfies CSSProperties;
 
-const inputClassName = 'h-10 rounded-[9px] border-[#384039] bg-[#111412] text-[#F3F0E6] placeholder:text-[#6F776E] focus-visible:border-[#FF5B36] focus-visible:ring-[#FF5B36]/35';
-const quietButtonClassName = 'rounded-[9px] border border-[#384039] bg-[#20251F] text-[#F3F0E6] hover:border-[#596458] hover:bg-[#293029]';
-const iconButtonClassName = 'h-9 w-9 rounded-[8px] border border-[#384039] bg-[#20251F] p-0 text-[#A7B0A4] hover:border-[#FF5B36]/70 hover:bg-[#2A3029] hover:text-[#F3F0E6]';
+const inputClassName = 'h-10 rounded-[9px] border-[#384039] bg-[#111412] text-[#F3F0E6] placeholder:text-[#6F776E] focus-visible:border-[var(--kinetic-theme-color)] focus-visible:ring-[var(--kinetic-theme-color)]/35';
+const quietButtonClassName = 'rounded-[9px] border border-[#384039] bg-[#20251F] text-[#F3F0E6] hover:border-[#596458] hover:bg-[#293029] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--kinetic-theme-color)]/70';
+const iconButtonClassName = 'h-9 w-9 rounded-[8px] border border-[#384039] bg-[#20251F] p-0 text-[#A7B0A4] hover:border-[var(--kinetic-theme-color)] hover:bg-[#2A3029] hover:text-[#F3F0E6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--kinetic-theme-color)]/70';
 
 type ActionResult = { ok: boolean; error?: string; id?: string };
 
@@ -83,7 +89,7 @@ const nodeSummary = (node: SessionNode): string => (
     node.type === 'workout' ? workoutSummary(node) : `${node.seconds || '—'} sec recovery`
 );
 
-const nodeAccent = (node: SessionNode): string => node.type === 'workout' ? KINETIC.coral : KINETIC.blue;
+const nodeAccent = (node: SessionNode): string => node.type === 'workout' ? KINETIC.theme : KINETIC.blue;
 
 const isNodeValid = (node: SessionNode): boolean => {
     if (!node.name.trim()) {
@@ -134,7 +140,7 @@ const KineticNodeCard = ({
 
     return (
         <div className="relative flex gap-3">
-            <div className="absolute -left-[2.1rem] top-5 flex h-6 w-6 items-center justify-center rounded-[7px] border text-[10px] font-bold" style={{ borderColor: `${accent}88`, color: accent, backgroundColor: KINETIC.background }} aria-hidden="true">
+            <div className="absolute -left-[2.1rem] top-5 flex h-6 w-6 items-center justify-center rounded-[7px] border text-[10px] font-bold" style={{ borderColor: node.type === 'workout' ? KINETIC.themeBorder : `${accent}88`, color: accent, backgroundColor: KINETIC.background }} aria-hidden="true">
                 {String(index + 1).padStart(2, '0')}
             </div>
             <article
@@ -160,13 +166,16 @@ const KineticNodeCard = ({
                     onDrop();
                 }}
                 className={cn(
-                    'group min-w-0 flex-1 cursor-pointer border p-3 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF5B36]/70',
-                    selected ? 'border-[#FF5B36] bg-[#232820]' : 'border-[#2C322D] bg-[#171A18] hover:border-[#515B50] hover:bg-[#1D221E]',
+                    'group min-w-0 flex-1 cursor-pointer border p-3 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--kinetic-theme-color)]/70',
+                    selected ? 'bg-[#232820]' : 'border-[#2C322D] bg-[#171A18] hover:border-[#515B50] hover:bg-[#1D221E]',
                 )}
-                style={{ borderRadius: 10 }}
+                style={{
+                    borderRadius: 10,
+                    ...(selected ? { borderColor: KINETIC.theme, backgroundColor: KINETIC.themeWash } : {}),
+                }}
             >
                 <div className="flex items-start gap-3">
-                    <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px]" style={{ color: accent, backgroundColor: `${accent}19` }}>
+                    <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px]" style={{ color: accent, backgroundColor: node.type === 'workout' ? KINETIC.themeWash : `${accent}19` }}>
                         {node.type === 'workout' ? <Dumbbell size={18} /> : <Timer size={18} />}
                     </div>
                     <div className="min-w-0 flex-1">
@@ -175,7 +184,7 @@ const KineticNodeCard = ({
                                 {node.type === 'workout' ? 'WORK' : 'REST'}
                             </span>
                             {valid && <Check size={13} aria-label="Valid node" style={{ color: KINETIC.lime }} />}
-                            {!valid && <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#FF8A6E]">Needs input</span>}
+                            {!valid && <span className="text-[10px] font-semibold uppercase tracking-[0.14em]" style={{ color: KINETIC.error }}>Needs input</span>}
                         </div>
                         <div className="mt-1 truncate text-[15px] font-semibold tracking-[-0.02em]" style={{ color: KINETIC.cream }} title={node.name}>
                             {node.name || 'Untitled block'}
@@ -184,7 +193,7 @@ const KineticNodeCard = ({
                             {nodeSummary(node)}
                         </div>
                         {node.type === 'workout' && node.notes?.trim() && (
-                            <div className="mt-2 truncate text-[11px]" style={{ color: KINETIC.coralSoft }} title={node.notes}>
+                            <div className="mt-2 truncate text-[11px]" style={{ color: KINETIC.themeSoft }} title={node.notes}>
                                 {node.notes}
                             </div>
                         )}
@@ -200,7 +209,7 @@ const KineticNodeCard = ({
                         <Button type="button" variant="ghost" size="icon" className={cn(iconButtonClassName, 'h-7 w-7')} onClick={() => onMove('right')} disabled={index === total - 1} aria-label={`Move ${node.name} later`} title="Move later">
                             <ArrowDown size={14} />
                         </Button>
-                        <Button type="button" variant="ghost" size="icon" className={cn(iconButtonClassName, 'h-7 w-7 hover:border-[#FF8A6E] hover:text-[#FF8A6E]')} onClick={onDelete} aria-label={`Remove ${node.name}`} title="Remove block">
+                        <Button type="button" variant="ghost" size="icon" className={cn(iconButtonClassName, 'h-7 w-7 hover:border-[#F28B82] hover:text-[#F28B82]')} onClick={onDelete} aria-label={`Remove ${node.name}`} title="Remove block">
                             <Trash2 size={14} />
                         </Button>
                     </div>
@@ -358,7 +367,7 @@ const NodeInspector = ({
                                 onChange={(event) => {
                                     if (event.target.value !== '__none__') onImportWorkout(node.id, event.target.value);
                                 }}
-                                className="h-10 w-full rounded-[9px] border border-[#384039] bg-[#111412] px-3 text-sm text-[#F3F0E6] outline-none focus:border-[#FF5B36]"
+                                className="h-10 w-full rounded-[9px] border border-[#384039] bg-[#111412] px-3 text-sm text-[#F3F0E6] outline-none focus:border-[var(--kinetic-theme-color)]"
                             >
                                 <option value="__none__">Inline block (not linked)</option>
                                 {savedWorkouts.map((workout) => <option key={workout.id} value={workout.id}>{workout.name}</option>)}
@@ -372,7 +381,7 @@ const NodeInspector = ({
                     }} />
                 )}
 
-                <Button type="button" variant="ghost" className="h-10 w-full justify-start gap-2 rounded-[9px] border border-[#4E322D] text-[#FF8A6E] hover:bg-[#3A211D] hover:text-[#FFB09B]" onClick={() => onDelete(node.id)}>
+                <Button type="button" variant="ghost" className="h-10 w-full justify-start gap-2 rounded-[9px] border border-[#573A36] text-[#F28B82] hover:bg-[#30201E] hover:text-[#FFB0A8]" onClick={() => onDelete(node.id)}>
                     <Trash2 size={15} /> Remove this block
                 </Button>
             </div>
@@ -389,6 +398,11 @@ const BuilderDialog = ({ dialog, value, onChangeValue, onClose, onConfirm }: {
 }) => {
     if (!dialog) return null;
     const isPrompt = dialog.kind === 'prompt';
+    const dialogLabelColor = dialog.kind === 'prompt'
+        ? KINETIC.theme
+        : dialog.tone === 'error'
+            ? KINETIC.error
+            : KINETIC.lime;
 
     return (
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-[#080A09]/80 p-4" role="dialog" aria-modal="true" aria-label={dialog.title} onPointerDown={(event) => {
@@ -397,7 +411,7 @@ const BuilderDialog = ({ dialog, value, onChangeValue, onClose, onConfirm }: {
             <div className="w-full max-w-md border border-[#485346] bg-[#171A18] p-5 shadow-[0_12px_50px_rgba(0,0,0,0.5)]" style={{ borderRadius: 10 }} onPointerDown={(event) => event.stopPropagation()}>
                 <div className="flex items-start justify-between gap-4">
                     <div>
-                        <div className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: dialog.kind === 'feedback' && dialog.tone === 'error' ? KINETIC.coralSoft : KINETIC.lime }}>
+                        <div className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: dialogLabelColor }}>
                             {isPrompt ? 'Session action' : dialog.tone === 'error' ? 'Action blocked' : 'Saved'}
                         </div>
                         <div className="mt-2 text-base font-semibold" style={{ color: KINETIC.cream }}>{dialog.title}</div>
@@ -413,7 +427,12 @@ const BuilderDialog = ({ dialog, value, onChangeValue, onClose, onConfirm }: {
                 )}
                 <div className="mt-6 flex justify-end gap-2">
                     {isPrompt && <Button type="button" variant="ghost" className={quietButtonClassName} onClick={onClose}>Cancel</Button>}
-                    <Button type="button" className={cn('rounded-[9px] border-0', isPrompt ? 'bg-[#FF5B36] text-[#151411] hover:bg-[#FF795B]' : 'bg-[#A8FF5A] text-[#151411] hover:bg-[#B9FF7A]')} onClick={onConfirm}>
+                    <Button
+                        type="button"
+                        className={cn('rounded-[9px] border-0', isPrompt ? 'text-[#151411] hover:brightness-110' : 'bg-[#A8FF5A] text-[#151411] hover:bg-[#B9FF7A]')}
+                        style={isPrompt ? { backgroundColor: KINETIC.theme, color: KINETIC.ink } : undefined}
+                        onClick={onConfirm}
+                    >
                         {isPrompt ? dialog.confirmLabel : 'Close'}
                     </Button>
                 </div>
@@ -557,18 +576,18 @@ const KineticSessionBuilder = ({ className }: KineticSessionBuilderProps) => {
                 <div className="flex flex-wrap items-end justify-between gap-4">
                     <div className="min-w-0">
                         <div className="flex items-center gap-3">
-                            <div className="flex h-8 w-8 items-center justify-center rounded-[8px] bg-[#FF5B36] text-[#151411]" aria-hidden="true"><Zap size={16} fill="currentColor" /></div>
-                            <div className="text-[11px] font-bold uppercase tracking-[0.25em]" style={{ color: KINETIC.coral }}>SESSION BUILDER</div>
+                            <div className="flex h-8 w-8 items-center justify-center rounded-[8px] text-[#151411]" style={{ backgroundColor: KINETIC.theme }} aria-hidden="true"><Zap size={16} fill="currentColor" /></div>
+                            <div className="text-[11px] font-bold uppercase tracking-[0.25em]" style={{ color: KINETIC.theme }}>SESSION BUILDER</div>
                             {hasUnsavedChanges && <span className="border border-[#A8FF5A]/40 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.16em] text-[#A8FF5A]" style={{ borderRadius: 5 }}>Unsaved</span>}
                         </div>
                         <div className="mt-3 flex max-w-[420px] items-center gap-2">
-                            <Input aria-label="Session name" value={draftName} onChange={(event) => setDraftName(event.target.value)} placeholder="Name this session" className="h-9 border-0 border-b border-[#4A5448] bg-transparent px-0 text-lg font-semibold tracking-[-0.03em] shadow-none focus-visible:border-[#FF5B36] focus-visible:ring-0" />
+                            <Input aria-label="Session name" value={draftName} onChange={(event) => setDraftName(event.target.value)} placeholder="Name this session" className="h-9 border-0 border-b border-[#4A5448] bg-transparent px-0 text-lg font-semibold tracking-[-0.03em] shadow-none focus-visible:border-[var(--kinetic-theme-color)] focus-visible:ring-0" />
                         </div>
                     </div>
                     <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
                         <label className="sr-only" htmlFor="kinetic-session-picker">Open saved session</label>
                         <div className="relative min-w-[190px]">
-                            <select id="kinetic-session-picker" value={sessionPicker} onChange={(event) => handleLoadSession(event.target.value)} className="h-10 w-full appearance-none rounded-[9px] border border-[#384039] bg-[#111412] px-3 pr-9 text-xs text-[#D9DED4] outline-none focus:border-[#FF5B36]">
+                            <select id="kinetic-session-picker" value={sessionPicker} onChange={(event) => handleLoadSession(event.target.value)} className="h-10 w-full appearance-none rounded-[9px] border border-[#384039] bg-[#111412] px-3 pr-9 text-xs text-[#D9DED4] outline-none focus:border-[var(--kinetic-theme-color)]">
                                 <option value="">Open saved session</option>
                                 {savedSessions.map((session) => <option key={session.id} value={session.id}>{session.name}</option>)}
                             </select>
@@ -582,7 +601,7 @@ const KineticSessionBuilder = ({ className }: KineticSessionBuilderProps) => {
             <div className="flex min-h-0 flex-1 flex-col overflow-y-auto lg:overflow-hidden">
                 <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b px-4 py-3 sm:px-6" style={{ borderColor: KINETIC.border, backgroundColor: '#131614' }}>
                     <div className="flex flex-wrap items-center gap-2">
-                        <Button type="button" className="h-10 gap-2 rounded-[9px] border-0 bg-[#FF5B36] px-4 text-sm font-semibold text-[#151411] hover:bg-[#FF795B]" onClick={() => handleAddResult(addWorkoutNodeFromCurrentSetup())}><Plus size={15} /> Add workout</Button>
+                        <Button type="button" className="h-10 gap-2 rounded-[9px] border-0 px-4 text-sm font-semibold text-[#151411] hover:brightness-110" style={{ backgroundColor: KINETIC.theme }} onClick={() => handleAddResult(addWorkoutNodeFromCurrentSetup())}><Plus size={15} /> Add workout</Button>
                         <Button type="button" variant="ghost" className={cn(quietButtonClassName, 'h-10 gap-2')} onClick={() => handleAddResult(addRestNode('60'))}><Plus size={15} /> Add rest</Button>
                         {savedWorkouts.length > 0 && (
                             <select aria-label="Add saved workout" defaultValue="" onChange={(event) => {
@@ -590,7 +609,7 @@ const KineticSessionBuilder = ({ className }: KineticSessionBuilderProps) => {
                                     handleAddResult(addWorkoutNodeFromSavedWorkout(event.target.value));
                                     event.target.value = '';
                                 }
-                            }} className="h-10 max-w-[190px] rounded-[9px] border border-[#384039] bg-[#20251F] px-3 text-xs text-[#D9DED4] outline-none focus:border-[#FF5B36]">
+                            }} className="h-10 max-w-[190px] rounded-[9px] border border-[#384039] bg-[#20251F] px-3 text-xs text-[#D9DED4] outline-none focus:border-[var(--kinetic-theme-color)]">
                                 <option value="">Add from library</option>
                                 {savedWorkouts.map((workout) => <option key={workout.id} value={workout.id}>{workout.name}</option>)}
                             </select>
@@ -599,21 +618,21 @@ const KineticSessionBuilder = ({ className }: KineticSessionBuilderProps) => {
                     <div className="flex items-center gap-2">
                         <Button type="button" variant="ghost" className={cn(quietButtonClassName, 'h-10 gap-2')} onClick={handleSave}><Save size={15} /> Save</Button>
                         <Button type="button" variant="ghost" className={cn(quietButtonClassName, 'h-10 w-10 p-0')} onClick={handleSaveAs} aria-label="Save session as copy" title="Save session as copy"><Copy size={15} /></Button>
-                        <Button type="button" className="h-10 gap-2 rounded-[9px] border-0 bg-[#A8FF5A] px-4 text-sm font-semibold text-[#151411] hover:bg-[#B9FF7A]" onClick={handleStart}><Play size={15} fill="currentColor" /> Start</Button>
+                        <Button type="button" className="h-10 gap-2 rounded-[9px] border-0 px-4 text-sm font-semibold text-[#151411] hover:brightness-110" style={{ backgroundColor: KINETIC.theme }} onClick={handleStart}><Play size={15} fill="currentColor" /> Start</Button>
                     </div>
                 </div>
 
                 <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1fr)_360px]">
                     <main className="min-h-0 overflow-y-auto px-4 py-5 sm:px-6 lg:py-6">
                         <div className="mb-4 flex items-baseline gap-3">
-                            <h2 className="flex items-center gap-2 text-sm font-semibold" style={{ color: KINETIC.cream }}><Activity size={15} style={{ color: KINETIC.coral }} /> Timeline</h2>
+                            <h2 className="flex items-center gap-2 text-sm font-semibold" style={{ color: KINETIC.cream }}><Activity size={15} style={{ color: KINETIC.theme }} /> Timeline</h2>
                             {nodes.length > 0 && <span className="text-xs" style={{ color: KINETIC.muted }}>{`${nodes.length} blocks · ${workoutCount} work · ${restCount} recovery`}</span>}
                         </div>
 
                         {nodes.length === 0 ? (
                             <div className="flex min-h-[260px] items-center justify-center py-10 text-center">
                                 <div className="max-w-[260px]">
-                                    <ListPlus size={22} className="mx-auto" style={{ color: KINETIC.coralSoft }} />
+                                    <ListPlus size={22} className="mx-auto" style={{ color: KINETIC.themeSoft }} />
                                     <div className="mt-3 text-sm font-semibold" style={{ color: KINETIC.cream }}>No blocks yet</div>
                                     <p className="mt-1 text-xs leading-relaxed" style={{ color: KINETIC.muted }}>Use the toolbar above to add a workout or recovery block.</p>
                                 </div>
@@ -640,7 +659,7 @@ const KineticSessionBuilder = ({ className }: KineticSessionBuilderProps) => {
                                     ))}
                                     <div className="flex items-center gap-3 pt-1">
                                         <div className="h-px flex-1 bg-[#2C322D]" />
-                                        <Button type="button" variant="ghost" className="h-8 rounded-[8px] border border-dashed border-[#485346] px-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#9EA69B] hover:border-[#FF5B36] hover:text-[#FF8A6E]" onClick={() => handleAddResult(addWorkoutNodeFromCurrentSetup())}><Plus size={13} /> Add block</Button>
+                                        <Button type="button" variant="ghost" className="h-8 rounded-[8px] border border-dashed border-[#485346] px-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#9EA69B] hover:border-[var(--kinetic-theme-color)] hover:text-[var(--kinetic-theme-color)]" onClick={() => handleAddResult(addWorkoutNodeFromCurrentSetup())}><Plus size={13} /> Add block</Button>
                                         <div className="h-px flex-1 bg-[#2C322D]" />
                                     </div>
                                 </div>

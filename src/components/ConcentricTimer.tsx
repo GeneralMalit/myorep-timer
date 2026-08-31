@@ -16,6 +16,7 @@ interface ConcentricTimerProps {
     isFinished: boolean;
     isPreparing: boolean;
     forceInfoVisible?: boolean;
+    fullScreenForegroundColor?: string;
 }
 
 const ConcentricTimer: React.FC<ConcentricTimerProps> = ({
@@ -29,6 +30,7 @@ const ConcentricTimer: React.FC<ConcentricTimerProps> = ({
     isFinished,
     isPreparing,
     forceInfoVisible = false,
+    fullScreenForegroundColor,
 }) => {
     const settings = useWorkoutStore((state: any) => state.settings);
     const currentRep = useWorkoutStore((state: any) => state.currentRep);
@@ -36,6 +38,7 @@ const ConcentricTimer: React.FC<ConcentricTimerProps> = ({
     const activeSessionId = useWorkoutStore((state: any) => state.activeSessionId);
     const activeSessionNodeIndex = useWorkoutStore((state: any) => state.activeSessionNodeIndex);
     const timerStatus = useWorkoutStore((state: any) => state.timerStatus);
+    const designVariant = useWorkoutStore((state: any) => state.designVariant);
     const isMobileViewport = useMobileViewport();
     const layout = getResponsiveLayout(isMobileViewport, concentricTimerMobileLayout, concentricTimerDesktopLayout);
 
@@ -69,7 +72,7 @@ const ConcentricTimer: React.FC<ConcentricTimerProps> = ({
         ? 'full-screen'
         : (isPreparing ? 'preparing' : (isFinished ? 'finished' : (isResting ? 'resting' : (isConcentricPhase ? 'concentric' : 'eccentric'))));
     const phaseColors = useMemo(() => {
-        if (isFullScreen) {
+        if (isFullScreen && designVariant !== 'kinetic') {
             return {
                 outer: '#ffffff',
                 inner: '#ffffff',
@@ -77,14 +80,24 @@ const ConcentricTimer: React.FC<ConcentricTimerProps> = ({
             };
         }
 
-        const activeColor = settings.activeColor;
+        if (isFullScreen && fullScreenForegroundColor) {
+            return {
+                outer: fullScreenForegroundColor,
+                inner: fullScreenForegroundColor,
+                text: fullScreenForegroundColor,
+            };
+        }
+
+        const activeColor = designVariant === 'kinetic' ? settings.kineticActiveColor ?? '#ffffff' : settings.activeColor;
+        const restColor = designVariant === 'kinetic' ? settings.kineticRestColor ?? '#ffffff' : settings.restColor;
+        const concentricColor = designVariant === 'kinetic' ? settings.kineticConcentricColor ?? '#ffffff' : settings.concentricColor;
         const isConcentric = visualPhase === 'concentric';
         return {
-            outer: visualPhase === 'resting' ? settings.restColor : activeColor,
-            inner: isConcentric ? settings.concentricColor : activeColor,
-            text: isConcentric ? settings.concentricColor : activeColor,
+            outer: visualPhase === 'resting' ? restColor : activeColor,
+            inner: isConcentric ? concentricColor : activeColor,
+            text: isConcentric ? concentricColor : activeColor,
         };
-    }, [isFullScreen, settings.activeColor, settings.concentricColor, settings.restColor, visualPhase]);
+    }, [designVariant, fullScreenForegroundColor, isFullScreen, settings.activeColor, settings.concentricColor, settings.kineticActiveColor, settings.kineticConcentricColor, settings.kineticRestColor, settings.restColor, visualPhase]);
     // Smooth mode gets its motion from the 50ms worker cadence. CSS transitions
     // are intentionally disabled in both modes so a new interval never animates
     // from the prior ring state back to full.

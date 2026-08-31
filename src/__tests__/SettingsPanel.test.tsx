@@ -79,4 +79,48 @@ describe('SettingsPanel', () => {
         expect(useWorkoutStore.getState().designVariant).toBe('classic');
         expect(screen.getByTestId('settings-drawer-panel')).not.toHaveClass('bg-[#111412]');
     });
+
+    it('shows the Kinetic Console visual identity controls and persists each color independently', async () => {
+        useWorkoutStore.setState({ designVariant: 'kinetic' });
+        useWorkoutStore.setState((state) => ({
+            settings: {
+                ...state.settings,
+                kineticThemeColor: '#ffffff',
+                kineticActiveColor: '#ffffff',
+                kineticRestColor: '#ffffff',
+                kineticConcentricColor: '#ffffff',
+                kineticFinishedColor: '#ffffff',
+            },
+        }));
+
+        render(<SettingsPanel isOpen onClose={vi.fn()} />);
+
+        const colorInputs = {
+            theme: await screen.findByLabelText('Theme'),
+            active: screen.getByLabelText('Active'),
+            resting: screen.getByLabelText('Resting'),
+            concentric: screen.getByLabelText('Concentric'),
+            finished: screen.getByLabelText('Finished'),
+        };
+
+        expect(colorInputs.theme).toHaveValue('#ffffff');
+        expect(colorInputs.active).toHaveValue('#ffffff');
+        expect(colorInputs.resting).toHaveValue('#ffffff');
+        expect(colorInputs.concentric).toHaveValue('#ffffff');
+        expect(colorInputs.finished).toHaveValue('#ffffff');
+
+        fireEvent.change(colorInputs.theme, { target: { value: '#102030' } });
+        fireEvent.change(colorInputs.active, { target: { value: '#203040' } });
+        fireEvent.change(colorInputs.resting, { target: { value: '#304050' } });
+        fireEvent.change(colorInputs.concentric, { target: { value: '#405060' } });
+        fireEvent.change(colorInputs.finished, { target: { value: '#506070' } });
+
+        expect(useWorkoutStore.getState().settings).toMatchObject({
+            kineticThemeColor: '#102030',
+            kineticActiveColor: '#203040',
+            kineticRestColor: '#304050',
+            kineticConcentricColor: '#405060',
+            kineticFinishedColor: '#506070',
+        });
+    });
 });

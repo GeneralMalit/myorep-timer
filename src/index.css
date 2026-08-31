@@ -234,8 +234,8 @@
   --card-foreground: 0 0% 96%;
   --popover: 210 7% 9%;
   --popover-foreground: 0 0% 96%;
-  --primary: 11 100% 60%;
-  --primary-foreground: 0 0% 100%;
+  --primary: 0 0% 100%;
+  --primary-foreground: 210 8% 6%;
   --secondary: 210 6% 14%;
   --secondary-foreground: 0 0% 96%;
   --muted: 210 6% 14%;
@@ -244,9 +244,9 @@
   --accent-foreground: 0 0% 96%;
   --border: 210 7% 17%;
   --input: 210 7% 17%;
-  --ring: 11 100% 60%;
-  --color-primary: hsl(11 100% 60%);
-  --color-ring: hsl(11 100% 60%);
+  --ring: 0 0% 100%;
+  --color-primary: var(--kinetic-theme-color, #ffffff);
+  --color-ring: var(--kinetic-theme-color, #ffffff);
   --radius: 0.625rem;
   font-family: 'Manrope', ui-sans-serif, system-ui, sans-serif;
 }
@@ -254,6 +254,6 @@
 .design-kinetic.theme-ocean,
 .design-kinetic.theme-fire,
 .design-kinetic.theme-forest {
-  --color-primary: hsl(11 100% 60%) !important;
-  --color-ring: hsl(11 100% 60%) !important;
+  --color-primary: var(--kinetic-theme-color, #ffffff) !important;
+  --color-ring: var(--kinetic-theme-color, #ffffff) !important;
 }

@@ -48,25 +48,6 @@ const MAX_RAIL_WIDTH = 360;
 
 const clampRailWidth = (width: number) => Math.max(MIN_RAIL_WIDTH, Math.min(MAX_RAIL_WIDTH, Math.round(width)));
 
-const rail = {
-    graphite: '#151617',
-    graphiteElevated: '#1c1e20',
-    graphiteSoft: '#24272a',
-    line: 'rgba(255,255,255,0.1)',
-    text: '#f2f0ed',
-    muted: '#96908b',
-    coral: '#ff6847',
-    lime: '#a8ff5a',
-    blue: '#74c7ff',
-} as const;
-
-const themes = [
-    { id: 'theme-default', name: 'Deep Purple', color: '#bb86fc' },
-    { id: 'theme-ocean', name: 'Ocean Blue', color: '#03dac6' },
-    { id: 'theme-fire', name: 'Crimson Fire', color: '#cf6679' },
-    { id: 'theme-forest', name: 'Neon Forest', color: '#00e676' },
-] as const;
-
 const formatLastUsed = (value: string | null | undefined): string => {
     if (!value) return 'Not used yet';
 
@@ -96,15 +77,15 @@ const NavButton = ({ icon, label, active = false, disabled = false, collapsed = 
         title={collapsed ? label : undefined}
         className={cn(
             'group flex min-h-10 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold transition-colors duration-150',
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff6847] focus-visible:ring-offset-2 focus-visible:ring-offset-[#151617]',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--kinetic-theme-color)] focus-visible:ring-offset-2 focus-visible:ring-offset-[#151617]',
             active
-                ? 'bg-[#ff6847] text-[#161616]'
+                ? 'bg-[var(--kinetic-theme-color)] text-[#161616]'
                 : 'text-[#b7b1ad] hover:bg-white/[0.07] hover:text-[#f2f0ed]',
             disabled && 'cursor-not-allowed opacity-45 hover:bg-transparent hover:text-[#b7b1ad]',
             collapsed && 'justify-center px-0',
         )}
     >
-        <span className={cn('shrink-0', active ? 'text-[#161616]' : 'text-[#ff6847]')}>{icon}</span>
+        <span className={cn('shrink-0', active ? 'text-[#161616]' : 'text-[var(--kinetic-theme-color)]')}>{icon}</span>
         {!collapsed && <span className="min-w-0 flex-1 truncate">{label}</span>}
         {!collapsed && badge && <span className="text-[10px] font-medium text-current/55">{badge}</span>}
     </button>
@@ -123,7 +104,7 @@ const ActionButton = ({ label, children, className, ...props }: ActionButtonProp
         className={cn(
             'inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-white/10 text-[#aaa39f] transition-colors duration-150',
             'hover:border-white/20 hover:bg-white/[0.08] hover:text-[#f2f0ed]',
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff6847] focus-visible:ring-offset-1 focus-visible:ring-offset-[#1c1e20]',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--kinetic-theme-color)] focus-visible:ring-offset-1 focus-visible:ring-offset-[#1c1e20]',
             'disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent',
             className,
         )}
@@ -150,7 +131,7 @@ const SessionRow = ({ session, duration, disabled, onLoad, onDuplicate, onRename
                 type="button"
                 onClick={onLoad}
                 disabled={disabled}
-                className="min-w-0 flex-1 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff6847] focus-visible:ring-offset-1 focus-visible:ring-offset-[#151617] disabled:cursor-not-allowed disabled:opacity-50"
+                className="min-w-0 flex-1 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--kinetic-theme-color)] focus-visible:ring-offset-1 focus-visible:ring-offset-[#151617] disabled:cursor-not-allowed disabled:opacity-50"
                 title={`Load ${session.name}`}
             >
                 <div className="truncate text-xs font-semibold text-[#e7e3df] group-hover:text-white">{session.name}</div>
@@ -160,7 +141,7 @@ const SessionRow = ({ session, duration, disabled, onLoad, onDuplicate, onRename
                     <span>{duration}</span>
                 </div>
             </button>
-            <ActionButton label={`Load ${session.name}`} onClick={onLoad} disabled={disabled} className="text-[#ff8467]">
+            <ActionButton label={`Load ${session.name}`} onClick={onLoad} disabled={disabled} className="text-[var(--kinetic-theme-color)]">
                 <FolderOpen size={13} />
             </ActionButton>
         </div>
@@ -196,7 +177,7 @@ const WorkoutRow = ({ workout, disabled, onLoad, onRename, onDelete }: WorkoutRo
                 type="button"
                 onClick={onLoad}
                 disabled={disabled}
-                className="min-w-0 flex-1 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff6847] focus-visible:ring-offset-1 focus-visible:ring-offset-[#151617] disabled:cursor-not-allowed disabled:opacity-50"
+                className="min-w-0 flex-1 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--kinetic-theme-color)] focus-visible:ring-offset-1 focus-visible:ring-offset-[#151617] disabled:cursor-not-allowed disabled:opacity-50"
                 title={`Load ${workout.name}`}
             >
                 <div className="truncate text-xs font-semibold text-[#e7e3df] group-hover:text-white">{workout.name}</div>
@@ -206,7 +187,7 @@ const WorkoutRow = ({ workout, disabled, onLoad, onRename, onDelete }: WorkoutRo
                     <span>{workout.reps} activation reps</span>
                 </div>
             </button>
-            <ActionButton label={`Load ${workout.name}`} onClick={onLoad} disabled={disabled} className="text-[#ff8467]">
+            <ActionButton label={`Load ${workout.name}`} onClick={onLoad} disabled={disabled} className="text-[var(--kinetic-theme-color)]">
                 <FolderOpen size={13} />
             </ActionButton>
         </div>
@@ -225,8 +206,6 @@ const WorkoutRow = ({ workout, disabled, onLoad, onRename, onDelete }: WorkoutRo
 );
 
 const KineticSidebar = ({
-    currentTheme,
-    setTheme,
     setShowSettings,
     onOpenProtocolIntel,
     showSettings,
@@ -271,7 +250,6 @@ const KineticSidebar = ({
     onWidthChange,
 }: KineticSidebarProps) => {
     const [libraryTab, setLibraryTab] = useState<LibraryTab>('sessions');
-    const [showThemes, setShowThemes] = useState(false);
     const fileInputRef = useRef<HTMLInputElement | null>(null);
     const autoCollapsedGuestAccountRef = useRef(false);
     const prepTime = useWorkoutStore((state) => state.settings.prepTime);
@@ -413,12 +391,12 @@ const KineticSidebar = ({
                             updateRailWidth(MAX_RAIL_WIDTH);
                         }
                     }}
-                    className="absolute inset-y-0 right-0 z-10 w-2 cursor-col-resize touch-none outline-none after:absolute after:inset-y-0 after:left-1/2 after:w-px after:-translate-x-1/2 after:bg-transparent hover:after:bg-[#ff6847]/80 focus-visible:after:bg-[#ff6847]"
+                    className="absolute inset-y-0 right-0 z-10 w-2 cursor-col-resize touch-none outline-none after:absolute after:inset-y-0 after:left-1/2 after:w-px after:-translate-x-1/2 after:bg-transparent hover:after:bg-[var(--kinetic-theme-color)] focus-visible:after:bg-[var(--kinetic-theme-color)]"
                 />
             )}
             <header className={cn('flex min-h-16 shrink-0 items-center border-b border-white/10 px-3', isCollapsed && !isMobileViewport && 'md:justify-center md:px-2')}>
                 <div className={cn('flex min-w-0 flex-1 items-center gap-3', isCollapsed && !isMobileViewport && 'md:flex-none')}>
-                    <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[#ff6847] text-[#161616]" aria-hidden="true">
+                    <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[var(--kinetic-theme-color)] text-[#161616]" aria-hidden="true">
                         <Activity size={19} strokeWidth={2.4} />
                     </div>
                     {shouldShowExpandedRail && (
@@ -435,7 +413,7 @@ const KineticSidebar = ({
                     aria-expanded={!isCollapsed}
                     className={cn(
                         'grid h-8 w-8 shrink-0 place-items-center rounded-md text-[#918a85] transition-colors hover:bg-white/[0.08] hover:text-white',
-                        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff6847] focus-visible:ring-offset-2 focus-visible:ring-offset-[#151617]',
+                        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--kinetic-theme-color)] focus-visible:ring-offset-2 focus-visible:ring-offset-[#151617]',
                         isCollapsed && !isMobileViewport && 'md:hidden',
                     )}
                 >
@@ -446,7 +424,7 @@ const KineticSidebar = ({
                         type="button"
                         onClick={toggleSidebar}
                         aria-label="Open navigation"
-                        className="hidden h-8 w-8 place-items-center rounded-md text-[#918a85] transition-colors hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff6847] focus-visible:ring-offset-2 focus-visible:ring-offset-[#151617] md:grid"
+                        className="hidden h-8 w-8 place-items-center rounded-md text-[#918a85] transition-colors hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--kinetic-theme-color)] focus-visible:ring-offset-2 focus-visible:ring-offset-[#151617] md:grid"
                     >
                         <ChevronRight size={17} />
                     </button>
@@ -488,7 +466,7 @@ const KineticSidebar = ({
                                     type="button"
                                     onClick={onCreateSession}
                                     disabled={!isSetupMode || !canAccessSessionBuilder}
-                                    className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold text-[#ff8061] transition-colors hover:bg-[#ff6847]/10 hover:text-[#ff967b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff6847] disabled:cursor-not-allowed disabled:opacity-40"
+                                    className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold text-[var(--kinetic-theme-color)] transition-colors hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--kinetic-theme-color)] disabled:cursor-not-allowed disabled:opacity-40"
                                 >
                                     <Plus size={13} />
                                     New
@@ -512,8 +490,8 @@ const KineticSidebar = ({
                                 aria-selected={libraryTab === 'sessions'}
                                 onClick={() => setLibraryTab('sessions')}
                                 className={cn(
-                                    'flex-1 border-b-2 px-1 pb-2 text-[11px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff6847] focus-visible:ring-inset',
-                                    libraryTab === 'sessions' ? 'border-[#ff6847] text-[#f2f0ed]' : 'border-transparent text-[#77716d] hover:text-[#c0bab5]',
+                                    'flex-1 border-b-2 px-1 pb-2 text-[11px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--kinetic-theme-color)] focus-visible:ring-inset',
+                                    libraryTab === 'sessions' ? 'border-[var(--kinetic-theme-color)] text-[#f2f0ed]' : 'border-transparent text-[#77716d] hover:text-[#c0bab5]',
                                 )}
                             >
                                 Sessions
@@ -524,8 +502,8 @@ const KineticSidebar = ({
                                 aria-selected={libraryTab === 'workouts'}
                                 onClick={() => setLibraryTab('workouts')}
                                 className={cn(
-                                    'flex-1 border-b-2 px-1 pb-2 text-[11px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff6847] focus-visible:ring-inset',
-                                    libraryTab === 'workouts' ? 'border-[#ff6847] text-[#f2f0ed]' : 'border-transparent text-[#77716d] hover:text-[#c0bab5]',
+                                    'flex-1 border-b-2 px-1 pb-2 text-[11px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--kinetic-theme-color)] focus-visible:ring-inset',
+                                    libraryTab === 'workouts' ? 'border-[var(--kinetic-theme-color)] text-[#f2f0ed]' : 'border-transparent text-[#77716d] hover:text-[#c0bab5]',
                                 )}
                             >
                                 Workouts
@@ -558,7 +536,7 @@ const KineticSidebar = ({
                                         type="button"
                                         onClick={onSaveCurrent}
                                         disabled={!isSetupMode}
-                                        className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md bg-[#ff6847] px-2 text-[10px] font-bold text-[#161616] transition-colors hover:bg-[#ff8061] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff6847] focus-visible:ring-offset-1 focus-visible:ring-offset-[#151617] disabled:cursor-not-allowed disabled:opacity-40"
+                                        className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md bg-[var(--kinetic-theme-color)] px-2 text-[10px] font-bold text-[#161616] transition-colors hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--kinetic-theme-color)] focus-visible:ring-offset-1 focus-visible:ring-offset-[#151617] disabled:cursor-not-allowed disabled:opacity-40"
                                     >
                                         <Save size={12} />
                                         Save
@@ -567,7 +545,7 @@ const KineticSidebar = ({
                                         type="button"
                                         onClick={onSaveAsCurrent}
                                         disabled={!isSetupMode}
-                                        className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-white/10 px-2 text-[10px] font-semibold text-[#b7b1ad] transition-colors hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff6847] focus-visible:ring-offset-1 focus-visible:ring-offset-[#151617] disabled:cursor-not-allowed disabled:opacity-40"
+                                        className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-white/10 px-2 text-[10px] font-semibold text-[#b7b1ad] transition-colors hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--kinetic-theme-color)] focus-visible:ring-offset-1 focus-visible:ring-offset-[#151617] disabled:cursor-not-allowed disabled:opacity-40"
                                     >
                                         <Copy size={12} />
                                         Save as
@@ -615,44 +593,10 @@ const KineticSidebar = ({
                         )}
                     </section>
 
-                    <div className="mx-3 border-t border-white/10" />
-
-                    <section className="px-3 pb-4 pt-4" aria-labelledby="kinetic-theme-heading">
-                        <button
-                            type="button"
-                            onClick={() => setShowThemes((visible) => !visible)}
-                            aria-expanded={showThemes}
-                            className="flex w-full items-center justify-between rounded-md px-1 py-1 text-left text-xs font-semibold text-[#d0cbc6] transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff6847]"
-                        >
-                            <span id="kinetic-theme-heading" className="flex items-center gap-2"><span className="h-2 w-2 rounded-full" style={{ backgroundColor: themes.find((theme) => theme.id === currentTheme)?.color ?? rail.coral }} />Theme</span>
-                            <ChevronDown size={14} className={cn('text-[#77716d] transition-transform', showThemes && 'rotate-180')} />
-                        </button>
-                        {showThemes && (
-                            <div className="mt-2 grid grid-cols-2 gap-1.5">
-                                {themes.map((theme) => (
-                                    <button
-                                        key={theme.id}
-                                        type="button"
-                                        onClick={() => setTheme(theme.id)}
-                                        aria-pressed={currentTheme === theme.id}
-                                        title={theme.name}
-                                        className={cn(
-                                            'flex min-w-0 items-center gap-2 rounded-md border px-2 py-2 text-left text-[10px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff6847]',
-                                            currentTheme === theme.id ? 'border-white/30 bg-white/[0.08] text-white' : 'border-white/10 text-[#908a85] hover:bg-white/[0.06] hover:text-[#d6d0cb]',
-                                        )}
-                                    >
-                                        <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: theme.color }} aria-hidden="true" />
-                                        <span className="truncate">{theme.name}</span>
-                                    </button>
-                                ))}
-                            </div>
-                        )}
-                    </section>
-
                     {account && (
                         <section className="border-t border-white/10 px-3 pb-5 pt-4" aria-labelledby="kinetic-account-heading">
                             <div className="mb-2 flex items-center gap-2 px-1 text-xs font-semibold text-[#f2f0ed]">
-                                <UserRound size={14} className="text-[#ff6847]" />
+                                <UserRound size={14} className="text-[var(--kinetic-theme-color)]" />
                                 <span id="kinetic-account-heading">Account</span>
                             </div>
                             <div className="mb-2 flex items-center justify-between gap-2 rounded-lg border border-white/10 bg-[#1c1e20] px-3 py-2">
@@ -665,7 +609,7 @@ const KineticSidebar = ({
                                     onClick={onToggleAccountCardCollapsed}
                                     aria-expanded={!isAccountCardCollapsed}
                                     aria-label={isAccountCardCollapsed ? 'Show account details' : 'Hide account details'}
-                                    className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-[#918a85] transition-colors hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff6847]"
+                                    className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-[#918a85] transition-colors hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--kinetic-theme-color)]"
                                 >
                                     <ChevronDown size={14} className={cn('transition-transform', !isAccountCardCollapsed && 'rotate-180')} />
                                 </button>
@@ -709,12 +653,12 @@ const KineticSidebar = ({
                     aria-pressed={showSettings}
                     title={isCollapsed && !isMobileViewport ? 'Settings' : undefined}
                     className={cn(
-                        'flex h-10 w-full items-center gap-3 rounded-lg px-3 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff6847] focus-visible:ring-offset-2 focus-visible:ring-offset-[#151617]',
+                        'flex h-10 w-full items-center gap-3 rounded-lg px-3 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--kinetic-theme-color)] focus-visible:ring-offset-2 focus-visible:ring-offset-[#151617]',
                         showSettings ? 'bg-white/[0.1] text-white' : 'text-[#9d9691] hover:bg-white/[0.07] hover:text-[#f2f0ed]',
                         isCollapsed && !isMobileViewport && 'md:justify-center md:px-0',
                     )}
                 >
-                    <Settings2 size={17} className={showSettings ? 'text-[#ff6847]' : undefined} />
+                    <Settings2 size={17} className={showSettings ? 'text-[var(--kinetic-theme-color)]' : undefined} />
                     {shouldShowExpandedRail && <span>Settings</span>}
                 </button>
                 {shouldShowExpandedRail && <div className="mt-2 px-1 text-[10px] text-[#655f5a]">v{APP_VERSION}</div>}

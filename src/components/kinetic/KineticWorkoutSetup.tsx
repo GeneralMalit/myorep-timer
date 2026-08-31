@@ -62,11 +62,11 @@ const KineticWorkoutSetup = ({ onStart, onSelectSession, canUseSessionBuilder }:
         disabled?: boolean;
     }> = [
         { key: 'sets', label: 'Total cycles', value: sets, icon: RotateCcw, unit: '', tone: '#f2f0ed' },
-        { key: 'reps', label: 'Activation reps', value: reps, icon: Activity, unit: '', tone: '#ff6a47' },
-        { key: 'seconds', label: 'Activation pace', value: seconds, icon: Zap, unit: 'sec', tone: '#ff8a4c' },
-        { key: 'rest', label: 'Rest interval', value: rest, icon: Square, unit: 'sec', tone: '#74c7ff', disabled: isSingleCycle },
-        { key: 'myoReps', label: 'Myo reps', value: myoReps, icon: Activity, unit: '', tone: '#a8ff5a', disabled: isSingleCycle },
-        { key: 'myoWorkSecs', label: 'Myo pace', value: myoWorkSecs, icon: Zap, unit: 'sec', tone: '#a8ff5a', disabled: isSingleCycle },
+        { key: 'reps', label: 'Activation reps', value: reps, icon: Activity, unit: '', tone: settings.kineticActiveColor ?? '#ffffff' },
+        { key: 'seconds', label: 'Activation pace', value: seconds, icon: Zap, unit: 'sec', tone: settings.kineticActiveColor ?? '#ffffff' },
+        { key: 'rest', label: 'Rest interval', value: rest, icon: Square, unit: 'sec', tone: settings.kineticRestColor ?? '#ffffff', disabled: isSingleCycle },
+        { key: 'myoReps', label: 'Myo reps', value: myoReps, icon: Activity, unit: '', tone: settings.kineticConcentricColor ?? '#ffffff', disabled: isSingleCycle },
+        { key: 'myoWorkSecs', label: 'Myo pace', value: myoWorkSecs, icon: Zap, unit: 'sec', tone: settings.kineticConcentricColor ?? '#ffffff', disabled: isSingleCycle },
     ];
 
     const adjustControl = (key: WorkoutConfigField, currentValue: string, delta: number) => {
@@ -93,11 +93,11 @@ const KineticWorkoutSetup = ({ onStart, onSelectSession, canUseSessionBuilder }:
             </header>
 
             <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 border border-white/10 bg-[#15171a] px-4 py-3 text-sm">
-                <div className="flex items-center gap-2 text-[#ff6a47]"><Activity size={15} /><span>Activation</span></div>
+                <div className="flex items-center gap-2" style={{ color: settings.kineticActiveColor ?? '#ffffff' }}><Activity size={15} /><span>Activation</span></div>
                 <span className="text-zinc-600">→</span>
-                <div className="flex items-center gap-2 text-[#74c7ff]"><Clock3 size={15} /><span>Rest</span></div>
+                <div className="flex items-center gap-2" style={{ color: settings.kineticRestColor ?? '#ffffff' }}><Clock3 size={15} /><span>Rest</span></div>
                 <span className="text-zinc-600">→</span>
-                <div className="flex items-center gap-2 text-[#a8ff5a]"><Zap size={15} /><span>Myo clusters</span></div>
+                <div className="flex items-center gap-2" style={{ color: settings.kineticConcentricColor ?? '#ffffff' }}><Zap size={15} /><span>Myo clusters</span></div>
                 <div className="ml-auto flex items-center gap-2 text-zinc-400"><Clock3 size={15} /><span>{estimatedDuration} est.</span></div>
                 <div className="flex items-center gap-2 border-l border-white/10 pl-4 text-zinc-300">
                     <Mic2 size={15} />
@@ -164,7 +164,8 @@ const KineticWorkoutSetup = ({ onStart, onSelectSession, canUseSessionBuilder }:
                         audioEngine.init();
                         onStart();
                     }}
-                    className="h-12 rounded-lg bg-[#ff5b36] px-5 text-sm font-bold text-white hover:bg-[#ff6a47]"
+                    className="h-12 rounded-lg px-5 text-sm font-bold hover:brightness-110"
+                    style={{ backgroundColor: settings.kineticThemeColor ?? '#ffffff', color: getReadableForeground(settings.kineticThemeColor ?? '#ffffff') }}
                 >
                     Start workout <ChevronRight size={17} />
                 </Button>
@@ -172,6 +173,21 @@ const KineticWorkoutSetup = ({ onStart, onSelectSession, canUseSessionBuilder }:
             <div className="mt-5 flex items-center gap-2 text-xs text-zinc-500"><Volume2 size={14} /> Change audio and display preferences in Settings.</div>
         </section>
     );
+};
+
+const getReadableForeground = (color: string): '#111412' | '#ffffff' => {
+    const normalized = color.replace('#', '');
+    const expanded = normalized.length === 3
+        ? normalized.split('').map((part) => `${part}${part}`).join('')
+        : normalized;
+
+    if (!/^[\da-f]{6}$/i.test(expanded)) return '#ffffff';
+
+    const luminance = ((parseInt(expanded.slice(0, 2), 16) * 299)
+        + (parseInt(expanded.slice(2, 4), 16) * 587)
+        + (parseInt(expanded.slice(4, 6), 16) * 114)) / 1000;
+
+    return luminance >= 150 ? '#111412' : '#ffffff';
 };
 
 export default KineticWorkoutSetup;

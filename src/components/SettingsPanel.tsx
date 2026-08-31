@@ -26,6 +26,36 @@ interface SettingsPanelProps {
     onClose: () => void;
 }
 
+type KineticVisualColorKey =
+    | 'kineticThemeColor'
+    | 'kineticActiveColor'
+    | 'kineticRestColor'
+    | 'kineticConcentricColor'
+    | 'kineticFinishedColor';
+
+type KineticVisualSettings = WorkoutSettings & Partial<Record<KineticVisualColorKey, string>>;
+
+type VisualIdentityItem = {
+    label: string;
+    key: keyof WorkoutSettings | KineticVisualColorKey;
+};
+
+const KINETIC_DEFAULT_COLOR = '#FFFFFF';
+
+const CLASSIC_VISUAL_COLORS: VisualIdentityItem[] = [
+    { label: 'Active', key: 'activeColor' },
+    { label: 'Resting', key: 'restColor' },
+    { label: 'Concentric', key: 'concentricColor' },
+];
+
+const KINETIC_VISUAL_COLORS: VisualIdentityItem[] = [
+    { label: 'Theme', key: 'kineticThemeColor' },
+    { label: 'Active', key: 'kineticActiveColor' },
+    { label: 'Resting', key: 'kineticRestColor' },
+    { label: 'Concentric', key: 'kineticConcentricColor' },
+    { label: 'Finished', key: 'kineticFinishedColor' },
+];
+
 const useMobileViewport = () => {
     const [isMobileViewport, setIsMobileViewport] = useState(() => {
         if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
@@ -68,12 +98,23 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
     const myoWorkSecs = useWorkoutStore((state) => state.myoWorkSecs);
     const selectedDesignVariant = designVariant ?? 'classic';
     const isKinetic = selectedDesignVariant === 'kinetic';
+    const kineticSettings = settings as KineticVisualSettings;
+    const kineticThemeColor = kineticSettings.kineticThemeColor ?? KINETIC_DEFAULT_COLOR;
+    const visualIdentityItems = isKinetic ? KINETIC_VISUAL_COLORS : CLASSIC_VISUAL_COLORS;
     const isMobileViewport = useMobileViewport();
     const layout = getResponsiveLayout(isMobileViewport, settingsPanelMobileLayout, settingsPanelDesktopLayout);
     const [shouldRenderContent, setShouldRenderContent] = useState(isOpen);
     const kineticSwitchClassName = isKinetic
         ? 'border-[#424940] bg-[#272c27] data-[state=checked]:border-[#A8FF5A] data-[state=checked]:bg-[#A8FF5A] data-[state=checked]:[&>span]:bg-[#111412] data-[state=unchecked]:bg-[#272c27] focus-visible:ring-[#FF5B36] focus-visible:ring-offset-[#111412]'
         : undefined;
+
+    const getVisualIdentityColor = (item: VisualIdentityItem) => {
+        if (isKinetic) {
+            return kineticSettings[item.key as KineticVisualColorKey] ?? KINETIC_DEFAULT_COLOR;
+        }
+
+        return settings[item.key as keyof WorkoutSettings] as string;
+    };
 
     const handleChange = <K extends keyof WorkoutSettings>(key: K, value: WorkoutSettings[K]) => {
         setSettings({ [key]: value });
@@ -218,35 +259,40 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                                 </p>
                             </section>
 
-                            <section className={cn(layout.section, isKinetic && 'space-y-3 rounded-[10px] border-[#343833] bg-[#171a17] p-4')}>
-                                <div className={cn(layout.sectionTitle, isKinetic && 'normal-case text-[11px] font-semibold tracking-[0.08em] text-[#9EA69B]')}>
+                            <section
+                                className={cn(layout.section, isKinetic && 'space-y-3 rounded-[10px] border-[#343833] bg-[#171a17] p-4')}
+                                style={isKinetic ? { '--kinetic-theme-color': kineticThemeColor } as React.CSSProperties : undefined}
+                            >
+                                <div className={cn(layout.sectionTitle, isKinetic && 'normal-case text-[11px] font-semibold tracking-[0.08em] text-[var(--kinetic-theme-color)]')}>
                                     <Palette size={16} />
                                     <span>Visual Identity</span>
                                 </div>
                                 <div className={layout.visualGrid}>
-                                    {[
-                                        { label: 'Active', key: 'activeColor' },
-                                        { label: 'Resting', key: 'restColor' },
-                                        { label: 'Concentric', key: 'concentricColor' },
-                                    ].map((item) => (
-                                        <div key={item.key} className={cn(layout.visualCard, isKinetic && 'space-y-2 rounded-[8px] border-[#343833] bg-[#111412] p-3')}>
-                                            <Label className={cn(layout.fieldLabel, isKinetic && 'normal-case px-0 text-[11px] font-medium tracking-normal text-[#C6CAC3]')}>
-                                                {item.label}
-                                            </Label>
-                                            <div className="flex items-center gap-3">
-                                                <div
-                                                    className={cn(layout.colorSwatch, isKinetic && 'h-8 w-8 rounded-[7px] border-[#535A52] shadow-none')}
-                                                    style={{ backgroundColor: (settings as any)[item.key] }}
-                                                />
-                                                <Input
-                                                    type="color"
-                                                    value={(settings as any)[item.key]}
-                                                    onChange={(e) => handleChange(item.key as any, e.target.value)}
-                                                    className={cn(layout.colorInput, isKinetic && 'h-8 rounded-[6px] bg-transparent')}
-                                                />
+                                    {visualIdentityItems.map((item) => {
+                                        const colorValue = getVisualIdentityColor(item);
+                                        const inputId = `settings-${item.key}`;
+
+                                        return (
+                                            <div key={item.key} className={cn(layout.visualCard, isKinetic && 'space-y-2 rounded-[8px] border-[#343833] bg-[#111412] p-3')}>
+                                                <Label htmlFor={inputId} className={cn(layout.fieldLabel, isKinetic && 'normal-case px-0 text-[11px] font-medium tracking-normal text-[#C6CAC3]')}>
+                                                    {item.label}
+                                                </Label>
+                                                <div className="flex items-center gap-3">
+                                                    <div
+                                                        className={cn(layout.colorSwatch, isKinetic && 'h-8 w-8 rounded-[7px] border-[var(--kinetic-theme-color)] shadow-none')}
+                                                        style={{ backgroundColor: colorValue }}
+                                                    />
+                                                    <Input
+                                                        id={inputId}
+                                                        type="color"
+                                                        value={colorValue}
+                                                        onChange={(e) => handleChange(item.key as any, e.target.value)}
+                                                        className={cn(layout.colorInput, isKinetic && 'h-8 rounded-[6px] bg-transparent focus-visible:ring-[var(--kinetic-theme-color)] focus-visible:ring-offset-[#111412]')}
+                                                    />
+                                                </div>
                                             </div>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             </section>
 
