@@ -1,3 +1,11 @@
+## [3.9.1](https://github.com/GeneralMalit/myorep-timer/compare/v3.9.0...v3.9.1) (2026-08-31)
+
+
+### Bug Fixes
+
+* migrate kinetic palette defaults ([401b41d](https://github.com/GeneralMalit/myorep-timer/commit/401b41d4cddf96a1356ee919fd67b235b1cf5271))
+* restore kinetic console palette defaults ([1409526](https://github.com/GeneralMalit/myorep-timer/commit/1409526d0485fdbdc0da295bbe6f12d170fbc410))
+
 # [3.9.0](https://github.com/GeneralMalit/myorep-timer/compare/v3.8.5...v3.9.0) (2026-08-31)
 
 
