@@ -1,3 +1,10 @@
+# [3.10.0](https://github.com/GeneralMalit/myorep-timer/compare/v3.9.1...v3.10.0) (2026-09-08)
+
+
+### Features
+
+* add session progression reminders ([f35eabc](https://github.com/GeneralMalit/myorep-timer/commit/f35eabcab8a6b592b67fb3825b85722e2675fbc3))
+
 ## [3.9.1](https://github.com/GeneralMalit/myorep-timer/compare/v3.9.0...v3.9.1) (2026-08-31)
 
 
