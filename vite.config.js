@@ -130,20 +130,19 @@ export default defineConfig(({ mode }) => {
       }),
 
       shouldObfuscate ? obfuscator({
+        apply: 'build',
+        include: [/[\\/]src[\\/](?:store[\\/]useWorkoutStore|utils[\\/](?:audioEngine|timerWorker))\.ts(?:\?.*)?$/],
         options: {
-          controlFlowFlattening: true,
-          controlFlowFlatteningThreshold: 0.75,
-          deadCodeInjection: true,
-          deadCodeInjectionThreshold: 0.4,
-          debugProtection: true,
-          debugProtectionInterval: 2000,
+          compact: true,
+          controlFlowFlattening: false,
+          deadCodeInjection: false,
+          debugProtection: false,
           disableConsoleOutput: true,
           identifierNamesGenerator: 'hexadecimal',
           renameGlobals: false,
-          rotateStringArray: true,
-          stringArray: true,
-          stringArrayEncoding: ['base64'],
-          stringArrayThreshold: 0.75,
+          selfDefending: false,
+          simplify: true,
+          stringArray: false,
           reservedNames: [
             '^speechSynthesis$',
             '^getVoices$',
@@ -173,6 +172,23 @@ export default defineConfig(({ mode }) => {
 
     build: {
       sourcemap: isCapacitorMode && !isCapacitorRelease,
+
+      // Keep the stable, initial UI dependencies in one cacheable chunk. The
+      // app-specific entry chunk can then change without invalidating React,
+      // Zustand, Radix, or the shared icon/UI helpers on every release.
+      rolldownOptions: {
+        output: {
+          advancedChunks: {
+            groups: [
+              {
+                name: 'vendor-core',
+                test: /node_modules[\\/](?:react|react-dom|zustand|lucide-react|@radix-ui[\\/](?:react-label|react-slot|react-switch)|class-variance-authority|clsx|tailwind-merge)[\\/]/,
+                priority: 10,
+              },
+            ],
+          },
+        },
+      },
     },
 
     define: {

@@ -2,6 +2,8 @@ export interface SyncMetadata {
     localId: string;
     remoteId: string | null;
     revision: number;
+    /** Last remote revision observed by this client. Null means legacy/unknown. */
+    baseRevision: number | null;
     updatedAt: string;
     dirty: boolean;
     pendingDelete: boolean;
@@ -19,21 +21,37 @@ export type SyncQueueStatus =
     | 'paused'
     | 'paused-offline'
     | 'paused-auth'
+    | 'dead-letter'
     | 'error';
 export type FirstSyncState = 'idle' | 'pending-choice' | 'processing';
 export type FirstSyncChoice = 'upload-local' | 'replace-local';
 
 export interface SyncQueueItem {
     id: string;
+    operationId: string;
+    ownerUserId: string;
+    authGeneration: string;
     entityType: SyncEntityType;
     entityId: string;
     localId: string;
     operation: SyncOperation;
     revision: number;
+    expectedRemoteRevision: number | null;
     queuedAt: string;
     attempts: number;
     nextRetryAt: string | null;
     lastError: string | null;
+    deadLetteredAt: string | null;
+}
+
+export interface SyncOperationToken {
+    operationId: string;
+    ownerUserId: string;
+    authGeneration: string;
+    entityType: SyncEntityType;
+    localId: string;
+    revision: number;
+    expectedRemoteRevision: number | null;
 }
 
 export interface SyncPendingCounts {
@@ -42,17 +60,20 @@ export interface SyncPendingCounts {
     sessions: number;
     deletes: number;
     upserts?: number;
+    deadLetters?: number;
 }
 
 export interface SyncRecoveryBackup {
     createdAt: string;
+    expiresAt?: string;
     workouts: unknown;
     sessions: unknown;
-    queue?: SyncQueueItem[];
+    queue?: unknown[];
     syncEnabled?: boolean;
-    queueStatus?: SyncQueueStatus;
-    firstSyncState?: FirstSyncState;
-    pendingCounts?: SyncPendingCounts;
+    queueStatus?: SyncQueueStatus | 'queued';
+    firstSyncState?: FirstSyncState | 'not-started' | 'in-progress' | 'completed';
+    firstSyncOnboardingState?: 'not-started' | 'in-progress' | 'completed';
+    pendingCounts?: SyncPendingCounts | Record<string, number>;
 }
 
 export interface SupabaseProfileRow {

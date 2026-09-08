@@ -1,330 +1,203 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// We need to test the timerWorker logic
-// Since Workers run in isolation, we'll test the logic by mocking the worker environment
+interface WorkerCommand {
+    action: 'start' | 'stop';
+    interval?: number;
+    runId?: number;
+}
 
-describe('timerWorker', () => {
-    let mockPostMessage: ReturnType<typeof vi.fn>;
-    let messageHandler: ((e: MessageEvent) => void) | null = null;
-    let intervalIds: number[] = [];
+interface TickMessage {
+    action: 'tick';
+    elapsed: number;
+    sampleEpochMs: number;
+    runId?: number;
+}
 
-    beforeEach(() => {
-        // Mock self (WorkerGlobalScope)
-        mockPostMessage = vi.fn();
-        intervalIds = [];
+interface ScheduledInterval {
+    callback: () => void;
+    delay: number;
+    active: boolean;
+}
 
-        const mockSelf = {
-            onmessage: null as ((e: MessageEvent) => void) | null,
-            postMessage: mockPostMessage,
+interface MockWorkerScope {
+    onmessage: ((event: MessageEvent<WorkerCommand>) => void) | null;
+    postMessage: ReturnType<typeof vi.fn>;
+}
+
+const TIME_ORIGIN = 1_700_000_000_000;
+
+describe('timerWorker production module', () => {
+    let nowMs: number;
+    let nextIntervalId: number;
+    let intervals: Map<number, ScheduledInterval>;
+    let workerScope: MockWorkerScope;
+    let setIntervalMock: ReturnType<typeof vi.fn>;
+    let clearIntervalMock: ReturnType<typeof vi.fn>;
+
+    const send = (data: WorkerCommand) => {
+        if (!workerScope.onmessage) throw new Error('Worker message handler was not registered');
+        workerScope.onmessage(new MessageEvent('message', { data }));
+    };
+
+    const getOnlyIntervalId = () => {
+        expect(intervals.size).toBe(1);
+        return [...intervals.keys()][0];
+    };
+
+    const fireInterval = (id: number) => {
+        const interval = intervals.get(id);
+        if (!interval?.active) return false;
+
+        interval.callback();
+        return true;
+    };
+
+    beforeEach(async () => {
+        vi.resetModules();
+
+        nowMs = 0;
+        nextIntervalId = 1;
+        intervals = new Map();
+        workerScope = {
+            onmessage: null,
+            postMessage: vi.fn(),
         };
 
-        // Read and execute worker code in mocked environment
-        // The worker code uses 'self' which we need to mock
-        const workerModule = `
-            let timerId = null;
-            let currentInterval = null;
-            let startTime = 0;
+        setIntervalMock = vi.fn((callback: TimerHandler, delay?: number) => {
+            if (typeof callback !== 'function') throw new Error('Expected an interval callback');
 
-            self.onmessage = (e) => {
-                if (e.data.action === 'start') {
-                    const interval = e.data.interval || 1000;
-                    
-                    if (timerId) clearInterval(timerId);
+            const id = nextIntervalId++;
+            intervals.set(id, {
+                callback: () => callback(),
+                delay: Number(delay),
+                active: true,
+            });
+            return id;
+        });
+        clearIntervalMock = vi.fn((id: number) => {
+            const interval = intervals.get(Number(id));
+            if (interval) interval.active = false;
+        });
 
-                    currentInterval = interval;
-                    startTime = performance.now();
-                    timerId = setInterval(() => {
-                        const now = performance.now();
-                        const elapsed = now - startTime;
-                        self.postMessage({ action: 'tick', elapsed });
-                    }, interval);
-                } else if (e.data.action === 'stop') {
-                    if (timerId) {
-                        clearInterval(timerId);
-                        timerId = null;
-                        currentInterval = null;
-                    }
-                }
-            };
-        `;
+        vi.stubGlobal('self', workerScope);
+        vi.stubGlobal('performance', {
+            now: vi.fn(() => nowMs),
+            timeOrigin: TIME_ORIGIN,
+        });
+        vi.stubGlobal('setInterval', setIntervalMock);
+        vi.stubGlobal('clearInterval', clearIntervalMock);
 
-        // Store reference to the mock self
-        (global as unknown as Record<string, unknown>).self = mockSelf;
-
-        // Execute worker code
-        eval(workerModule);
-
-        messageHandler = mockSelf.onmessage;
+        await import('../utils/timerWorker');
     });
 
     afterEach(() => {
-        // Clear all intervals
-        intervalIds.forEach(id => clearInterval(id));
-        intervalIds = [];
-        vi.clearAllTimers();
-        vi.useRealTimers();
+        vi.unstubAllGlobals();
+        vi.restoreAllMocks();
     });
 
-    describe('message handling', () => {
-        it('should handle start action and post tick messages', async () => {
-            vi.useFakeTimers();
+    it('registers the real worker handler and posts an exact timestamped tick with its runId', () => {
+        expect(workerScope.onmessage).toBeTypeOf('function');
 
-            const mockPerformanceNow = vi.fn()
-                .mockReturnValueOnce(1000) // startTime
-                .mockReturnValueOnce(1100) // First tick (100ms elapsed)
-                .mockReturnValueOnce(1200); // Second tick (200ms elapsed)
+        nowMs = 10_000;
+        send({ action: 'start', interval: 125, runId: 23 });
 
-            global.performance = {
-                ...global.performance,
-                now: mockPerformanceNow,
-            };
+        const intervalId = getOnlyIntervalId();
+        expect(setIntervalMock).toHaveBeenCalledWith(expect.any(Function), 125);
 
-            // Send start message
-            messageHandler?.(new MessageEvent('message', {
-                data: { action: 'start', interval: 100 }
-            }));
-
-            // Wait for interval to be set up
-            await vi.advanceTimersByTimeAsync(0);
-
-            // Advance time to trigger first tick
-            await vi.advanceTimersByTimeAsync(100);
-
-            expect(mockPostMessage).toHaveBeenCalledWith({
-                action: 'tick',
-                elapsed: 100
-            });
-
-            // Advance time to trigger second tick
-            await vi.advanceTimersByTimeAsync(100);
-
-            expect(mockPostMessage).toHaveBeenCalledTimes(2);
-        });
-
-        it('should handle stop action and clear interval', async () => {
-            vi.useFakeTimers();
-
-            const mockPerformanceNow = vi.fn()
-                .mockReturnValueOnce(1000)
-                .mockReturnValueOnce(1100)
-                .mockReturnValueOnce(1200);
-
-            global.performance = {
-                ...global.performance,
-                now: mockPerformanceNow,
-            };
-
-            // Start the timer
-            messageHandler?.(new MessageEvent('message', {
-                data: { action: 'start', interval: 100 }
-            }));
-
-            await vi.advanceTimersByTimeAsync(0);
-
-            // Stop the timer
-            messageHandler?.(new MessageEvent('message', {
-                data: { action: 'stop' }
-            }));
-
-            await vi.advanceTimersByTimeAsync(0);
-
-            // Reset mock to check no more calls
-            mockPostMessage.mockClear();
-
-            // Advance time - should not trigger any ticks
-            await vi.advanceTimersByTimeAsync(500);
-
-            expect(mockPostMessage).not.toHaveBeenCalled();
-        });
-
-        it('should use default interval of 1000ms when not specified', async () => {
-            vi.useFakeTimers();
-
-            const mockPerformanceNow = vi.fn()
-                .mockReturnValueOnce(0)
-                .mockReturnValueOnce(1000);
-
-            global.performance = {
-                ...global.performance,
-                now: mockPerformanceNow,
-            };
-
-            messageHandler?.(new MessageEvent('message', {
-                data: { action: 'start' } // No interval specified
-            }));
-
-            await vi.advanceTimersByTimeAsync(0);
-
-            // Should not trigger at 500ms (less than default 1000ms)
-            await vi.advanceTimersByTimeAsync(500);
-            expect(mockPostMessage).not.toHaveBeenCalled();
-
-            // Should trigger at 1000ms
-            await vi.advanceTimersByTimeAsync(500);
-            expect(mockPostMessage).toHaveBeenCalledWith({
-                action: 'tick',
-                elapsed: 1000
-            });
-        });
-
-        it('should clear existing interval when starting new timer', async () => {
-            vi.useFakeTimers();
-
-            const mockPerformanceNow = vi.fn()
-                .mockReturnValueOnce(0)   // First start: startTime = 0
-                .mockReturnValueOnce(50)  // Second start: startTime = 50
-                .mockReturnValueOnce(250); // Tick after 200ms interval: elapsed = 250 - 50 = 200
-
-            global.performance = {
-                ...global.performance,
-                now: mockPerformanceNow,
-            };
-
-            // Start first timer
-            messageHandler?.(new MessageEvent('message', {
-                data: { action: 'start', interval: 100 }
-            }));
-
-            await vi.advanceTimersByTimeAsync(0);
-
-            // Start second timer (should clear first)
-            messageHandler?.(new MessageEvent('message', {
-                data: { action: 'start', interval: 200 }
-            }));
-
-            await vi.advanceTimersByTimeAsync(0);
-
-            // Reset and advance (new interval is 200ms)
-            mockPostMessage.mockClear();
-            await vi.advanceTimersByTimeAsync(200);
-
-            // Should have been called with new timing
-            expect(mockPostMessage).toHaveBeenCalledWith({
-                action: 'tick',
-                elapsed: 200
-            });
-        });
+        nowMs = 10_187.5;
+        expect(fireInterval(intervalId)).toBe(true);
+        expect(workerScope.postMessage).toHaveBeenCalledExactlyOnceWith({
+            action: 'tick',
+            elapsed: 187.5,
+            sampleEpochMs: TIME_ORIGIN + 10_187.5,
+            runId: 23,
+        } satisfies TickMessage);
     });
 
-    describe('timer accuracy', () => {
-        it('should calculate elapsed time correctly', async () => {
-            vi.useFakeTimers();
+    it('uses the default cadence and omits runId when the start command has none', () => {
+        nowMs = 500;
+        send({ action: 'start' });
 
-            const elapsedTimes = [10000, 10500, 11000, 11500];
-            let callIndex = 0;
+        const intervalId = getOnlyIntervalId();
+        expect(intervals.get(intervalId)?.delay).toBe(1000);
 
-            const mockPerformanceNow = vi.fn(() => {
-                return elapsedTimes[callIndex++] ?? 12000;
-            });
+        nowMs = 1_500;
+        fireInterval(intervalId);
 
-            global.performance = {
-                ...global.performance,
-                now: mockPerformanceNow,
-            };
-
-            messageHandler?.(new MessageEvent('message', {
-                data: { action: 'start', interval: 500 }
-            }));
-
-            await vi.advanceTimersByTimeAsync(0);
-
-            // First tick at 500ms elapsed
-            await vi.advanceTimersByTimeAsync(500);
-            expect(mockPostMessage).toHaveBeenLastCalledWith({
-                action: 'tick',
-                elapsed: 500
-            });
-
-            // Second tick at 1000ms elapsed
-            await vi.advanceTimersByTimeAsync(500);
-            expect(mockPostMessage).toHaveBeenLastCalledWith({
-                action: 'tick',
-                elapsed: 1000
-            });
-        });
+        expect(workerScope.postMessage).toHaveBeenCalledWith({
+            action: 'tick',
+            elapsed: 1000,
+            sampleEpochMs: TIME_ORIGIN + 1_500,
+        } satisfies TickMessage);
     });
 
-    describe('edge cases', () => {
-        it('should handle stop when timer is not running', () => {
-            // Should not throw error
-            expect(() => {
-                messageHandler?.(new MessageEvent('message', {
-                    data: { action: 'stop' }
-                }));
-            }).not.toThrow();
-        });
+    it('invalidates the previous interval when a replacement run starts', () => {
+        nowMs = 100;
+        send({ action: 'start', interval: 50, runId: 1 });
+        const firstIntervalId = getOnlyIntervalId();
 
-        it('should handle multiple stop calls', async () => {
-            vi.useFakeTimers();
+        nowMs = 550;
+        send({ action: 'start', interval: 200, runId: 2 });
+        const secondIntervalId = nextIntervalId - 1;
 
-            // Start timer
-            messageHandler?.(new MessageEvent('message', {
-                data: { action: 'start', interval: 100 }
-            }));
+        expect(clearIntervalMock).toHaveBeenCalledWith(firstIntervalId);
+        expect(intervals.get(firstIntervalId)?.active).toBe(false);
+        expect(intervals.get(secondIntervalId)?.active).toBe(true);
 
-            await vi.advanceTimersByTimeAsync(0);
+        nowMs = 750;
+        expect(fireInterval(firstIntervalId)).toBe(false);
+        expect(fireInterval(secondIntervalId)).toBe(true);
+        expect(workerScope.postMessage).toHaveBeenCalledExactlyOnceWith({
+            action: 'tick',
+            elapsed: 200,
+            sampleEpochMs: TIME_ORIGIN + 750,
+            runId: 2,
+        } satisfies TickMessage);
+    });
 
-            // Stop multiple times - should not throw
-            expect(() => {
-                messageHandler?.(new MessageEvent('message', {
-                    data: { action: 'stop' }
-                }));
-                messageHandler?.(new MessageEvent('message', {
-                    data: { action: 'stop' }
-                }));
-            }).not.toThrow();
-        });
+    it('stops the active run, clears its runId, and leaves repeated stop commands harmless', () => {
+        nowMs = 2_000;
+        send({ action: 'start', interval: 50, runId: 73 });
+        const intervalId = getOnlyIntervalId();
+        const stoppedCallback = intervals.get(intervalId)?.callback;
+
+        send({ action: 'stop' });
+        expect(clearIntervalMock).toHaveBeenCalledExactlyOnceWith(intervalId);
+        expect(intervals.get(intervalId)?.active).toBe(false);
+
+        nowMs = 2_500;
+        expect(fireInterval(intervalId)).toBe(false);
+        expect(workerScope.postMessage).not.toHaveBeenCalled();
+        expect(() => send({ action: 'stop' })).not.toThrow();
+        expect(clearIntervalMock).toHaveBeenCalledTimes(1);
+
+        // A cleared browser interval cannot fire. Calling the captured callback directly
+        // makes the otherwise-private run metadata observable and proves stop reset it.
+        stoppedCallback?.();
+        expect(workerScope.postMessage).toHaveBeenCalledExactlyOnceWith({
+            action: 'tick',
+            elapsed: 500,
+            sampleEpochMs: TIME_ORIGIN + 2_500,
+        } satisfies TickMessage);
+    });
+
+    it('samples monotonic elapsed time instead of estimating it from callback cadence', () => {
+        nowMs = 4_000;
+        send({ action: 'start', interval: 50, runId: 9 });
+        const intervalId = getOnlyIntervalId();
+
+        for (const sample of [4_050, 4_175, 4_600]) {
+            nowMs = sample;
+            fireInterval(intervalId);
+        }
+
+        const ticks = workerScope.postMessage.mock.calls.map(([message]) => message as TickMessage);
+        expect(ticks.map(({ elapsed }) => elapsed)).toEqual([50, 175, 600]);
+        expect(ticks.map(({ sampleEpochMs }) => sampleEpochMs)).toEqual([
+            TIME_ORIGIN + 4_050,
+            TIME_ORIGIN + 4_175,
+            TIME_ORIGIN + 4_600,
+        ]);
+        expect(ticks.map(({ runId }) => runId)).toEqual([9, 9, 9]);
     });
 });
-
-describe('timerWorker source module', () => {
-    it('registers worker onmessage handler from source file', async () => {
-        const postMessage = vi.fn();
-        const fakeSelf = {
-            onmessage: null as ((e: MessageEvent) => void) | null,
-            postMessage,
-        };
-
-        vi.useFakeTimers();
-        (global as unknown as Record<string, unknown>).self = fakeSelf;
-
-        const perfSpy = vi.spyOn(performance, 'now')
-            .mockReturnValueOnce(1000)
-            .mockReturnValueOnce(1250);
-
-        await import('../utils/timerWorker');
-
-        expect(typeof fakeSelf.onmessage).toBe('function');
-        fakeSelf.onmessage?.(new MessageEvent('message', { data: { action: 'stop' } }));
-
-        // Start without interval to cover default interval branch.
-        perfSpy.mockReturnValueOnce(1500).mockReturnValueOnce(2500);
-        fakeSelf.onmessage?.(new MessageEvent('message', { data: { action: 'start' } }));
-        await vi.advanceTimersByTimeAsync(1000);
-        expect(postMessage).toHaveBeenCalled();
-        const firstTick = postMessage.mock.calls[0][0] as { action: string; elapsed: number };
-        expect(firstTick.action).toBe('tick');
-        expect(firstTick.elapsed).toBeGreaterThanOrEqual(0);
-
-        // Start with a new interval to cover timer replacement branch.
-        fakeSelf.onmessage?.(new MessageEvent('message', { data: { action: 'start', interval: 250 } }));
-        await vi.advanceTimersByTimeAsync(250);
-        expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ action: 'tick', elapsed: 250 }));
-
-        postMessage.mockClear();
-        perfSpy.mockReturnValueOnce(3000).mockReturnValueOnce(3250);
-        fakeSelf.onmessage?.(new MessageEvent('message', { data: { action: 'start', interval: 250, runId: 7 } }));
-        await vi.advanceTimersByTimeAsync(250);
-        expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ action: 'tick', elapsed: 250, runId: 7 }));
-
-        fakeSelf.onmessage?.(new MessageEvent('message', { data: { action: 'stop' } }));
-        postMessage.mockClear();
-        await vi.advanceTimersByTimeAsync(500);
-        expect(postMessage).not.toHaveBeenCalled();
-
-        perfSpy.mockRestore();
-        vi.useRealTimers();
-    });
-});
-
-

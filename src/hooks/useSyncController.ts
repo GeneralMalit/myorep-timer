@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import type { SavedSession } from '@/types/savedSessions';
 import type { SavedWorkout } from '@/types/savedWorkouts';
 import type {
@@ -8,6 +9,7 @@ import type {
     AccountSyncSnapshot,
     FirstSyncChoice,
 } from '@/types/account';
+import type { SyncOperation, SyncOperationToken, SyncQueueItem } from '@/types/sync';
 import { useAccountStore } from '@/store/useAccountStore';
 import { useSyncStore } from '@/store/useSyncStore';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
@@ -18,12 +20,23 @@ import {
     pushSessionMutation,
     pushWorkoutMutation,
 } from '@/lib/supabaseSync';
+import type { SyncMutationResult } from '@/lib/supabaseSync';
 import { getSupabaseClient } from '@/lib/supabase';
 import { canAccessCloudSync } from '@/utils/account';
 import { createSyncRecoveryBackup, isSyncAuthExpiredError } from '@/utils/sync';
 
 const RETRY_BASE_DELAY_MS = 2_000;
 const RETRY_MAX_DELAY_MS = 30_000;
+const RETRY_JITTER_RATIO = 0.25;
+const MAX_RETRY_ATTEMPTS = 5;
+
+type ActiveSyncProcess = {
+    id: string;
+    ownerUserId: string;
+    authGeneration: string;
+    operationId: string;
+    cancelled: boolean;
+};
 
 const getErrorMessage = (error: unknown): string => {
     if (error instanceof Error && error.message.trim()) {
@@ -35,6 +48,80 @@ const getErrorMessage = (error: unknown): string => {
     }
 
     return 'Cloud sync failed.';
+};
+
+const getErrorStatus = (error: unknown): number | null => {
+    if (!error || typeof error !== 'object') {
+        return null;
+    }
+
+    const record = error as Record<string, unknown>;
+    const candidate = record.status ?? record.statusCode;
+    return typeof candidate === 'number' && Number.isFinite(candidate) ? candidate : null;
+};
+
+const getErrorCode = (error: unknown): string => {
+    if (!error || typeof error !== 'object') {
+        return '';
+    }
+
+    const code = (error as Record<string, unknown>).code;
+    return typeof code === 'string' ? code : '';
+};
+
+const isPermanentSyncError = (error: unknown): boolean => {
+    const status = getErrorStatus(error);
+    if (status !== null) {
+        return status >= 400
+            && status < 500
+            && status !== 408
+            && status !== 409
+            && status !== 425
+            && status !== 429;
+    }
+
+    const code = getErrorCode(error);
+    return /^(22|23|42|PGRST1)/i.test(code);
+};
+
+const getRetryDelayMs = (attempts: number): number => {
+    const exponentialDelay = RETRY_BASE_DELAY_MS * Math.max(1, 2 ** attempts);
+    const jitterMultiplier = 1 - RETRY_JITTER_RATIO + (Math.random() * RETRY_JITTER_RATIO * 2);
+    return Math.min(RETRY_MAX_DELAY_MS, Math.max(RETRY_BASE_DELAY_MS, Math.round(exponentialDelay * jitterMultiplier)));
+};
+
+const toOperationToken = (item: SyncQueueItem): SyncOperationToken => ({
+    operationId: item.operationId,
+    ownerUserId: item.ownerUserId,
+    authGeneration: item.authGeneration,
+    entityType: item.entityType,
+    localId: item.localId,
+    revision: item.revision,
+    expectedRemoteRevision: item.expectedRemoteRevision,
+});
+
+const normalizeMutationResult = <T extends SavedWorkout | SavedSession>(
+    value: unknown,
+    operation: SyncOperation,
+): SyncMutationResult<T> => {
+    if (value && typeof value === 'object' && 'status' in value) {
+        return value as SyncMutationResult<T>;
+    }
+
+    if (value === null && operation === 'delete') {
+        return { status: 'deleted', record: null, remoteRevision: 0 };
+    }
+
+    if (value && typeof value === 'object') {
+        const record = value as T;
+        return {
+            status: 'applied',
+            record,
+            remoteRevision: record.sync?.baseRevision ?? record.sync?.revision ?? 0,
+        };
+    }
+
+    throw new Error('Cloud sync returned an invalid mutation response.');
 };
 
 const hasLocalLibraryData = (workouts: SavedWorkout[], sessions: SavedSession[]): boolean => {
@@ -79,11 +166,13 @@ export const useSyncController = (params: {
         typeof navigator === 'undefined' ? true : navigator.onLine
     ));
     const [retryClock, setRetryClock] = useState(0);
-    const processingRef = useRef(false);
+    const processingRef = useRef<ActiveSyncProcess | null>(null);
 
     const {
         syncEnabled,
         firstSyncState,
+        currentUserId,
+        authGeneration,
         queuedOperations,
         queueStatus,
         syncError,
@@ -96,6 +185,8 @@ export const useSyncController = (params: {
         markFirstSyncProcessing,
         completeEnableSync,
         disableSync,
+        clearExpiredRecoveryBackup,
+        isOperationCurrent,
         markQueuePending,
         markQueueSyncing,
         markQueuePausedOffline,
@@ -105,8 +196,39 @@ export const useSyncController = (params: {
         acknowledgeUpsert,
         acknowledgeDelete,
         incrementAttempt,
+        retryFailedOperations,
         resetForNewSession,
-    } = useSyncStore();
+    } = useSyncStore(useShallow((state) => ({
+        syncEnabled: state.syncEnabled,
+        firstSyncState: state.firstSyncState,
+        currentUserId: state.currentUserId,
+        authGeneration: state.authGeneration,
+        queuedOperations: state.queuedOperations,
+        queueStatus: state.queueStatus,
+        syncError: state.syncError,
+        authExpired: state.authExpired,
+        lastSyncedAt: state.lastSyncedAt,
+        recoveryBackup: state.recoveryBackup,
+        setCurrentUser: state.setCurrentUser,
+        beginEnableSync: state.beginEnableSync,
+        cancelEnableSync: state.cancelEnableSync,
+        markFirstSyncProcessing: state.markFirstSyncProcessing,
+        completeEnableSync: state.completeEnableSync,
+        disableSync: state.disableSync,
+        clearExpiredRecoveryBackup: state.clearExpiredRecoveryBackup,
+        isOperationCurrent: state.isOperationCurrent,
+        markQueuePending: state.markQueuePending,
+        markQueueSyncing: state.markQueueSyncing,
+        markQueuePausedOffline: state.markQueuePausedOffline,
+        markQueuePausedAuth: state.markQueuePausedAuth,
+        markQueueError: state.markQueueError,
+        clearQueueError: state.clearQueueError,
+        acknowledgeUpsert: state.acknowledgeUpsert,
+        acknowledgeDelete: state.acknowledgeDelete,
+        incrementAttempt: state.incrementAttempt,
+        retryFailedOperations: state.retryFailedOperations,
+        resetForNewSession: state.resetForNewSession,
+    })));
 
     const replaceLibrariesFromSync = useWorkoutStore((state) => state.replaceLibrariesFromSync);
     const acknowledgeSyncedWorkout = useWorkoutStore((state) => state.acknowledgeSyncedWorkout);
@@ -126,6 +248,11 @@ export const useSyncController = (params: {
     const userId = account.session?.user.id ?? null;
     const canUseCloudSync = canAccessCloudSync(account.entitlement);
 
+    const isCurrentAuthContext = useCallback((expectedUserId: string, expectedAuthGeneration: string): boolean => {
+        const state = useSyncStore.getState();
+        return state.currentUserId === expectedUserId && state.authGeneration === expectedAuthGeneration;
+    }, []);
+
     useEffect(() => {
         if (userId) {
             setCurrentUser(userId);
@@ -134,6 +261,21 @@ export const useSyncController = (params: {
 
         resetForNewSession();
     }, [resetForNewSession, setCurrentUser, userId]);
+
+    useEffect(() => {
+        clearExpiredRecoveryBackup();
+    }, [clearExpiredRecoveryBackup, recoveryBackup]);
+
+    useEffect(() => {
+        const activeProcess = processingRef.current;
+        if (activeProcess && (
+            activeProcess.ownerUserId !== userId
+            || activeProcess.ownerUserId !== currentUserId
+            || activeProcess.authGeneration !== authGeneration
+        )) {
+            activeProcess.cancelled = true;
+        }
+    }, [authGeneration, currentUserId, userId]);
 
     useEffect(() => {
         const syncStatus = !canUseCloudSync || !syncEnabled
@@ -173,11 +315,17 @@ export const useSyncController = (params: {
     }, [markQueuePausedOffline, markQueuePending, syncEnabled]);
 
     useEffect(() => {
-        const nextRetry = queuedOperations
-            .filter((item) => item.nextRetryAt)
-            .map((item) => new Date(item.nextRetryAt as string).getTime())
-            .filter((value) => Number.isFinite(value))
-            .sort((a, b) => a - b)[0];
+        let nextRetry: number | null = null;
+        for (const item of queuedOperations) {
+            if (item.deadLetteredAt !== null || !item.nextRetryAt) {
+                continue;
+            }
+
+            const retryAt = new Date(item.nextRetryAt).getTime();
+            if (Number.isFinite(retryAt) && (nextRetry === null || retryAt < nextRetry)) {
+                nextRetry = retryAt;
+            }
+        }
 
         if (!nextRetry) {
             return undefined;
@@ -196,17 +344,32 @@ export const useSyncController = (params: {
             return { ok: false, message: 'Cloud sync is only available for signed-in Plus users.' };
         }
 
+        if (currentUserId !== userId) {
+            return { ok: false, message: 'Your account session changed. Try enabling sync again.' };
+        }
+
+        const actionAuthGeneration = authGeneration;
+
         const backup = createSyncRecoveryBackup({
             reason: 'first-sync',
             syncEnabled,
             firstSyncOnboardingState: firstSyncState === 'processing' ? 'in-progress' : 'not-started',
-            queueStatus: queueStatus === 'pending' ? 'queued' : queueStatus === 'paused-auth' || queueStatus === 'paused-offline' ? 'paused' : queueStatus,
+            queueStatus: queueStatus === 'pending'
+                ? 'queued'
+                : queueStatus === 'paused-auth' || queueStatus === 'paused-offline'
+                    ? 'paused'
+                    : queueStatus === 'dead-letter'
+                        ? 'error'
+                        : queueStatus,
             workouts: visibleWorkouts,
             sessions: visibleSessions,
         });
 
         try {
             const presence = await inspectRemoteSyncPresence(client, userId);
+            if (!isCurrentAuthContext(userId, actionAuthGeneration)) {
+                return { ok: false, message: 'Your account session changed before sync setup completed.' };
+            }
             const localHasData = hasLocalLibraryData(visibleWorkouts, visibleSessions);
             const effectiveChoice = resolveFirstSyncChoice({
                 localHasData,
@@ -228,12 +391,21 @@ export const useSyncController = (params: {
 
             if (effectiveChoice === 'replace-local') {
                 const snapshot = await fetchRemoteLibrarySnapshot(client, userId);
+                if (!isCurrentAuthContext(userId, actionAuthGeneration)) {
+                    return { ok: false, message: 'Your account session changed before sync setup completed.' };
+                }
                 replaceLibrariesFromSync(snapshot);
             } else {
                 const snapshot = await overwriteRemoteLibraryWithLocal(client, userId, visibleWorkouts, visibleSessions);
+                if (!isCurrentAuthContext(userId, actionAuthGeneration)) {
+                    return { ok: false, message: 'Your account session changed before sync setup completed.' };
+                }
                 replaceLibrariesFromSync(snapshot);
             }
 
+            if (!isCurrentAuthContext(userId, actionAuthGeneration)) {
+                return { ok: false, message: 'Your account session changed before sync setup completed.' };
+            }
             completeEnableSync(userId, new Date().toISOString());
             clearQueueError();
             return {
@@ -244,18 +416,24 @@ export const useSyncController = (params: {
             };
         } catch (error: unknown) {
             const message = getErrorMessage(error);
+            if (!isCurrentAuthContext(userId, actionAuthGeneration)) {
+                return { ok: false, message: 'Your account session changed before sync setup completed.' };
+            }
             cancelEnableSync();
             markQueueError(message);
             return { ok: false, message };
         }
     }, [
         beginEnableSync,
+        authGeneration,
         cancelEnableSync,
         clearQueueError,
         client,
         completeEnableSync,
+        currentUserId,
         firstSyncState,
         canUseCloudSync,
+        isCurrentAuthContext,
         markFirstSyncProcessing,
         markQueueError,
         queueStatus,
@@ -270,6 +448,12 @@ export const useSyncController = (params: {
         if (!client || !userId || !canUseCloudSync) {
             return { ok: false, message: 'Cloud sync is only available for signed-in Plus users.' };
         }
+
+        if (currentUserId !== userId) {
+            return { ok: false, message: 'Your account session changed. Try syncing again.' };
+        }
+
+        const actionAuthGeneration = authGeneration;
 
         if (!syncEnabled) {
             return { ok: false, message: 'Enable cloud sync on this device first.' };
@@ -287,12 +471,18 @@ export const useSyncController = (params: {
             try {
                 markQueueSyncing();
                 const snapshot = await fetchRemoteLibrarySnapshot(client, userId);
+                if (!isCurrentAuthContext(userId, actionAuthGeneration)) {
+                    return { ok: false, message: 'Your account session changed before sync completed.' };
+                }
                 replaceLibrariesFromSync(snapshot);
                 useSyncStore.getState().markQueuePending();
                 useSyncStore.setState({ lastSyncedAt: new Date().toISOString() });
                 return { ok: true, message: 'Cloud sync completed.' };
             } catch (error: unknown) {
                 const message = getErrorMessage(error);
+                if (!isCurrentAuthContext(userId, actionAuthGeneration)) {
+                    return { ok: false, message: 'Your account session changed before sync completed.' };
+                }
                 if (isSyncAuthExpiredError(error)) {
                     markQueuePausedAuth(message);
                     return { ok: false, message };
@@ -304,9 +494,12 @@ export const useSyncController = (params: {
 
         return { ok: true, message: `Queued ${queuedOperations.length} local change${queuedOperations.length === 1 ? '' : 's'} for sync.` };
     }, [
+        authGeneration,
         clearQueueError,
         client,
+        currentUserId,
         isOnline,
+        isCurrentAuthContext,
         canUseCloudSync,
         markQueueError,
         markQueuePausedAuth,
@@ -320,19 +513,26 @@ export const useSyncController = (params: {
     ]);
 
     const retrySync = useCallback(async (): Promise<AccountActionResult> => {
-        clearQueueError();
         if (!syncEnabled) {
             return { ok: false, message: 'Enable cloud sync on this device first.' };
         }
+        if (!userId || currentUserId !== userId) {
+            return { ok: false, message: 'Your account session changed. Sign in again before retrying.' };
+        }
+        retryFailedOperations();
+        clearQueueError();
         markQueuePending();
         return { ok: true, message: 'Retrying cloud sync.' };
-    }, [clearQueueError, markQueuePending, syncEnabled]);
+    }, [clearQueueError, currentUserId, markQueuePending, retryFailedOperations, syncEnabled, userId]);
 
     const resumeSync = useCallback(async (): Promise<AccountActionResult> => {
+        if (!syncEnabled || !userId || currentUserId !== userId) {
+            return { ok: false, message: 'Sign in to the sync account before resuming cloud sync.' };
+        }
         clearQueueError();
         markQueuePending();
         return { ok: true, message: 'Cloud sync resumed.' };
-    }, [clearQueueError, markQueuePending]);
+    }, [clearQueueError, currentUserId, markQueuePending, syncEnabled, userId]);
 
     const turnSyncOff = useCallback(async (): Promise<AccountActionResult> => {
         if (!syncEnabled) {
@@ -348,6 +548,10 @@ export const useSyncController = (params: {
             return;
         }
 
+        if (currentUserId !== userId) {
+            return;
+        }
+
         if (!isOnline) {
             markQueuePausedOffline();
             return;
@@ -358,103 +562,208 @@ export const useSyncController = (params: {
         }
 
         const now = Date.now();
-        const nextItem = queuedOperations.find((item) => (
-            !item.nextRetryAt || new Date(item.nextRetryAt).getTime() <= now
-        ));
+        let nextItem: SyncQueueItem | undefined;
+        let queueHasNoRunnableWork = queuedOperations.length === 0;
+        for (const item of queuedOperations) {
+            if (item.deadLetteredAt !== null) {
+                continue;
+            }
+
+            queueHasNoRunnableWork = false;
+            if (
+                item.ownerUserId === userId
+                && item.authGeneration === authGeneration
+                && (!item.nextRetryAt || new Date(item.nextRetryAt).getTime() <= now)
+            ) {
+                nextItem = item;
+                break;
+            }
+        }
 
         if (!nextItem) {
-            if (queueStatus !== 'idle' && queueStatus !== 'syncing' && !syncError) {
+            if (
+                queueHasNoRunnableWork
+                && !syncError
+                && queueStatus !== 'idle'
+                && queueStatus !== 'dead-letter'
+            ) {
                 markQueuePending();
             }
             return;
         }
 
-        processingRef.current = true;
+        const token = toOperationToken(nextItem);
+        const activeProcess: ActiveSyncProcess = {
+            id: `${nextItem.operationId}:${Date.now()}`,
+            ownerUserId: userId,
+            authGeneration,
+            operationId: nextItem.operationId,
+            cancelled: false,
+        };
+        const isActive = (): boolean => (
+            !activeProcess.cancelled
+            && isCurrentAuthContext(userId, authGeneration)
+            && isOperationCurrent(token)
+        );
+        const deadLetter = (message: string): void => {
+            if (!isActive()) {
+                return;
+            }
+            incrementAttempt({
+                ...token,
+                nextRetryAt: null,
+                error: message,
+                deadLetter: true,
+                failedAt: new Date().toISOString(),
+            });
+        };
+
+        processingRef.current = activeProcess;
         markQueueSyncing();
 
         void (async () => {
             try {
+                if (!isActive()) {
+                    return;
+                }
+
                 if (nextItem.entityType === 'workout') {
-                    const workout = savedWorkouts.find((entry) => entry.id === nextItem.entityId || entry.sync?.localId === nextItem.localId);
+                    const workout = useWorkoutStore.getState().savedWorkouts.find((entry) => (
+                        entry.id === nextItem.entityId || entry.sync?.localId === nextItem.localId
+                    ));
                     if (!workout) {
-                        acknowledgeDelete({
-                            entityType: 'workout',
-                            localId: nextItem.localId,
-                            syncedAt: new Date().toISOString(),
-                        });
+                        deadLetter('The queued workout snapshot is no longer available. Save it again to retry.');
+                        return;
+                    }
+                    if (
+                        workout.sync?.localId !== nextItem.localId
+                        || workout.sync.revision !== nextItem.revision
+                        || workout.sync.baseRevision !== nextItem.expectedRemoteRevision
+                    ) {
+                        deadLetter('The queued workout revision no longer matches local data. Save it again to retry.');
                         return;
                     }
 
-                    const remoteWorkout = await pushWorkoutMutation(client, userId, workout);
-                    if (workout.sync?.pendingDelete || nextItem.operation === 'delete') {
-                        acknowledgeDelete({
-                            entityType: 'workout',
-                            localId: nextItem.localId,
-                            syncedAt: new Date().toISOString(),
-                        });
-                        purgeDeletedWorkout(workout.id);
+                    const rawResult = await pushWorkoutMutation(
+                        client,
+                        userId,
+                        workout,
+                        nextItem.expectedRemoteRevision,
+                    );
+                    if (!isActive()) {
                         return;
                     }
 
-                    if (remoteWorkout) {
-                        acknowledgeSyncedWorkout(remoteWorkout);
+                    const result = normalizeMutationResult<SavedWorkout>(rawResult, nextItem.operation);
+                    if (result.status === 'conflict') {
+                        deadLetter(`Cloud conflict: ${result.reason || 'a newer remote workout revision exists'}. Review the local copy and retry manually.`);
+                        return;
                     }
-                    acknowledgeUpsert({
-                        entityType: 'workout',
+
+                    const syncedAt = new Date().toISOString();
+                    if (result.status === 'deleted' || nextItem.operation === 'delete') {
+                        if (purgeDeletedWorkout(workout.id, token)) {
+                            acknowledgeDelete({ ...token, syncedAt });
+                        }
+                        return;
+                    }
+
+                    const acknowledged = acknowledgeSyncedWorkout(result.record, {
                         localId: nextItem.localId,
-                        syncedAt: new Date().toISOString(),
+                        revision: nextItem.revision,
+                        remoteRevision: result.remoteRevision,
                     });
+                    if (acknowledged) {
+                        acknowledgeUpsert({ ...token, syncedAt });
+                    }
                     return;
                 }
 
-                const session = savedSessions.find((entry) => entry.id === nextItem.entityId || entry.sync?.localId === nextItem.localId);
+                const session = useWorkoutStore.getState().savedSessions.find((entry) => (
+                    entry.id === nextItem.entityId || entry.sync?.localId === nextItem.localId
+                ));
                 if (!session) {
-                    acknowledgeDelete({
-                        entityType: 'session',
-                        localId: nextItem.localId,
-                        syncedAt: new Date().toISOString(),
-                    });
+                    deadLetter('The queued session snapshot is no longer available. Save it again to retry.');
+                    return;
+                }
+                if (
+                    session.sync?.localId !== nextItem.localId
+                    || session.sync.revision !== nextItem.revision
+                    || session.sync.baseRevision !== nextItem.expectedRemoteRevision
+                ) {
+                    deadLetter('The queued session revision no longer matches local data. Save it again to retry.');
                     return;
                 }
 
-                const remoteSession = await pushSessionMutation(client, userId, session);
-                if (session.sync?.pendingDelete || nextItem.operation === 'delete') {
-                    acknowledgeDelete({
-                        entityType: 'session',
-                        localId: nextItem.localId,
-                        syncedAt: new Date().toISOString(),
-                    });
-                    purgeDeletedSession(session.id);
+                const rawResult = await pushSessionMutation(
+                    client,
+                    userId,
+                    session,
+                    nextItem.expectedRemoteRevision,
+                );
+                if (!isActive()) {
                     return;
                 }
 
-                if (remoteSession) {
-                    acknowledgeSyncedSession(remoteSession);
+                const result = normalizeMutationResult<SavedSession>(rawResult, nextItem.operation);
+                if (result.status === 'conflict') {
+                    deadLetter(`Cloud conflict: ${result.reason || 'a newer remote session revision exists'}. Review the local copy and retry manually.`);
+                    return;
                 }
-                acknowledgeUpsert({
-                    entityType: 'session',
+
+                const syncedAt = new Date().toISOString();
+                if (result.status === 'deleted' || nextItem.operation === 'delete') {
+                    if (purgeDeletedSession(session.id, token)) {
+                        acknowledgeDelete({ ...token, syncedAt });
+                    }
+                    return;
+                }
+
+                const acknowledged = acknowledgeSyncedSession(result.record, {
                     localId: nextItem.localId,
-                    syncedAt: new Date().toISOString(),
+                    revision: nextItem.revision,
+                    remoteRevision: result.remoteRevision,
                 });
+                if (acknowledged) {
+                    acknowledgeUpsert({ ...token, syncedAt });
+                }
             } catch (error: unknown) {
+                if (!isActive()) {
+                    return;
+                }
+
                 const message = getErrorMessage(error);
                 if (isSyncAuthExpiredError(error)) {
                     markQueuePausedAuth(message);
                     return;
                 }
 
-                const nextRetryAt = new Date(
-                    Date.now() + Math.min(RETRY_MAX_DELAY_MS, RETRY_BASE_DELAY_MS * Math.max(1, 2 ** nextItem.attempts)),
-                ).toISOString();
+                const nextAttempt = nextItem.attempts + 1;
+                const shouldDeadLetter = isPermanentSyncError(error) || nextAttempt >= MAX_RETRY_ATTEMPTS;
+                const nextRetryAt = shouldDeadLetter
+                    ? null
+                    : new Date(Date.now() + getRetryDelayMs(nextItem.attempts)).toISOString();
                 incrementAttempt({
-                    entityType: nextItem.entityType,
-                    localId: nextItem.localId,
+                    ...token,
                     nextRetryAt,
-                    error: message,
+                    error: shouldDeadLetter
+                        ? `${message} Manual retry is required.`
+                        : message,
+                    deadLetter: shouldDeadLetter,
+                    failedAt: new Date().toISOString(),
                 });
-                markQueueError(message);
             } finally {
-                processingRef.current = false;
+                if (processingRef.current?.id === activeProcess.id) {
+                    processingRef.current = null;
+                }
+
+                const latestSyncState = useSyncStore.getState();
+                if (
+                    isCurrentAuthContext(userId, authGeneration)
+                    && latestSyncState.queueStatus === 'syncing'
+                ) {
+                    latestSyncState.markQueuePending();
+                }
             }
         })();
     }, [
@@ -463,11 +772,14 @@ export const useSyncController = (params: {
         acknowledgeSyncedWorkout,
         acknowledgeUpsert,
         authExpired,
-        client,
-        incrementAttempt,
-        isOnline,
+        authGeneration,
         canUseCloudSync,
-        markQueueError,
+        client,
+        currentUserId,
+        incrementAttempt,
+        isCurrentAuthContext,
+        isOnline,
+        isOperationCurrent,
         markQueuePausedAuth,
         markQueuePausedOffline,
         markQueuePending,
@@ -476,8 +788,7 @@ export const useSyncController = (params: {
         purgeDeletedWorkout,
         queueStatus,
         queuedOperations,
-        savedSessions,
-        savedWorkouts,
+        retryClock,
         syncEnabled,
         syncError,
         userId,
@@ -523,6 +834,20 @@ export const useSyncController = (params: {
             };
         }
 
+        const deadLetterCount = queuedOperations.reduce(
+            (count, item) => count + (item.deadLetteredAt !== null ? 1 : 0),
+            0,
+        );
+        if (deadLetterCount > 0 || queueStatus === 'dead-letter') {
+            return {
+                status: 'sync-error',
+                detail: `${deadLetterCount || 1} local change${deadLetterCount === 1 ? '' : 's'} need manual retry. ${syncError ?? 'Review the local copy, then retry cloud sync.'}`,
+                lastSyncedAt,
+                isOnline,
+                isPaused: true,
+            };
+        }
+
         if (syncError) {
             return {
                 status: 'sync-error',
@@ -560,7 +885,7 @@ export const useSyncController = (params: {
             lastSyncedAt,
             isOnline,
         };
-    }, [authExpired, canUseCloudSync, firstSyncState, isOnline, lastSyncedAt, queueStatus, queuedOperations.length, recoveryBackup, syncEnabled, syncError]);
+    }, [authExpired, canUseCloudSync, firstSyncState, isOnline, lastSyncedAt, queueStatus, queuedOperations, recoveryBackup, syncEnabled, syncError]);
 
     const syncActions = useMemo<AccountSyncActions | undefined>(() => {
         if (!canUseCloudSync) {

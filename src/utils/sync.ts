@@ -18,6 +18,7 @@ import type {
     SupabaseSavedWorkoutWriteRow,
     SyncMetadata,
 } from '@/types/sync';
+import { normalizeSessionNodesForPersistence } from '@/utils/workoutProgression';
 
 const parsePositiveInt = (value: unknown): number | null => {
     if (typeof value !== 'string' && typeof value !== 'number') {
@@ -26,6 +27,19 @@ const parsePositiveInt = (value: unknown): number | null => {
 
     const parsed = typeof value === 'number' ? value : parseInt(value, 10);
     if (!Number.isFinite(parsed) || parsed <= 0) {
+        return null;
+    }
+
+    return Math.floor(parsed);
+};
+
+const parseNonNegativeInt = (value: unknown): number | null => {
+    if (typeof value !== 'string' && typeof value !== 'number') {
+        return null;
+    }
+
+    const parsed = typeof value === 'number' ? value : parseInt(value, 10);
+    if (!Number.isFinite(parsed) || parsed < 0) {
         return null;
     }
 
@@ -109,7 +123,7 @@ const normalizeSavedSessionSync = (
 ): SavedSessionExportRecordV1 => {
     return {
         ...session,
-        nodes: cloneJsonArray(session.nodes) as SavedSession['nodes'],
+        nodes: normalizeSessionNodesForPersistence(cloneJsonArray(session.nodes)) as SavedSession['nodes'],
         sync: normalizeSyncMetadata(session.sync, session.id, nowIso),
     };
 };
@@ -119,6 +133,7 @@ export const createSyncMetadata = (localId: string, nowIso: string): SyncMetadat
         localId,
         remoteId: null,
         revision: 1,
+        baseRevision: 0,
         updatedAt: nowIso,
         dirty: true,
         pendingDelete: false,
@@ -137,14 +152,22 @@ export const normalizeSyncMetadata = (value: unknown, localId: string, nowIso: s
         ? record.localId
         : localId;
 
+    const remoteId = typeof record.remoteId === 'string' && record.remoteId.trim()
+        ? record.remoteId
+        : null;
+    const revision = parsePositiveInt(record.revision) ?? 1;
+    const dirty = typeof record.dirty === 'boolean' ? record.dirty : true;
+    const explicitBaseRevision = parseNonNegativeInt(record.baseRevision);
+    const baseRevision = explicitBaseRevision
+        ?? (remoteId === null ? 0 : dirty ? null : revision);
+
     return {
         localId: normalizedLocalId,
-        remoteId: typeof record.remoteId === 'string' && record.remoteId.trim()
-            ? record.remoteId
-            : null,
-        revision: parsePositiveInt(record.revision) ?? 1,
+        remoteId,
+        revision,
+        baseRevision,
         updatedAt: resolveTimestamp(record.updatedAt, nowIso),
-        dirty: typeof record.dirty === 'boolean' ? record.dirty : true,
+        dirty,
         pendingDelete: typeof record.pendingDelete === 'boolean' ? record.pendingDelete : false,
         deletedAt: resolveTimestamp(record.deletedAt, '') || null,
         lastSyncedAt: resolveTimestamp(record.lastSyncedAt, '') || null,
@@ -160,6 +183,8 @@ export const touchSyncMetadata = (
         localId,
         remoteId: sync?.remoteId ?? null,
         revision: (sync?.revision ?? 0) + 1,
+        baseRevision: sync?.baseRevision
+            ?? (sync?.remoteId ? (sync.dirty ? null : sync.revision) : 0),
         updatedAt: nowIso,
         dirty: true,
         pendingDelete: sync?.pendingDelete ?? false,
@@ -177,6 +202,8 @@ export const markSyncDeleted = (
         localId,
         remoteId: sync?.remoteId ?? null,
         revision: (sync?.revision ?? 0) + 1,
+        baseRevision: sync?.baseRevision
+            ?? (sync?.remoteId ? (sync.dirty ? null : sync.revision) : 0),
         updatedAt: nowIso,
         dirty: true,
         pendingDelete: true,
@@ -194,6 +221,8 @@ export const clearSyncMetadata = (
         localId,
         remoteId: sync?.remoteId ?? null,
         revision: (sync?.revision ?? 0) + 1,
+        baseRevision: sync?.baseRevision
+            ?? (sync?.remoteId ? sync.revision : 0),
         updatedAt: nowIso,
         dirty: false,
         pendingDelete: false,
@@ -242,7 +271,7 @@ export const toSupabaseSavedSessionWriteRow = (
         user_id: userId,
         local_id: sync?.localId ?? session.id,
         name: session.name,
-        nodes: session.nodes,
+        nodes: normalizeSessionNodesForPersistence(session.nodes),
         times_used: session.timesUsed,
         last_used_at: session.lastUsedAt,
         revision: sync?.revision ?? 1,
@@ -258,6 +287,7 @@ const toLocalSyncMetadata = (
         localId: row.local_id,
         remoteId: row.id,
         revision: parsePositiveInt(row.revision) ?? 1,
+        baseRevision: parsePositiveInt(row.revision) ?? 1,
         updatedAt: row.updated_at,
         dirty: false,
         pendingDelete: row.deleted_at !== null,
@@ -294,7 +324,7 @@ export const fromSupabaseSavedSessionRow = (
     return {
         id: row.local_id,
         name: row.name,
-        nodes: cloneJsonArray(row.nodes) as SavedSession['nodes'],
+        nodes: normalizeSessionNodesForPersistence(cloneJsonArray(row.nodes)) as SavedSession['nodes'],
         timesUsed: parsePositiveInt(row.times_used) ?? 0,
         lastUsedAt: row.last_used_at,
         createdAt: nowIso,
@@ -349,13 +379,25 @@ export const buildRemotePresenceMap = (
     >,
     entity: SyncEntityKind,
 ): Record<string, SyncRemotePresence> => {
-    return rows.reduce<Record<string, SyncRemotePresence>>((accumulator, row) => {
-        const presence = buildRemotePresence(rows, entity, row.local_id, row.id);
-        if (presence) {
-            accumulator[row.local_id] = presence;
+    const presenceByLocalId: Record<string, SyncRemotePresence> = {};
+
+    for (const row of rows) {
+        if (!presenceByLocalId[row.local_id]) {
+            presenceByLocalId[row.local_id] = {
+                entity,
+                localId: row.local_id,
+                remoteId: row.id,
+                hasRemoteRow: true,
+                source: 'both',
+                deletedAt: row.deleted_at,
+                revision: parsePositiveInt(row.revision) ?? 1,
+                updatedAt: row.updated_at,
+                lastSyncedAt: row.updated_at,
+            };
         }
-        return accumulator;
-    }, {});
+    }
+
+    return presenceByLocalId;
 };
 
 export const inspectRemotePresence = (
@@ -426,13 +468,13 @@ export const dedupeSyncQueueEntries = (queue: SyncQueueEntry[]): SyncQueueEntry[
         }
 
         seen.add(dedupeKey);
-        nextQueue.unshift({
+        nextQueue.push({
             ...entry,
             dedupeKey,
         });
     }
 
-    return nextQueue;
+    return nextQueue.reverse();
 };
 
 export const ackSyncQueueEntry = (

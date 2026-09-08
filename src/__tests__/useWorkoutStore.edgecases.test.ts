@@ -59,6 +59,7 @@ const resetStore = () => {
         timeLeft: 0,
         setTotalDuration: 0,
         setElapsedTime: 0,
+        pendingElapsedSeconds: 0,
         lastTickSecond: -1,
         savedWorkouts: [],
         selectedSavedWorkoutId: null,
@@ -393,7 +394,7 @@ describe('useWorkoutStore edge cases', () => {
         act(() => {
             store.resumeSession();
         });
-        expect(useWorkoutStore.getState().isTimerRunning).toBe(true);
+        expect(useWorkoutStore.getState().isTimerRunning).toBe(false);
         expect(useWorkoutStore.getState().isRunningSession).toBe(false);
 
         act(() => {

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import {
     handlePaddleCheckoutRequest,
     handlePaddlePortalRequest,
@@ -9,10 +10,10 @@ const getBillingEnvironmentMock = vi.hoisted(() => vi.fn());
 const createSupabaseAuthClientMock = vi.hoisted(() => vi.fn());
 const createSupabaseAdminClientMock = vi.hoisted(() => vi.fn());
 const authenticateSupabaseUserMock = vi.hoisted(() => vi.fn());
+const applyPaddleSubscriptionEventMock = vi.hoisted(() => vi.fn());
 const getBillingAccountByUserIdMock = vi.hoisted(() => vi.fn());
 const getBillingAccountByPaddleCustomerIdMock = vi.hoisted(() => vi.fn());
 const upsertBillingAccountMock = vi.hoisted(() => vi.fn());
-const syncResolvedEntitlementMock = vi.hoisted(() => vi.fn());
 const createPaddleCustomerMock = vi.hoisted(() => vi.fn());
 const createPaddleCheckoutTransactionMock = vi.hoisted(() => vi.fn());
 const createPaddleCustomerPortalSessionMock = vi.hoisted(() => vi.fn());
@@ -28,13 +29,10 @@ vi.mock('@/server/billingData', () => ({
     createSupabaseAuthClient: createSupabaseAuthClientMock,
     createSupabaseAdminClient: createSupabaseAdminClientMock,
     authenticateSupabaseUser: authenticateSupabaseUserMock,
+    applyPaddleSubscriptionEvent: applyPaddleSubscriptionEventMock,
     getBillingAccountByUserId: getBillingAccountByUserIdMock,
     getBillingAccountByPaddleCustomerId: getBillingAccountByPaddleCustomerIdMock,
     upsertBillingAccount: upsertBillingAccountMock,
-}));
-
-vi.mock('@/server/entitlements', () => ({
-    syncResolvedEntitlement: syncResolvedEntitlementMock,
 }));
 
 vi.mock('@/server/paddleBilling', () => ({
@@ -73,8 +71,8 @@ describe('billingHandlers', () => {
         });
         getBillingAccountByUserIdMock.mockResolvedValue(null);
         getBillingAccountByPaddleCustomerIdMock.mockResolvedValue(null);
+        applyPaddleSubscriptionEventMock.mockResolvedValue('applied');
         upsertBillingAccountMock.mockResolvedValue(undefined);
-        syncResolvedEntitlementMock.mockResolvedValue(undefined);
         createPaddleCustomerMock.mockResolvedValue({
             id: 'ctm_123',
         });
@@ -89,16 +87,16 @@ describe('billingHandlers', () => {
             },
         });
         buildPaddleHostedCheckoutUrlMock.mockReturnValue('https://myorep.app/account?_ptxn=txn_123');
-        buildEntitlementProjectionFromPaddleSubscriptionMock.mockReturnValue({
-            userId: 'user-1',
-            paddleCustomerId: 'ctm_123',
-            paddleSubscriptionId: 'sub_123',
-            paddlePriceId: 'pri_plus',
-            subscriptionStatus: 'active',
-            active: true,
-            currentPeriodEnd: '2026-05-01T00:00:00.000Z',
-            occurredAt: '2026-04-16T00:00:00.000Z',
-        });
+        buildEntitlementProjectionFromPaddleSubscriptionMock.mockImplementation((subscription, userId, occurredAt) => ({
+            userId,
+            paddleCustomerId: subscription.customer_id ?? null,
+            paddleSubscriptionId: subscription.id,
+            paddlePriceId: subscription.items?.[0]?.price?.id ?? null,
+            subscriptionStatus: subscription.status,
+            active: subscription.status === 'active' || subscription.status === 'trialing',
+            currentPeriodEnd: subscription.next_billed_at ?? null,
+            occurredAt,
+        }));
     });
 
     it('rejects checkout requests without an authenticated user', async () => {
@@ -183,12 +181,6 @@ describe('billingHandlers', () => {
                 next_billed_at: '2026-05-01T00:00:00.000Z',
             },
         });
-        getBillingAccountByUserIdMock.mockResolvedValueOnce({
-            user_id: 'user-1',
-            paddle_customer_id: 'ctm_123',
-            last_event_id: null,
-        });
-
         const response = await handlePaddleWebhookRequest(createJsonRequest('/api/paddle/webhook', {
             method: 'POST',
             headers: {
@@ -211,18 +203,21 @@ describe('billingHandlers', () => {
             'user-1',
             '2026-04-16T00:00:00.000Z',
         );
-        expect(upsertBillingAccountMock).toHaveBeenCalledWith({ kind: 'admin-client' }, expect.objectContaining({
-            user_id: 'user-1',
-            paddle_customer_id: 'ctm_123',
-            paddle_subscription_id: 'sub_123',
-            paddle_price_id: 'pri_plus',
-            subscription_status: 'active',
-            last_event_id: 'evt_123',
-            last_event_occurred_at: '2026-04-16T00:00:00.000Z',
-        }));
-        expect(syncResolvedEntitlementMock).toHaveBeenCalledWith({ kind: 'admin-client' }, expect.objectContaining({
+        expect(applyPaddleSubscriptionEventMock).toHaveBeenCalledWith({ kind: 'admin-client' }, {
+            eventId: 'evt_123',
+            eventType: 'subscription.updated',
+            occurredAt: '2026-04-16T00:00:00.000Z',
             userId: 'user-1',
-        }));
+            paddleCustomerId: 'ctm_123',
+            paddleSubscriptionId: 'sub_123',
+            paddlePriceId: 'pri_plus',
+            subscriptionStatus: 'active',
+            currentPeriodEnd: '2026-05-01T00:00:00.000Z',
+        });
+        expect(upsertBillingAccountMock).not.toHaveBeenCalledWith(
+            { kind: 'admin-client' },
+            expect.objectContaining({ last_event_id: 'evt_123' }),
+        );
     });
 
     it('treats repeated webhook events as idempotent', async () => {
@@ -241,11 +236,7 @@ describe('billingHandlers', () => {
                 next_billed_at: null,
             },
         });
-        getBillingAccountByUserIdMock.mockResolvedValueOnce({
-            user_id: 'user-1',
-            paddle_customer_id: 'ctm_123',
-            last_event_id: 'evt_123',
-        });
+        applyPaddleSubscriptionEventMock.mockResolvedValueOnce('duplicate');
 
         const response = await handlePaddleWebhookRequest(createJsonRequest('/api/paddle/webhook', {
             method: 'POST',
@@ -260,7 +251,156 @@ describe('billingHandlers', () => {
             received: true,
             duplicate: true,
         });
-        expect(upsertBillingAccountMock).not.toHaveBeenCalled();
-        expect(syncResolvedEntitlementMock).not.toHaveBeenCalled();
+        expect(applyPaddleSubscriptionEventMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('acknowledges a delayed older event without replacing the newer projection', async () => {
+        verifyAndParsePaddleWebhookEventMock.mockImplementation((rawBody: string) => JSON.parse(rawBody));
+
+        let acceptedOccurredAt: string | null = null;
+        let acceptedEventId: string | null = null;
+        applyPaddleSubscriptionEventMock.mockImplementation(async (_client, event) => {
+            if (
+                acceptedOccurredAt
+                && (
+                    event.occurredAt < acceptedOccurredAt
+                    || (event.occurredAt === acceptedOccurredAt && event.eventId <= (acceptedEventId ?? ''))
+                )
+            ) {
+                return 'stale';
+            }
+
+            acceptedOccurredAt = event.occurredAt;
+            acceptedEventId = event.eventId;
+            return 'applied';
+        });
+
+        const newerEvent = {
+            event_id: 'evt_newer',
+            event_type: 'subscription.updated',
+            occurred_at: '2026-04-17T00:00:00.000Z',
+            data: {
+                id: 'sub_123',
+                customer_id: 'ctm_123',
+                custom_data: { supabaseUserId: 'user-1' },
+                status: 'active',
+                items: [],
+                next_billed_at: '2026-05-01T00:00:00.000Z',
+            },
+        };
+        const olderEvent = {
+            ...newerEvent,
+            event_id: 'evt_older',
+            occurred_at: '2026-04-16T00:00:00.000Z',
+            data: {
+                ...newerEvent.data,
+                status: 'canceled',
+                next_billed_at: null,
+            },
+        };
+
+        const newerResponse = await handlePaddleWebhookRequest(createJsonRequest('/api/paddle/webhook', {
+            method: 'POST',
+            headers: { 'paddle-signature': 'ts=123;h1=abc' },
+            body: JSON.stringify(newerEvent),
+        }));
+        const olderResponse = await handlePaddleWebhookRequest(createJsonRequest('/api/paddle/webhook', {
+            method: 'POST',
+            headers: { 'paddle-signature': 'ts=123;h1=abc' },
+            body: JSON.stringify(olderEvent),
+        }));
+
+        await expect(newerResponse.json()).resolves.toEqual({ received: true });
+        await expect(olderResponse.json()).resolves.toEqual({ received: true, stale: true });
+        expect(acceptedEventId).toBe('evt_newer');
+        expect(acceptedOccurredAt).toBe('2026-04-17T00:00:00.000Z');
+    });
+
+    it('routes concurrent duplicate deliveries through atomic event acceptance', async () => {
+        verifyAndParsePaddleWebhookEventMock.mockImplementation((rawBody: string) => JSON.parse(rawBody));
+
+        const recordedEventIds = new Set<string>();
+        let transactionQueue = Promise.resolve();
+        applyPaddleSubscriptionEventMock.mockImplementation((_client, event) => {
+            const result = transactionQueue.then(() => {
+                if (recordedEventIds.has(event.eventId)) {
+                    return 'duplicate';
+                }
+
+                recordedEventIds.add(event.eventId);
+                return 'applied';
+            });
+            transactionQueue = result.then(() => undefined);
+            return result;
+        });
+
+        const event = {
+            event_id: 'evt_concurrent',
+            event_type: 'subscription.updated',
+            occurred_at: '2026-04-17T00:00:00.000Z',
+            data: {
+                id: 'sub_123',
+                customer_id: 'ctm_123',
+                custom_data: { supabaseUserId: 'user-1' },
+                status: 'active',
+                items: [],
+                next_billed_at: null,
+            },
+        };
+        const createRequest = () => createJsonRequest('/api/paddle/webhook', {
+            method: 'POST',
+            headers: { 'paddle-signature': 'ts=123;h1=abc' },
+            body: JSON.stringify(event),
+        });
+
+        const responses = await Promise.all([
+            handlePaddleWebhookRequest(createRequest()),
+            handlePaddleWebhookRequest(createRequest()),
+        ]);
+        const bodies = await Promise.all(responses.map((response) => response.json()));
+
+        expect(responses.every((response) => response.status === 200)).toBe(true);
+        expect(bodies).toEqual(expect.arrayContaining([
+            { received: true },
+            { received: true, duplicate: true },
+        ]));
+        expect(recordedEventIds).toEqual(new Set(['evt_concurrent']));
+        expect(applyPaddleSubscriptionEventMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('sends the full subscription projection through one database RPC', async () => {
+        const { applyPaddleSubscriptionEvent } = await vi.importActual<
+            typeof import('@/server/billingData')
+        >('@/server/billingData');
+        const rpc = vi.fn().mockResolvedValue({ data: 'applied', error: null });
+
+        const result = await applyPaddleSubscriptionEvent(
+            { rpc } as unknown as SupabaseClient,
+            {
+                eventId: 'evt_123',
+                eventType: 'subscription.updated',
+                occurredAt: '2026-04-16T00:00:00.000Z',
+                userId: 'user-1',
+                paddleCustomerId: 'ctm_123',
+                paddleSubscriptionId: 'sub_123',
+                paddlePriceId: 'pri_plus',
+                subscriptionStatus: 'active',
+                currentPeriodEnd: '2026-05-01T00:00:00.000Z',
+            },
+        );
+
+        expect(result).toBe('applied');
+        expect(rpc).toHaveBeenCalledTimes(1);
+        expect(rpc).toHaveBeenCalledWith('apply_paddle_subscription_event', {
+            p_event_id: 'evt_123',
+            p_event_type: 'subscription.updated',
+            p_occurred_at: '2026-04-16T00:00:00.000Z',
+            p_user_id: 'user-1',
+            p_paddle_customer_id: 'ctm_123',
+            p_paddle_subscription_id: 'sub_123',
+            p_paddle_price_id: 'pri_plus',
+            p_subscription_status: 'active',
+            p_current_period_end: '2026-05-01T00:00:00.000Z',
+        });
     });
 });

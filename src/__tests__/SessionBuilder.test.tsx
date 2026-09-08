@@ -91,6 +91,8 @@ describe('SessionBuilder', () => {
         render(<SessionBuilder />);
 
         expect(screen.getByText(/Empty canvas/i)).toBeInTheDocument();
+        expect(screen.getAllByRole('button', { name: /^add workout$/i })).toHaveLength(1);
+        expect(screen.getAllByRole('button', { name: /^add rest$/i })).toHaveLength(1);
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
         expect(screen.getByRole('button', { name: /^new session$/i })).toHaveClass('border-primary/60');
 
@@ -291,20 +293,26 @@ describe('SessionBuilder', () => {
         const viewport = screen.getByTestId('session-canvas-viewport');
         const board = screen.getByTestId('session-canvas-board');
         const editButton = screen.getByRole('button', { name: /edit workout 1/i });
+        const requestFrameSpy = vi.spyOn(globalThis, 'requestAnimationFrame');
 
         expect(board).toHaveStyle({ transform: 'translate3d(28px, 28px, 0)' });
 
         fireEvent.pointerDown(board, { pointerId: 1, clientX: 120, clientY: 120 });
         fireEvent.pointerMove(viewport, { pointerId: 1, clientX: 164, clientY: 150 });
-        fireEvent.pointerUp(viewport, { pointerId: 1, clientX: 164, clientY: 150 });
+        fireEvent.pointerMove(viewport, { pointerId: 1, clientX: 180, clientY: 160 });
 
-        expect(board).toHaveStyle({ transform: 'translate3d(72px, 58px, 0)' });
+        expect(requestFrameSpy).toHaveBeenCalledTimes(1);
+
+        fireEvent.pointerUp(viewport, { pointerId: 1, clientX: 180, clientY: 160 });
+
+        expect(board).toHaveStyle({ transform: 'translate3d(88px, 68px, 0)' });
 
         fireEvent.pointerDown(editButton, { pointerId: 2, clientX: 90, clientY: 90 });
         fireEvent.pointerMove(viewport, { pointerId: 2, clientX: 140, clientY: 140 });
         fireEvent.pointerUp(viewport, { pointerId: 2, clientX: 140, clientY: 140 });
 
-        expect(board).toHaveStyle({ transform: 'translate3d(72px, 58px, 0)' });
+        expect(board).toHaveStyle({ transform: 'translate3d(88px, 68px, 0)' });
+        requestFrameSpy.mockRestore();
     });
 
     it('resets the mobile canvas position when a different session draft is loaded', async () => {
@@ -381,7 +389,7 @@ describe('SessionBuilder', () => {
         });
     });
 
-    it('keeps the mobile empty canvas clean without instructional copy', () => {
+    it('keeps the mobile empty canvas actionable with bottom add controls', () => {
         setMobileViewport(true);
         resetStore();
 
@@ -389,7 +397,9 @@ describe('SessionBuilder', () => {
 
         expect(screen.getByTestId('session-canvas-frame')).toBeInTheDocument();
         expect(screen.queryByText(/empty canvas/i)).not.toBeInTheDocument();
-        expect(screen.queryByText(/add workout and rest nodes from the builder actions/i)).not.toBeInTheDocument();
+        expect(screen.getByText(/add a workout or rest block to start this session/i)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /^add workout$/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /^add rest$/i })).toBeInTheDocument();
     });
 
     it('closes builder dialogs from the backdrop', () => {
@@ -415,7 +425,7 @@ describe('SessionBuilder', () => {
         fireEvent.change(within(dialog).getByLabelText(/session name/i), { target: { value: 'No Link Session' } });
         fireEvent.click(within(dialog).getByRole('button', { name: /create session/i }));
 
-        fireEvent.click(screen.getByRole('button', { name: /^workout$/i }));
+        fireEvent.click(screen.getByRole('button', { name: /^add workout$/i }));
         expect(useWorkoutStore.getState().editingSessionDraft?.nodes).toHaveLength(1);
         expect(useWorkoutStore.getState().savedWorkouts).toHaveLength(1);
         const node = useWorkoutStore.getState().editingSessionDraft?.nodes[0];
@@ -425,7 +435,7 @@ describe('SessionBuilder', () => {
         }
     });
 
-    it('adds an incomplete session-local workout node when the current workout config is invalid', () => {
+    it('adds a valid default session-local workout node independently of the current workout config', () => {
         useWorkoutStore.setState({
             selectedSavedWorkoutId: null,
             savedWorkouts: [],
@@ -444,7 +454,7 @@ describe('SessionBuilder', () => {
         fireEvent.change(within(dialog).getByLabelText(/session name/i), { target: { value: 'Broken Session' } });
         fireEvent.click(within(dialog).getByRole('button', { name: /create session/i }));
 
-        fireEvent.click(screen.getByRole('button', { name: /^workout$/i }));
+        fireEvent.click(screen.getByRole('button', { name: /^add workout$/i }));
 
         expect(screen.queryByRole('dialog', { name: /could not add this workout node/i })).not.toBeInTheDocument();
         expect(useWorkoutStore.getState().editingSessionDraft?.nodes).toHaveLength(1);
@@ -453,12 +463,12 @@ describe('SessionBuilder', () => {
         if (node?.type === 'workout') {
             expect(node.sourceWorkoutId).toBeNull();
             expect(node.config).toMatchObject({
-                sets: '',
-                reps: '',
-                seconds: '',
-                rest: '',
-                myoReps: '',
-                myoWorkSecs: '',
+                sets: '3',
+                reps: '15',
+                seconds: '2',
+                rest: '20',
+                myoReps: '5',
+                myoWorkSecs: '2',
             });
         }
     });
@@ -513,6 +523,72 @@ describe('SessionBuilder', () => {
         expect(within(dialog).getByText(/linked workout/i)).toBeInTheDocument();
         expect(within(dialog).getAllByText(baseWorkout.name).length).toBeGreaterThan(0);
         expect(within(dialog).getByRole('button', { name: /save workout/i })).toBeInTheDocument();
+    });
+
+    it('shows progression reminders only for workout nodes at the configured threshold', () => {
+        useWorkoutStore.setState((state) => ({
+            settings: {
+                ...state.settings,
+                progressionReminderThreshold: 3,
+            },
+            setupMode: 'session',
+            editingSessionNodeId: null,
+            editingSessionDraft: {
+                id: 'progression-session',
+                name: 'Progression Session',
+                nodes: [
+                    {
+                        id: 'progression-workout',
+                        type: 'workout',
+                        name: 'Workout 1',
+                        config: {
+                            sets: '2',
+                            reps: '10',
+                            seconds: '3',
+                            rest: '20',
+                            myoReps: '4',
+                            myoWorkSecs: '2',
+                        },
+                        sourceWorkoutId: null,
+                        notes: '',
+                        completedSessionsSinceProgression: 3,
+                        createdAt: '2026-03-01T00:00:00.000Z',
+                        updatedAt: '2026-03-01T00:00:00.000Z',
+                    },
+                    {
+                        id: 'below-threshold-workout',
+                        type: 'workout',
+                        name: 'Workout 2',
+                        config: {
+                            sets: '2', reps: '10', seconds: '3', rest: '20', myoReps: '4', myoWorkSecs: '2',
+                        },
+                        sourceWorkoutId: null,
+                        notes: '',
+                        completedSessionsSinceProgression: 2,
+                        createdAt: '2026-03-01T00:00:00.000Z',
+                        updatedAt: '2026-03-01T00:00:00.000Z',
+                    },
+                    {
+                        id: 'progression-rest',
+                        type: 'rest',
+                        name: 'Rest 1',
+                        seconds: '20',
+                        createdAt: '2026-03-01T00:00:00.000Z',
+                        updatedAt: '2026-03-01T00:00:00.000Z',
+                    },
+                ],
+                timesUsed: 0,
+                lastUsedAt: null,
+                createdAt: '2026-03-01T00:00:00.000Z',
+                updatedAt: '2026-03-01T00:00:00.000Z',
+            },
+        }));
+
+        render(<SessionBuilder />);
+
+        expect(screen.getAllByText('Consider progressing')).toHaveLength(1);
+        expect(screen.getByLabelText(/3 completed sessions since this workout was last changed/i)).toBeInTheDocument();
+        expect(screen.queryByLabelText(/completed sessions since this rest was last changed/i)).not.toBeInTheDocument();
     });
 
     it('shows workout notes in the editor and on the canvas card', () => {
@@ -600,7 +676,7 @@ describe('SessionBuilder', () => {
         expect(screen.getByText(/no longer in your library/i)).toBeInTheDocument();
     });
 
-    it('adds an incomplete session-local workout node when workout config is invalid', () => {
+    it('adds the generic default workout when standalone setup values are blank', () => {
         useWorkoutStore.setState({
             selectedSavedWorkoutId: null,
             savedWorkouts: [],
@@ -621,19 +697,19 @@ describe('SessionBuilder', () => {
         fireEvent.change(within(dialog).getByLabelText(/session name/i), { target: { value: 'Broken Session' } });
         fireEvent.click(within(dialog).getByRole('button', { name: /create session/i }));
 
-        fireEvent.click(screen.getByRole('button', { name: /^workout$/i }));
+        fireEvent.click(screen.getByRole('button', { name: /^add workout$/i }));
         expect(screen.queryByRole('dialog', { name: /could not add this workout node/i })).not.toBeInTheDocument();
         const createdNode = useWorkoutStore.getState().editingSessionDraft?.nodes.find((node) => node.type === 'workout');
         expect(createdNode?.type).toBe('workout');
         if (createdNode?.type === 'workout') {
             expect(createdNode.sourceWorkoutId).toBeNull();
             expect(createdNode.config).toMatchObject({
-                sets: '',
-                reps: '',
-                seconds: '',
-                rest: '',
-                myoReps: '',
-                myoWorkSecs: '',
+                sets: '3',
+                reps: '15',
+                seconds: '2',
+                rest: '20',
+                myoReps: '5',
+                myoWorkSecs: '2',
             });
         }
     });
@@ -645,12 +721,10 @@ describe('SessionBuilder', () => {
         const createDialog = screen.getByRole('dialog', { name: /create a new session/i });
         fireEvent.change(within(createDialog).getByLabelText(/session name/i), { target: { value: 'Leg Session' } });
         fireEvent.click(within(createDialog).getByRole('button', { name: /create session/i }));
-        fireEvent.click(screen.getByRole('button', { name: /^Workout$/i }));
+        fireEvent.click(screen.getByRole('button', { name: /^add workout$/i }));
 
         const orderedButtons = [
             screen.getByRole('button', { name: /^new session$/i }),
-            screen.getByRole('button', { name: /^Workout$/i }),
-            screen.getByRole('button', { name: /^Rest$/i }),
             screen.getByRole('button', { name: /^Save$/i }),
             screen.getByRole('button', { name: /^Save As$/i }),
             screen.getByRole('button', { name: /^Start$/i }),
@@ -660,11 +734,13 @@ describe('SessionBuilder', () => {
                 orderedButtons[index].compareDocumentPosition(orderedButtons[index + 1]) & Node.DOCUMENT_POSITION_FOLLOWING,
             ).toBeTruthy();
         }
+        expect(screen.getByRole('textbox', { name: /session name/i }).compareDocumentPosition(orderedButtons[1]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(screen.getByRole('button', { name: /^add workout$/i }).compareDocumentPosition(orderedButtons[orderedButtons.length - 1]) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
 
         expect(useWorkoutStore.getState().editingSessionDraft?.nodes).toHaveLength(1);
-        expect(screen.getByText('Workout 1')).toBeInTheDocument();
-        expect(screen.getByText('10 @ 3s + (1 * 4 @ 2s)')).toBeInTheDocument();
-        expect(screen.getByText('1:03')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /edit workout 1/i })).toBeInTheDocument();
+        expect(screen.getByText('15 @ 2s + (2 * 5 @ 2s)')).toBeInTheDocument();
+        expect(screen.getByText('1:35')).toBeInTheDocument();
         const initialWorkoutNode = useWorkoutStore.getState().editingSessionDraft?.nodes.find((node) => node.type === 'workout');
         if (initialWorkoutNode?.type === 'workout') {
             expect(initialWorkoutNode.sourceWorkoutId).toBeNull();
@@ -727,9 +803,9 @@ describe('SessionBuilder', () => {
         fireEvent.click(within(workoutDialog).getByRole('button', { name: /close node editor/i }));
         expect(screen.queryByRole('dialog', { name: /workout node editor/i })).not.toBeInTheDocument();
 
-        fireEvent.click(screen.getByRole('button', { name: /^Rest$/i }));
+        fireEvent.click(screen.getByRole('button', { name: /^add rest$/i }));
         expect(useWorkoutStore.getState().editingSessionDraft?.nodes).toHaveLength(2);
-        expect(screen.getByText('Rest 1')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /edit rest 1/i })).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: /edit rest 1/i }));
         const restDialog = screen.getByRole('dialog', { name: /rest node editor/i });
@@ -868,14 +944,15 @@ describe('SessionBuilder', () => {
         render(<SessionBuilder />);
 
         fireEvent.click(screen.getByRole('button', { name: /^new session$/i }));
-        fireEvent.change(screen.getByLabelText(/session name/i), { target: { value: 'Drag Session' } });
+        const createDialog = screen.getByRole('dialog', { name: /create a new session/i });
+        fireEvent.change(within(createDialog).getByLabelText(/session name/i), { target: { value: 'Drag Session' } });
         fireEvent.click(screen.getByRole('button', { name: /create session/i }));
-        fireEvent.click(screen.getByRole('button', { name: /^Workout$/i }));
-        fireEvent.click(screen.getByRole('button', { name: /^Rest$/i }));
-        fireEvent.click(screen.getByRole('button', { name: /^Workout$/i }));
+        fireEvent.click(screen.getByRole('button', { name: /^add workout$/i }));
+        fireEvent.click(screen.getByRole('button', { name: /^add rest$/i }));
+        fireEvent.click(screen.getByRole('button', { name: /^add workout$/i }));
 
-        const workoutOne = screen.getByText('Workout 1').closest('[draggable="true"]') as HTMLElement;
-        const workoutTwo = screen.getByText('Workout 2').closest('[draggable="true"]') as HTMLElement;
+        const workoutOne = screen.getByRole('button', { name: /edit workout 1/i }).closest('[draggable="true"]') as HTMLElement;
+        const workoutTwo = screen.getByRole('button', { name: /edit workout 2/i }).closest('[draggable="true"]') as HTMLElement;
         expect(workoutOne).toBeTruthy();
         expect(workoutTwo).toBeTruthy();
 
@@ -913,11 +990,12 @@ describe('SessionBuilder', () => {
         render(<SessionBuilder />);
 
         fireEvent.click(screen.getByRole('button', { name: /^new session$/i }));
-        fireEvent.change(screen.getByLabelText(/session name/i), { target: { value: 'Touch Session' } });
+        const createDialog = screen.getByRole('dialog', { name: /create a new session/i });
+        fireEvent.change(within(createDialog).getByLabelText(/session name/i), { target: { value: 'Touch Session' } });
         fireEvent.click(screen.getByRole('button', { name: /create session/i }));
-        fireEvent.click(screen.getByRole('button', { name: /^Workout$/i }));
-        fireEvent.click(screen.getByRole('button', { name: /^Rest$/i }));
-        fireEvent.click(screen.getByRole('button', { name: /^Workout$/i }));
+        fireEvent.click(screen.getByRole('button', { name: /^add workout$/i }));
+        fireEvent.click(screen.getByRole('button', { name: /^add rest$/i }));
+        fireEvent.click(screen.getByRole('button', { name: /^add workout$/i }));
 
         fireEvent.click(screen.getByRole('button', { name: /move rest 1 left/i }));
         expect(useWorkoutStore.getState().editingSessionDraft?.nodes.map((node) => node.name)).toEqual([

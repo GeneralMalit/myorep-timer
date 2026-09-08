@@ -23,6 +23,7 @@ describe('sync metadata helpers', () => {
             localId: 'local-1',
             remoteId: null,
             revision: 1,
+            baseRevision: 0,
             updatedAt: '2026-02-01T00:00:00.000Z',
             dirty: true,
             pendingDelete: false,
@@ -50,6 +51,7 @@ describe('sync metadata helpers', () => {
             localId: 'local-9',
             remoteId: 'remote-9',
             revision: 7,
+            baseRevision: 7,
             updatedAt: '2026-02-02T03:04:05.000Z',
             dirty: false,
             pendingDelete: true,
@@ -63,6 +65,7 @@ describe('sync metadata helpers', () => {
             localId: 'local-1',
             remoteId: 'remote-1',
             revision: 2,
+            baseRevision: 2,
             updatedAt: '2026-02-01T00:00:00.000Z',
             dirty: false,
             pendingDelete: false,
@@ -74,6 +77,7 @@ describe('sync metadata helpers', () => {
             localId: 'local-1',
             remoteId: 'remote-1',
             revision: 3,
+            baseRevision: 2,
             updatedAt: '2026-02-03T00:00:00.000Z',
             dirty: true,
             pendingDelete: false,
@@ -88,6 +92,7 @@ describe('sync metadata helpers', () => {
             localId: 'local-1',
             remoteId: null,
             revision: 1,
+            baseRevision: 0,
             updatedAt: '2026-02-04T00:00:00.000Z',
             dirty: true,
             pendingDelete: true,
@@ -100,12 +105,34 @@ describe('sync metadata helpers', () => {
             localId: 'local-1',
             remoteId: null,
             revision: 2,
+            baseRevision: 0,
             updatedAt: '2026-02-05T00:00:00.000Z',
             dirty: false,
             pendingDelete: false,
             deletedAt: null,
             lastSyncedAt: '2026-02-05T00:00:00.000Z',
         });
+    });
+
+    it('normalizes legacy base revisions without guessing across multiple dirty edits', () => {
+        expect(normalizeSyncMetadata({
+            localId: 'clean-local',
+            remoteId: 'clean-remote',
+            revision: 8,
+            dirty: false,
+        }, 'clean-local', '2026-02-06T00:00:00.000Z').baseRevision).toBe(8);
+
+        const legacyDirty = normalizeSyncMetadata({
+            localId: 'dirty-local',
+            remoteId: 'dirty-remote',
+            revision: 8,
+            dirty: true,
+        }, 'dirty-local', '2026-02-06T00:00:00.000Z');
+        expect(legacyDirty.baseRevision).toBeNull();
+
+        const once = touchSyncMetadata({ ...legacyDirty, baseRevision: 5 }, 'dirty-local', '2026-02-07T00:00:00.000Z');
+        const twice = touchSyncMetadata(once, 'dirty-local', '2026-02-08T00:00:00.000Z');
+        expect(twice).toMatchObject({ revision: 10, baseRevision: 5 });
     });
 
     it('maps synced workouts and sessions into Supabase write rows', () => {

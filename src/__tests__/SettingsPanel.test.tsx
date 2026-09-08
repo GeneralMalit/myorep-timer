@@ -41,6 +41,7 @@ describe('SettingsPanel', () => {
                 ttsEnabled: true,
                 pulseEffect: 'always',
                 finishedColor: '#4caf50',
+                progressionReminderThreshold: 3,
             },
         }));
     });
@@ -122,5 +123,28 @@ describe('SettingsPanel', () => {
             kineticConcentricColor: '#405060',
             kineticFinishedColor: '#506070',
         });
+    });
+
+    it('edits the progression reminder threshold as a positive whole number without storing blank input', async () => {
+        render(<SettingsPanel isOpen onClose={vi.fn()} />);
+
+        const thresholdInput = await screen.findByLabelText(/progression reminder after/i);
+        expect(thresholdInput).toHaveValue(3);
+        expect(screen.getAllByText(/completed sessions/i).length).toBeGreaterThanOrEqual(2);
+
+        fireEvent.change(thresholdInput, { target: { value: '5' } });
+        expect((useWorkoutStore.getState().settings as { progressionReminderThreshold?: number }).progressionReminderThreshold).toBe(5);
+
+        fireEvent.change(thresholdInput, { target: { value: '' } });
+        expect(thresholdInput).toHaveValue(null);
+        expect((useWorkoutStore.getState().settings as { progressionReminderThreshold?: number }).progressionReminderThreshold).toBe(5);
+
+        fireEvent.blur(thresholdInput);
+        expect(thresholdInput).toHaveValue(5);
+
+        fireEvent.change(thresholdInput, { target: { value: '2.5' } });
+        fireEvent.blur(thresholdInput);
+        expect(thresholdInput).toHaveValue(5);
+        expect((useWorkoutStore.getState().settings as { progressionReminderThreshold?: number }).progressionReminderThreshold).toBe(5);
     });
 });

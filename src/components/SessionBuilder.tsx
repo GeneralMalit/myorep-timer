@@ -136,21 +136,17 @@ const SessionBuilder = () => {
     const saveSessionDraft = useWorkoutStore((state) => state.saveSessionDraft);
     const saveSessionDraftAs = useWorkoutStore((state) => state.saveSessionDraftAs);
     const startSession = useWorkoutStore((state) => state.startSession);
-    const addWorkoutNodeFromCurrentSetup = useWorkoutStore((state) => state.addWorkoutNodeFromCurrentSetup);
+    const addDefaultWorkoutNode = useWorkoutStore((state) => state.addDefaultWorkoutNode);
     const addRestNode = useWorkoutStore((state) => state.addRestNode);
     const removeSessionNode = useWorkoutStore((state) => state.removeSessionNode);
     const moveSessionNode = useWorkoutStore((state) => state.moveSessionNode);
     const moveSessionNodeToIndex = useWorkoutStore((state) => state.moveSessionNodeToIndex);
     const [dialogState, setDialogState] = useState<SessionBuilderDialogState>(null);
+    const [sessionNameDraft, setSessionNameDraft] = useState('');
 
-    const nodeCount = editingSessionDraft?.nodes.length ?? 0;
-    const summary = useMemo(() => {
-        if (!editingSessionDraft) {
-            return 'Create a session, then edit nodes directly in the canvas.';
-        }
-
-        return `${nodeCount} node${nodeCount === 1 ? '' : 's'} in the chain.`;
-    }, [editingSessionDraft, nodeCount]);
+    useEffect(() => {
+        setSessionNameDraft(editingSessionDraft?.name ?? '');
+    }, [editingSessionDraft?.id, editingSessionDraft?.name]);
 
     const estimatedDuration = useMemo(() => {
         if (!editingSessionDraft) {
@@ -193,7 +189,7 @@ const SessionBuilder = () => {
     };
 
     const handleSave = () => {
-        const result = saveSessionDraft();
+        const result = saveSessionDraft(sessionNameDraft);
         if (!result.ok) {
             setDialogState({
                 type: 'message',
@@ -217,7 +213,7 @@ const SessionBuilder = () => {
             type: 'save-session-as',
             title: 'Save this session as a copy',
             description: 'Give the current draft a new name before saving it into your session library.',
-            value: editingSessionDraft.name,
+            value: sessionNameDraft || editingSessionDraft.name,
             confirmLabel: 'Save Copy',
         });
     };
@@ -244,12 +240,29 @@ const SessionBuilder = () => {
     };
 
     const handleAddWorkout = () => {
-        const result = addWorkoutNodeFromCurrentSetup();
+        const result = addDefaultWorkoutNode();
+        if (result.ok && result.id) {
+            setEditingSessionNodeId(result.id);
+        }
         if (!result.ok) {
             setDialogState({
                 type: 'message',
                 title: 'Could not add this workout node',
                 description: result.error ?? 'Could not add workout node.',
+            });
+        }
+    };
+
+    const handleAddRest = () => {
+        const result = addRestNode('60');
+        if (result.ok && result.id) {
+            setEditingSessionNodeId(result.id);
+        }
+        if (!result.ok) {
+            setDialogState({
+                type: 'message',
+                title: 'Could not add this rest node',
+                description: result.error ?? 'Could not add rest node.',
             });
         }
     };
@@ -299,7 +312,7 @@ const SessionBuilder = () => {
                 >
                     <div className={layout.controls}>
                         <div className={layout.actionsWrap}>
-                            <div className={layout.actionsGrid}>
+                            <div className={cn(layout.actionsGrid, 'flex-wrap')}>
                                 <Button
                                     type="button"
                                     variant="outline"
@@ -308,22 +321,16 @@ const SessionBuilder = () => {
                                 >
                                     <Plus size={16} /> New Session
                                 </Button>
-                                <Button
-                                    type="button"
-                                    variant="secondary"
-                                    onClick={handleAddWorkout}
-                                    className="shrink-0 gap-2 rounded-full px-4 font-black italic tracking-tighter"
-                                >
-                                    <Plus size={16} /> Workout
-                                </Button>
-                                <Button
-                                    type="button"
-                                    variant="secondary"
-                                    onClick={() => addRestNode()}
-                                    className="shrink-0 gap-2 rounded-full px-4 font-black italic tracking-tighter"
-                                >
-                                    <Plus size={16} /> Rest
-                                </Button>
+                                <div className="flex min-w-[12rem] flex-1 items-center gap-2">
+                                    <Label htmlFor="session-builder-name" className="sr-only">Session name</Label>
+                                    <Input
+                                        id="session-builder-name"
+                                        value={sessionNameDraft}
+                                        onChange={(event) => setSessionNameDraft(event.target.value)}
+                                        placeholder="Session name"
+                                        className="h-10 min-w-0 flex-1 rounded-xl"
+                                    />
+                                </div>
                                 <Button type="button" variant="secondary" onClick={handleSave} className="shrink-0 gap-2 rounded-full px-4 font-black italic tracking-tighter">
                                     <Save size={16} /> Save
                                 </Button>
@@ -355,6 +362,8 @@ const SessionBuilder = () => {
                                 onRemoveNode={removeSessionNode}
                                 onMoveNode={moveSessionNode}
                                 onMoveNodeToIndex={(nodeId, targetIndex) => moveSessionNodeToIndex(nodeId, targetIndex)}
+                                onAddWorkout={handleAddWorkout}
+                                onAddRest={handleAddRest}
                             />
                         </div>
                     </div>

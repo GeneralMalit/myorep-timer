@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient, type User } from '@supabase/supabase-js';
+import type { SupabaseEntitlementRow } from '../types/sync.ts';
 import type { SupabaseServerEnvironment } from './billingEnv.ts';
 
 export interface BillingAccountRow {
@@ -25,6 +26,10 @@ export interface EntitlementOverrideRow {
     created_at: string;
     updated_at: string;
 }
+
+export type PaddleSubscriptionEventAcceptance = 'applied' | 'duplicate' | 'stale';
+
+export type PasswordSignUpAvailability = 'available' | 'email_taken' | 'username_taken';
 
 export class AccountProvisionError extends Error {
     code: string;
@@ -63,39 +68,6 @@ export const authenticateSupabaseUser = async (
     }
 
     return data.user;
-};
-
-export const findSupabaseUserByEmail = async (
-    adminClient: SupabaseClient,
-    email: string,
-): Promise<User | null> => {
-    const normalizedEmail = email.trim().toLowerCase();
-    let page = 1;
-
-    while (page <= 10) {
-        const { data, error } = await adminClient.auth.admin.listUsers({
-            page,
-            perPage: 200,
-        });
-
-        if (error) {
-            throw error;
-        }
-
-        const users = data.users ?? [];
-        const match = users.find((user) => user.email?.trim().toLowerCase() === normalizedEmail);
-        if (match) {
-            return match;
-        }
-
-        if (users.length < 200) {
-            return null;
-        }
-
-        page += 1;
-    }
-
-    return null;
 };
 
 export const getSupabaseProfileByUserId = async (
@@ -170,29 +142,53 @@ export const upsertSupabaseProfile = async (
     return data;
 };
 
-export const assertSupabasePasswordSignUpAvailable = async (
+export const getSupabasePasswordSignUpAvailability = async (
     adminClient: SupabaseClient,
     payload: {
         username: string;
         email: string;
     },
-): Promise<void> => {
-    const normalizedEmail = payload.email.trim().toLowerCase();
-    const existingUser = await findSupabaseUserByEmail(adminClient, normalizedEmail);
-    if (existingUser) {
-        throw new AccountProvisionError(
-            'account_exists',
-            'An account already exists for that email. Sign in or use forgot password.',
-        );
+): Promise<PasswordSignUpAvailability> => {
+    const { data, error } = await adminClient.rpc('get_password_signup_availability', {
+        p_email: payload.email.trim().toLowerCase(),
+        p_username: payload.username,
+    });
+
+    if (error) {
+        throw error;
     }
 
-    const existingProfile = await findSupabaseProfileByUsername(adminClient, payload.username);
-    if (existingProfile) {
-        throw new AccountProvisionError(
-            'username_taken',
-            'That username is already taken.',
-        );
+    if (data !== 'available' && data !== 'email_taken' && data !== 'username_taken') {
+        throw new Error('Supabase returned an invalid sign-up availability result.');
     }
+
+    return data;
+};
+
+export const refreshResolvedEntitlement = async (
+    adminClient: SupabaseClient,
+    userId: string,
+): Promise<SupabaseEntitlementRow> => {
+    const { data, error } = await adminClient.rpc('refresh_resolved_entitlement', {
+        p_user_id: userId,
+    });
+
+    if (error) {
+        throw error;
+    }
+
+    const entitlement = data as Partial<SupabaseEntitlementRow> | null;
+    if (
+        !entitlement
+        || entitlement.user_id !== userId
+        || (entitlement.plan !== 'free' && entitlement.plan !== 'plus')
+        || typeof entitlement.cloud_sync_enabled !== 'boolean'
+        || typeof entitlement.updated_at !== 'string'
+    ) {
+        throw new Error('Supabase returned an invalid entitlement refresh result.');
+    }
+
+    return entitlement as SupabaseEntitlementRow;
 };
 
 export const updateSupabaseUsername = async (
@@ -276,4 +272,41 @@ export const upsertBillingAccount = async (
     if (error) {
         throw error;
     }
+};
+
+export const applyPaddleSubscriptionEvent = async (
+    adminClient: SupabaseClient,
+    event: {
+        eventId: string;
+        eventType: string;
+        occurredAt: string;
+        userId: string;
+        paddleCustomerId: string | null;
+        paddleSubscriptionId: string;
+        paddlePriceId: string | null;
+        subscriptionStatus: string;
+        currentPeriodEnd: string | null;
+    },
+): Promise<PaddleSubscriptionEventAcceptance> => {
+    const { data, error } = await adminClient.rpc('apply_paddle_subscription_event', {
+        p_event_id: event.eventId,
+        p_event_type: event.eventType,
+        p_occurred_at: event.occurredAt,
+        p_user_id: event.userId,
+        p_paddle_customer_id: event.paddleCustomerId,
+        p_paddle_subscription_id: event.paddleSubscriptionId,
+        p_paddle_price_id: event.paddlePriceId,
+        p_subscription_status: event.subscriptionStatus,
+        p_current_period_end: event.currentPeriodEnd,
+    });
+
+    if (error) {
+        throw error;
+    }
+
+    if (data !== 'applied' && data !== 'duplicate' && data !== 'stale') {
+        throw new Error('Supabase returned an invalid Paddle event acceptance result.');
+    }
+
+    return data;
 };

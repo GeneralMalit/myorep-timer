@@ -4,6 +4,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
 import type { SessionNode } from '@/types/savedSessions';
 import { hasLinkedWorkoutSource } from '@/utils/savedSessions';
+import { DEFAULT_PROGRESSION_REMINDER_THRESHOLD } from '@/utils/workoutProgression';
 import { cn } from '@/lib/utils';
 
 interface SessionNodeCardProps {
@@ -38,8 +39,24 @@ const SessionNodeCard = ({
     onDragEnd,
 }: SessionNodeCardProps) => {
     const savedWorkouts = useWorkoutStore((state) => state.savedWorkouts);
+    const progressionReminderThreshold = useWorkoutStore((state) => {
+        const value = state.settings.progressionReminderThreshold;
+
+        return typeof value === 'number' && Number.isSafeInteger(value) && value > 0
+            ? value
+            : DEFAULT_PROGRESSION_REMINDER_THRESHOLD;
+    });
     const savedWorkoutIds = savedWorkouts.map((workout) => workout.id);
     const isWorkout = node.type === 'workout';
+    const completedSessionsSinceProgression = node.type === 'workout'
+        ? node.completedSessionsSinceProgression
+        : 0;
+    const normalizedCompletedSessions = typeof completedSessionsSinceProgression === 'number'
+        && Number.isSafeInteger(completedSessionsSinceProgression)
+        && completedSessionsSinceProgression >= 0
+        ? completedSessionsSinceProgression
+        : 0;
+    const shouldShowProgressionReminder = isWorkout && normalizedCompletedSessions >= progressionReminderThreshold;
     const workoutConfig = isWorkout ? node.config : null;
     const isUnsavedWorkoutNode = isWorkout && !node.sourceWorkoutId;
     const isMissingLinkedWorkout = isWorkout && Boolean(node.sourceWorkoutId) && !hasLinkedWorkoutSource(node, savedWorkoutIds);
@@ -130,11 +147,20 @@ const SessionNodeCard = ({
                         )}
                     </div>
 
-                    {!isMobile && (
-                        <div className="flex items-center gap-1 pt-0.5">
-                            <GripVertical size={12} className="text-muted-foreground" />
-                        </div>
-                    )}
+                    <div className="flex shrink-0 items-start gap-1 pt-0.5">
+                        {shouldShowProgressionReminder && (
+                            <span
+                                role="note"
+                                tabIndex={0}
+                                className="inline-flex max-w-[7.5rem] items-center rounded-md border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-right text-[7px] font-semibold uppercase leading-tight tracking-[0.12em] text-amber-200 outline-none focus-visible:ring-2 focus-visible:ring-amber-300/70"
+                                title={`${normalizedCompletedSessions} completed sessions since this workout was last changed. Review its settings or notes.`}
+                                aria-label={`${normalizedCompletedSessions} completed sessions since this workout was last changed. Review its settings or notes.`}
+                            >
+                                Consider progressing
+                            </span>
+                        )}
+                        {!isMobile && <GripVertical size={12} className="mt-0.5 shrink-0 text-muted-foreground" />}
+                    </div>
                 </div>
 
                 <div className={cn('mt-auto grid gap-1', actionGridClass)}>

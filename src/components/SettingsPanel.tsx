@@ -20,6 +20,7 @@ import { audioEngine } from '@/utils/audioEngine';
 import { cn } from '@/lib/utils';
 import { settingsPanelDesktopLayout } from '@/layout/settingsPanel.desktop';
 import { settingsPanelMobileLayout } from '@/layout/settingsPanel.mobile';
+import { DEFAULT_PROGRESSION_REMINDER_THRESHOLD } from '@/utils/workoutProgression';
 
 interface SettingsPanelProps {
     isOpen: boolean;
@@ -41,6 +42,22 @@ type VisualIdentityItem = {
 };
 
 const KINETIC_DEFAULT_COLOR = '#FFFFFF';
+const normalizeProgressionReminderThreshold = (value: unknown): number => {
+    if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 1) {
+        return DEFAULT_PROGRESSION_REMINDER_THRESHOLD;
+    }
+
+    return value;
+};
+
+const parseProgressionReminderThreshold = (value: string): number | null => {
+    if (!/^\d+$/.test(value.trim())) {
+        return null;
+    }
+
+    const parsed = Number(value);
+    return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+};
 
 const CLASSIC_VISUAL_COLORS: VisualIdentityItem[] = [
     { label: 'Active', key: 'activeColor' },
@@ -104,6 +121,11 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
     const isMobileViewport = useMobileViewport();
     const layout = getResponsiveLayout(isMobileViewport, settingsPanelMobileLayout, settingsPanelDesktopLayout);
     const [shouldRenderContent, setShouldRenderContent] = useState(isOpen);
+    const rawProgressionReminderThreshold = settings.progressionReminderThreshold;
+    const progressionReminderThreshold = normalizeProgressionReminderThreshold(rawProgressionReminderThreshold);
+    const [progressionReminderThresholdDraft, setProgressionReminderThresholdDraft] = useState(
+        String(progressionReminderThreshold),
+    );
     const kineticSwitchClassName = isKinetic
         ? 'border-[#424940] bg-[#272c27] data-[state=checked]:border-[#A8FF5A] data-[state=checked]:bg-[#A8FF5A] data-[state=checked]:[&>span]:bg-[#111412] data-[state=unchecked]:bg-[#272c27] focus-visible:ring-[#FF5B36] focus-visible:ring-offset-[#111412]'
         : undefined;
@@ -118,6 +140,29 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
 
     const handleChange = <K extends keyof WorkoutSettings>(key: K, value: WorkoutSettings[K]) => {
         setSettings({ [key]: value });
+    };
+
+    useEffect(() => {
+        setProgressionReminderThresholdDraft(String(progressionReminderThreshold));
+    }, [progressionReminderThreshold]);
+
+    const handleProgressionReminderThresholdChange = (value: string) => {
+        setProgressionReminderThresholdDraft(value);
+        const parsed = parseProgressionReminderThreshold(value);
+        if (parsed !== null) {
+            handleChange('progressionReminderThreshold', parsed);
+        }
+    };
+
+    const commitProgressionReminderThreshold = () => {
+        const parsed = parseProgressionReminderThreshold(progressionReminderThresholdDraft);
+        if (parsed === null) {
+            setProgressionReminderThresholdDraft(String(progressionReminderThreshold));
+            return;
+        }
+
+        setProgressionReminderThresholdDraft(String(parsed));
+        handleChange('progressionReminderThreshold', parsed);
     };
 
     const paceValues = [parseInt(seconds, 10), parseInt(myoWorkSecs, 10)].filter((value) => Number.isFinite(value) && value > 0);
@@ -341,6 +386,42 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                                         onCheckedChange={(checked) => handleChange('smoothAnimation', checked)}
                                         className={kineticSwitchClassName}
                                     />
+                                </div>
+                            </section>
+
+                            <section className={cn(layout.section, isKinetic && 'space-y-3 rounded-[10px] border-[#343833] bg-[#171a17] p-4')}>
+                                <div className={cn(layout.sectionTitle, isKinetic && 'normal-case text-[11px] font-semibold tracking-[0.08em] text-[#9EA69B]')}>
+                                    <Info size={16} />
+                                    <span>Progression</span>
+                                </div>
+                                <div className={layout.field}>
+                                    <Label
+                                        htmlFor="settings-progression-reminder-threshold"
+                                        className={cn(layout.fieldLabel, isKinetic && 'normal-case px-0 text-[11px] font-medium tracking-normal text-[#C6CAC3]')}
+                                    >
+                                        Progression reminder after
+                                    </Label>
+                                    <div className="flex items-center gap-2">
+                                        <Input
+                                            id="settings-progression-reminder-threshold"
+                                            type="number"
+                                            min={1}
+                                            step={1}
+                                            inputMode="numeric"
+                                            value={progressionReminderThresholdDraft}
+                                            onChange={(event) => handleProgressionReminderThresholdChange(event.target.value)}
+                                            onBlur={commitProgressionReminderThreshold}
+                                            aria-describedby="settings-progression-reminder-threshold-help"
+                                            className={cn(layout.fieldInput, 'max-w-28', isKinetic && 'h-10 rounded-[8px] border-[#424940] bg-[#111412] font-medium text-[#F2F0ED] focus-visible:ring-[#FF5B36] focus-visible:ring-offset-[#171a17]')}
+                                        />
+                                        <span className={cn('text-sm text-muted-foreground', isKinetic && 'text-[#9EA69B]')}>completed sessions</span>
+                                    </div>
+                                    <p
+                                        id="settings-progression-reminder-threshold-help"
+                                        className={cn(layout.fieldHelp, isKinetic && 'normal-case px-0 text-[11px] tracking-normal text-[#8A9285]')}
+                                    >
+                                        Reminds you to review a workout after this many completed sessions. Editing its workout settings or notes resets its count.
+                                    </p>
                                 </div>
                             </section>
 

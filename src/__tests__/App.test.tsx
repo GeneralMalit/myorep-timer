@@ -370,8 +370,8 @@ describe('App', () => {
         expect(await screen.findByText(/Session Canvas/i)).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /workout setup/i })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /session builder/i })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /^workout$/i })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /^rest$/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /^add workout$/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /^add rest$/i })).toBeInTheDocument();
         expect(screen.queryByText(/^End$/i)).not.toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /add workout node/i })).not.toBeInTheDocument();
     });

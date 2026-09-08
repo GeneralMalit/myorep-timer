@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import {
     Activity,
     ArrowDown,
@@ -59,6 +59,11 @@ const iconButtonClassName = 'h-9 w-9 rounded-[8px] border border-[#384039] bg-[#
 
 type ActionResult = { ok: boolean; error?: string; id?: string };
 
+type SuccessNotification = {
+    id: number;
+    message: string;
+};
+
 type BuilderDialog =
     | { kind: 'prompt'; title: string; description: string; value: string; confirmLabel: string }
     | { kind: 'feedback'; title: string; description: string; tone: 'error' | 'success' }
@@ -90,6 +95,17 @@ const nodeSummary = (node: SessionNode): string => (
 );
 
 const nodeAccent = (node: SessionNode): string => node.type === 'workout' ? KINETIC.theme : KINETIC.blue;
+
+const getCompletedSessionCount = (node: WorkoutSessionNode): number => {
+    const count = (node as WorkoutSessionNode & { completedSessionsSinceProgression?: unknown }).completedSessionsSinceProgression;
+    return typeof count === 'number' && Number.isFinite(count) && count >= 0 ? Math.floor(count) : 0;
+};
+
+const getProgressionReminderThreshold = (value: unknown): number => (
+    typeof value === 'number' && Number.isFinite(value) && value > 0
+        ? Math.max(1, Math.floor(value))
+        : 3
+);
 
 const isNodeValid = (node: SessionNode): boolean => {
     if (!node.name.trim()) {
@@ -124,6 +140,8 @@ const KineticNodeCard = ({
     onDelete,
     onDragStart,
     onDrop,
+    progressionReminderThreshold,
+    nodeRef,
 }: {
     node: SessionNode;
     index: number;
@@ -134,9 +152,16 @@ const KineticNodeCard = ({
     onDelete: () => void;
     onDragStart: () => void;
     onDrop: () => void;
+    progressionReminderThreshold: number;
+    nodeRef: (element: HTMLElement | null) => void;
 }) => {
     const accent = nodeAccent(node);
     const valid = isNodeValid(node);
+    const showProgressionReminder = node.type === 'workout'
+        && getCompletedSessionCount(node) >= progressionReminderThreshold;
+    const progressionReminderDescription = node.type === 'workout'
+        ? `${getCompletedSessionCount(node)} completed sessions since this workout was last changed. Review its settings or notes.`
+        : '';
 
     return (
         <div className="relative flex gap-3">
@@ -144,6 +169,7 @@ const KineticNodeCard = ({
                 {String(index + 1).padStart(2, '0')}
             </div>
             <article
+                ref={nodeRef}
                 draggable
                 tabIndex={0}
                 aria-label={`${node.type === 'workout' ? 'Workout' : 'Rest'} ${node.name}`}
@@ -198,7 +224,21 @@ const KineticNodeCard = ({
                             </div>
                         )}
                     </div>
-                    <GripVertical size={17} className="mt-1 shrink-0 text-[#606A5F] opacity-70" aria-label="Drag to reorder" />
+                    <div className="mt-0.5 flex shrink-0 items-start gap-2">
+                        {showProgressionReminder && (
+                            <div
+                                role="note"
+                                tabIndex={0}
+                                aria-label={progressionReminderDescription}
+                                title={progressionReminderDescription}
+                                className="border border-[#A8FF5A]/40 bg-[#A8FF5A]/10 px-2 py-1 text-[10px] font-semibold text-[#C7FFA0] outline-none focus-visible:ring-2 focus-visible:ring-[var(--kinetic-theme-color)]/70"
+                                style={{ borderRadius: 5 }}
+                            >
+                                Consider progressing
+                            </div>
+                        )}
+                        <GripVertical size={17} className="mt-1 shrink-0 text-[#606A5F] opacity-70" aria-label="Drag to reorder" />
+                    </div>
                 </div>
                 <div className="mt-3 flex items-center justify-between border-t border-[#2C322D] pt-2">
                     <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-[#727B71]">Block {index + 1} / {total}</span>
@@ -441,19 +481,43 @@ const BuilderDialog = ({ dialog, value, onChangeValue, onClose, onConfirm }: {
     );
 };
 
+const TimelineAddControls = ({ onAddWorkout, onAddRest }: {
+    onAddWorkout: () => void;
+    onAddRest: () => void;
+}) => (
+    <div data-testid="kinetic-timeline-add-controls" className="flex flex-wrap items-center justify-center gap-2 border-t border-[#2C322D] pt-4">
+        <Button
+            type="button"
+            className="h-10 gap-2 rounded-[9px] border-0 px-4 text-sm font-semibold text-[#151411] hover:brightness-110"
+            style={{ backgroundColor: KINETIC.theme }}
+            onClick={onAddWorkout}
+        >
+            <Plus size={15} /> Add workout
+        </Button>
+        <Button type="button" variant="ghost" className={cn(quietButtonClassName, 'h-10 gap-2')} onClick={onAddRest}>
+            <Plus size={15} /> Add rest
+        </Button>
+    </div>
+);
+
 const KineticSessionBuilder = ({ className }: KineticSessionBuilderProps) => {
     const editingSessionDraft = useWorkoutStore((state) => state.editingSessionDraft);
     const savedSessions = useWorkoutStore((state) => state.savedSessions);
     const savedWorkouts = useWorkoutStore((state) => state.savedWorkouts);
     const editingSessionNodeId = useWorkoutStore((state) => state.editingSessionNodeId);
-    const prepTime = useWorkoutStore((state) => state.settings.prepTime);
+    const settings = useWorkoutStore((state) => state.settings);
+    const prepTime = settings.prepTime;
+    const progressionReminderThreshold = getProgressionReminderThreshold(
+        (settings as typeof settings & { progressionReminderThreshold?: unknown }).progressionReminderThreshold,
+    );
     const createSession = useWorkoutStore((state) => state.createSession);
     const saveSessionDraft = useWorkoutStore((state) => state.saveSessionDraft);
     const saveSessionDraftAs = useWorkoutStore((state) => state.saveSessionDraftAs);
     const loadSessionForEditing = useWorkoutStore((state) => state.loadSessionForEditing);
     const startSession = useWorkoutStore((state) => state.startSession);
-    const addWorkoutNodeFromCurrentSetup = useWorkoutStore((state) => state.addWorkoutNodeFromCurrentSetup);
-    const addWorkoutNodeFromSavedWorkout = useWorkoutStore((state) => state.addWorkoutNodeFromSavedWorkout);
+    const addDefaultWorkoutNode = useWorkoutStore((state) => (
+        (state as typeof state & { addDefaultWorkoutNode: () => ActionResult }).addDefaultWorkoutNode
+    ));
     const addRestNode = useWorkoutStore((state) => state.addRestNode);
     const updateWorkoutNode = useWorkoutStore((state) => state.updateWorkoutNode);
     const updateRestNode = useWorkoutStore((state) => state.updateRestNode);
@@ -466,9 +530,13 @@ const KineticSessionBuilder = ({ className }: KineticSessionBuilderProps) => {
     const [draftName, setDraftName] = useState(editingSessionDraft?.name ?? '');
     const [dialog, setDialog] = useState<BuilderDialog>(null);
     const [dialogValue, setDialogValue] = useState('');
-    const [statusMessage, setStatusMessage] = useState('');
+    const [statusMessage, setStatusMessage] = useState<SuccessNotification | null>(null);
     const [sessionPicker, setSessionPicker] = useState('');
     const [draggedNodeId, setDraggedNodeId] = useState<string | null>(null);
+    const statusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const statusSequenceRef = useRef(0);
+    const nodeCardRefs = useRef(new Map<string, HTMLElement>());
+    const pendingScrollNodeIdRef = useRef<string | null>(null);
 
     const nodes = editingSessionDraft?.nodes ?? [];
     const selectedNode = useMemo(() => nodes.find((node) => node.id === editingSessionNodeId) ?? null, [editingSessionNodeId, nodes]);
@@ -497,12 +565,58 @@ const KineticSessionBuilder = ({ className }: KineticSessionBuilderProps) => {
         setEditingSessionNodeId(nodes[0]?.id ?? null);
     }, [editingSessionDraft, editingSessionNodeId, nodes, setEditingSessionNodeId]);
 
+    useEffect(() => {
+        const pendingNodeId = pendingScrollNodeIdRef.current;
+        if (!pendingNodeId) return;
+
+        const nodeElement = nodeCardRefs.current.get(pendingNodeId);
+        if (!nodeElement) return;
+
+        pendingScrollNodeIdRef.current = null;
+        nodeElement.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
+    }, [nodes]);
+
+    useEffect(() => () => {
+        if (statusTimeoutRef.current !== null) {
+            clearTimeout(statusTimeoutRef.current);
+            statusTimeoutRef.current = null;
+        }
+    }, []);
+
+    const showSuccess = (message: string) => {
+        if (statusTimeoutRef.current !== null) {
+            clearTimeout(statusTimeoutRef.current);
+            statusTimeoutRef.current = null;
+        }
+
+        const id = statusSequenceRef.current + 1;
+        statusSequenceRef.current = id;
+        setStatusMessage({ id, message });
+
+        let timeoutId: ReturnType<typeof setTimeout>;
+        timeoutId = setTimeout(() => {
+            setStatusMessage((current) => current?.id === id ? null : current);
+            if (statusTimeoutRef.current === timeoutId) {
+                statusTimeoutRef.current = null;
+            }
+        }, 3000);
+        statusTimeoutRef.current = timeoutId;
+    };
+
+    const dismissSuccess = () => {
+        if (statusTimeoutRef.current !== null) {
+            clearTimeout(statusTimeoutRef.current);
+            statusTimeoutRef.current = null;
+        }
+        setStatusMessage(null);
+    };
+
     const showResult = (result: ActionResult, successMessage?: string) => {
         if (!result.ok) {
             setDialog({ kind: 'feedback', title: 'Could not update session', description: result.error ?? 'Please check the session and try again.', tone: 'error' });
             return;
         }
-        if (successMessage) setStatusMessage(successMessage);
+        if (successMessage) showSuccess(successMessage);
     };
 
     const handleCreate = () => {
@@ -532,12 +646,16 @@ const KineticSessionBuilder = ({ className }: KineticSessionBuilderProps) => {
 
     const handleAddResult = (result: ActionResult) => {
         if (result.ok && result.id) {
+            pendingScrollNodeIdRef.current = result.id;
             setEditingSessionNodeId(result.id);
-            setStatusMessage('Block added');
+            showSuccess('Block added');
         } else {
             showResult(result);
         }
     };
+
+    const handleAddWorkout = () => handleAddResult(addDefaultWorkoutNode());
+    const handleAddRest = () => handleAddResult(addRestNode('60'));
 
     const handleDialogConfirm = () => {
         if (!dialog) return;
@@ -552,7 +670,7 @@ const KineticSessionBuilder = ({ className }: KineticSessionBuilderProps) => {
         }
         setDialog(null);
         setDraftName(dialogValue);
-        setStatusMessage(dialog.title === 'Create a session' ? 'Session created' : 'Copy saved');
+        showSuccess(dialog.title === 'Create a session' ? 'Session created' : 'Copy saved');
     };
 
     const handleDeleteNode = (nodeId: string) => {
@@ -560,7 +678,7 @@ const KineticSessionBuilder = ({ className }: KineticSessionBuilderProps) => {
         const nextNode = nodes[index + 1] ?? nodes[index - 1] ?? null;
         removeSessionNode(nodeId);
         setEditingSessionNodeId(nextNode?.id ?? null);
-        setStatusMessage('Block removed');
+        showSuccess('Block removed');
     };
 
     const handleLoadSession = (sessionId: string) => {
@@ -580,9 +698,6 @@ const KineticSessionBuilder = ({ className }: KineticSessionBuilderProps) => {
                             <div className="text-[11px] font-bold uppercase tracking-[0.25em]" style={{ color: KINETIC.theme }}>SESSION BUILDER</div>
                             {hasUnsavedChanges && <span className="border border-[#A8FF5A]/40 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.16em] text-[#A8FF5A]" style={{ borderRadius: 5 }}>Unsaved</span>}
                         </div>
-                        <div className="mt-3 flex max-w-[420px] items-center gap-2">
-                            <Input aria-label="Session name" value={draftName} onChange={(event) => setDraftName(event.target.value)} placeholder="Name this session" className="h-9 border-0 border-b border-[#4A5448] bg-transparent px-0 text-lg font-semibold tracking-[-0.03em] shadow-none focus-visible:border-[var(--kinetic-theme-color)] focus-visible:ring-0" />
-                        </div>
                     </div>
                     <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
                         <label className="sr-only" htmlFor="kinetic-session-picker">Open saved session</label>
@@ -600,20 +715,14 @@ const KineticSessionBuilder = ({ className }: KineticSessionBuilderProps) => {
 
             <div className="flex min-h-0 flex-1 flex-col overflow-y-auto lg:overflow-hidden">
                 <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b px-4 py-3 sm:px-6" style={{ borderColor: KINETIC.border, backgroundColor: '#131614' }}>
-                    <div className="flex flex-wrap items-center gap-2">
-                        <Button type="button" className="h-10 gap-2 rounded-[9px] border-0 px-4 text-sm font-semibold text-[#151411] hover:brightness-110" style={{ backgroundColor: KINETIC.theme }} onClick={() => handleAddResult(addWorkoutNodeFromCurrentSetup())}><Plus size={15} /> Add workout</Button>
-                        <Button type="button" variant="ghost" className={cn(quietButtonClassName, 'h-10 gap-2')} onClick={() => handleAddResult(addRestNode('60'))}><Plus size={15} /> Add rest</Button>
-                        {savedWorkouts.length > 0 && (
-                            <select aria-label="Add saved workout" defaultValue="" onChange={(event) => {
-                                if (event.target.value) {
-                                    handleAddResult(addWorkoutNodeFromSavedWorkout(event.target.value));
-                                    event.target.value = '';
-                                }
-                            }} className="h-10 max-w-[190px] rounded-[9px] border border-[#384039] bg-[#20251F] px-3 text-xs text-[#D9DED4] outline-none focus:border-[var(--kinetic-theme-color)]">
-                                <option value="">Add from library</option>
-                                {savedWorkouts.map((workout) => <option key={workout.id} value={workout.id}>{workout.name}</option>)}
-                            </select>
-                        )}
+                    <div className="flex min-w-0 flex-1 items-center gap-3">
+                        <Input
+                            aria-label="Session name"
+                            value={draftName}
+                            onChange={(event) => setDraftName(event.target.value)}
+                            placeholder="Name this session"
+                            className="h-10 min-w-0 max-w-[420px] flex-1 border-0 border-b border-[#4A5448] bg-transparent px-0 text-lg font-semibold tracking-[-0.03em] shadow-none focus-visible:border-[var(--kinetic-theme-color)] focus-visible:ring-0"
+                        />
                     </div>
                     <div className="flex items-center gap-2">
                         <Button type="button" variant="ghost" className={cn(quietButtonClassName, 'h-10 gap-2')} onClick={handleSave}><Save size={15} /> Save</Button>
@@ -630,12 +739,15 @@ const KineticSessionBuilder = ({ className }: KineticSessionBuilderProps) => {
                         </div>
 
                         {nodes.length === 0 ? (
-                            <div className="flex min-h-[260px] items-center justify-center py-10 text-center">
-                                <div className="max-w-[260px]">
-                                    <ListPlus size={22} className="mx-auto" style={{ color: KINETIC.themeSoft }} />
-                                    <div className="mt-3 text-sm font-semibold" style={{ color: KINETIC.cream }}>No blocks yet</div>
-                                    <p className="mt-1 text-xs leading-relaxed" style={{ color: KINETIC.muted }}>Use the toolbar above to add a workout or recovery block.</p>
+                            <div className="space-y-5 py-10 text-center">
+                                <div className="flex min-h-[180px] items-center justify-center">
+                                    <div className="max-w-[260px]">
+                                        <ListPlus size={22} className="mx-auto" style={{ color: KINETIC.themeSoft }} />
+                                        <div className="mt-3 text-sm font-semibold" style={{ color: KINETIC.cream }}>No blocks yet</div>
+                                        <p className="mt-1 text-xs leading-relaxed" style={{ color: KINETIC.muted }}>Add a workout or recovery block to start your timeline.</p>
+                                    </div>
                                 </div>
+                                <TimelineAddControls onAddWorkout={handleAddWorkout} onAddRest={handleAddRest} />
                             </div>
                         ) : (
                             <div className="pl-8">
@@ -650,6 +762,11 @@ const KineticSessionBuilder = ({ className }: KineticSessionBuilderProps) => {
                                             onSelect={() => setEditingSessionNodeId(node.id)}
                                             onMove={(direction) => moveSessionNode(node.id, direction === 'left' ? 'left' : 'right')}
                                             onDelete={() => handleDeleteNode(node.id)}
+                                            progressionReminderThreshold={progressionReminderThreshold}
+                                            nodeRef={(element) => {
+                                                if (element) nodeCardRefs.current.set(node.id, element);
+                                                else nodeCardRefs.current.delete(node.id);
+                                            }}
                                             onDragStart={() => setDraggedNodeId(node.id)}
                                             onDrop={() => {
                                                 if (draggedNodeId && draggedNodeId !== node.id) moveSessionNodeToIndex(draggedNodeId, index);
@@ -657,11 +774,7 @@ const KineticSessionBuilder = ({ className }: KineticSessionBuilderProps) => {
                                             }}
                                         />
                                     ))}
-                                    <div className="flex items-center gap-3 pt-1">
-                                        <div className="h-px flex-1 bg-[#2C322D]" />
-                                        <Button type="button" variant="ghost" className="h-8 rounded-[8px] border border-dashed border-[#485346] px-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#9EA69B] hover:border-[var(--kinetic-theme-color)] hover:text-[var(--kinetic-theme-color)]" onClick={() => handleAddResult(addWorkoutNodeFromCurrentSetup())}><Plus size={13} /> Add block</Button>
-                                        <div className="h-px flex-1 bg-[#2C322D]" />
-                                    </div>
+                                    <TimelineAddControls onAddWorkout={handleAddWorkout} onAddRest={handleAddRest} />
                                 </div>
                             </div>
                         )}
@@ -684,7 +797,24 @@ const KineticSessionBuilder = ({ className }: KineticSessionBuilderProps) => {
             </footer>
 
             <BuilderDialog dialog={dialog} value={dialogValue} onChangeValue={setDialogValue} onClose={() => setDialog(null)} onConfirm={handleDialogConfirm} />
-            {statusMessage && <div role="status" aria-live="polite" className="fixed bottom-14 left-1/2 z-[110] -translate-x-1/2 border border-[#A8FF5A]/50 bg-[#1C2818] px-3 py-2 text-xs font-semibold text-[#C7FFA0] shadow-[0_8px_24px_rgba(0,0,0,0.3)]" style={{ borderRadius: 8 }} onClick={() => setStatusMessage('')}>{statusMessage}</div>}
+            {statusMessage && (
+                <div
+                    role="status"
+                    aria-live="polite"
+                    className="fixed bottom-14 left-1/2 z-[110] flex -translate-x-1/2 items-center gap-3 border border-[#A8FF5A]/50 bg-[#1C2818] px-3 py-2 text-xs font-semibold text-[#C7FFA0] shadow-[0_8px_24px_rgba(0,0,0,0.3)]"
+                    style={{ borderRadius: 8 }}
+                >
+                    <span>{statusMessage.message}</span>
+                    <button
+                        type="button"
+                        className="rounded-[5px] p-1 text-[#A8FF5A] hover:bg-[#A8FF5A]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A8FF5A]"
+                        onClick={dismissSuccess}
+                        aria-label="Dismiss notification"
+                    >
+                        <X size={14} />
+                    </button>
+                </div>
+            )}
         </section>
     );
 };

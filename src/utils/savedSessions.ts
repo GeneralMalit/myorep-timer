@@ -13,6 +13,12 @@ import type {
 } from '@/types/savedSessions';
 import { isValidWorkoutConfig, sanitizeSavedWorkoutConfig } from '@/utils/savedWorkouts';
 import { createSyncMetadata, normalizeSyncMetadata } from '@/utils/sync';
+import {
+    createDefaultWorkoutConfig,
+    normalizeCompletedSessionsSinceProgression,
+    normalizeSessionNode,
+    normalizeWorkoutSessionNode,
+} from '@/utils/workoutProgression';
 
 const SESSION_NODE_KEYS: Array<keyof SavedWorkoutConfig> = [
     'sets',
@@ -126,10 +132,6 @@ const createId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 
 const normalizeName = (value: string) => value.trim();
 
-const normalizeWorkoutNotes = (value: unknown): string => {
-    return typeof value === 'string' ? value : '';
-};
-
 const isRecord = (value: unknown): value is Record<string, unknown> => {
     return typeof value === 'object' && value !== null;
 };
@@ -145,35 +147,58 @@ const normalizeSessionNodeConfig = (config: Partial<SavedWorkoutConfig>): SavedW
     return picked;
 };
 
-const cloneNodeIdentity = <T extends SessionNode>(node: T, nowIso?: string): T => {
-    if (!nowIso) {
-        return node.type === 'workout'
-            ? {
-                ...node,
-                notes: normalizeWorkoutNotes(node.notes),
-                config: { ...node.config },
-            } as T
-            : {
-                ...node,
-            } as T;
+export interface CloneSessionOptions {
+    /** Timestamp used when a new identity is generated. */
+    nowIso?: string;
+    /** Generate a new id and creation/update timestamps. */
+    regenerateIdentity?: boolean;
+    /** Reset workout-block progression counters in the resulting copy. */
+    resetProgression?: boolean;
+}
+
+type LegacyCloneOptions = Pick<CloneSessionOptions, 'resetProgression'>;
+
+const resolveCloneOptions = (
+    nowIsoOrOptions?: string | CloneSessionOptions,
+    legacyOptions?: LegacyCloneOptions,
+): CloneSessionOptions => {
+    if (typeof nowIsoOrOptions === 'string') {
+        return {
+            nowIso: nowIsoOrOptions,
+            regenerateIdentity: true,
+            resetProgression: legacyOptions?.resetProgression ?? false,
+        };
     }
 
-    const nextId = createId();
-    return node.type === 'workout'
-        ? {
-            ...node,
-            id: nextId,
-            notes: normalizeWorkoutNotes(node.notes),
-            config: { ...node.config },
-            createdAt: nowIso,
-            updatedAt: nowIso,
-        } as T
-        : {
-            ...node,
-            id: nextId,
-            createdAt: nowIso,
-            updatedAt: nowIso,
-        } as T;
+    return {
+        ...nowIsoOrOptions,
+        regenerateIdentity: nowIsoOrOptions?.regenerateIdentity ?? false,
+        resetProgression: nowIsoOrOptions?.resetProgression ?? legacyOptions?.resetProgression ?? false,
+    };
+};
+
+const cloneNodeIdentity = <T extends SessionNode>(
+    node: T,
+    nowIsoOrOptions?: string | CloneSessionOptions,
+    legacyOptions?: LegacyCloneOptions,
+): T => {
+    const options = resolveCloneOptions(nowIsoOrOptions, legacyOptions);
+    const regenerateIdentity = options.regenerateIdentity === true;
+    const generatedNowIso = options.nowIso ?? new Date().toISOString();
+    const clonedNode = normalizeSessionNode(node, {
+        resetProgression: options.resetProgression,
+    });
+
+    if (!regenerateIdentity) {
+        return clonedNode as T;
+    }
+
+    return {
+        ...clonedNode,
+        id: createId(),
+        createdAt: generatedNowIso,
+        updatedAt: generatedNowIso,
+    } as T;
 };
 
 const resolveSessionExportedAt = (exportedAt?: string) => exportedAt ?? new Date().toISOString();
@@ -262,7 +287,7 @@ const toImportedSessionNode = (value: unknown): SessionNode | null => {
         return null;
     }
 
-    return {
+    return normalizeWorkoutSessionNode({
         id: typeof record.id === 'string' && record.id.trim() ? record.id : createId(),
         type: 'workout',
         name,
@@ -270,10 +295,13 @@ const toImportedSessionNode = (value: unknown): SessionNode | null => {
         sourceWorkoutId: typeof record.sourceWorkoutId === 'string' && record.sourceWorkoutId.trim()
             ? record.sourceWorkoutId
             : null,
-        notes: normalizeWorkoutNotes(record.notes),
+        notes: typeof record.notes === 'string' ? record.notes : '',
+        completedSessionsSinceProgression: normalizeCompletedSessionsSinceProgression(
+            record.completedSessionsSinceProgression,
+        ),
         createdAt: nowIso,
         updatedAt: typeof record.updatedAt === 'string' && record.updatedAt ? record.updatedAt : nowIso,
-    };
+    });
 };
 
 export const sanitizeRestNodeSeconds = (value: unknown): string => {
@@ -302,31 +330,50 @@ export const createWorkoutSessionNode = (
     if (typeof nameOrConfig === 'string') {
         const normalizedName = normalizeName(nameOrConfig) || 'Workout';
         const sanitizedConfig = normalizeSessionNodeConfig(configOrName as Partial<SavedWorkoutConfig>);
-        return {
+        return normalizeWorkoutSessionNode({
             id: createId(),
             type: 'workout',
             name: normalizedName,
             config: sanitizedConfig,
             sourceWorkoutId: sourceWorkoutId ?? null,
             notes: '',
+            completedSessionsSinceProgression: 0,
             createdAt: nowIso,
             updatedAt: nowIso,
-        };
+        });
     }
 
     const sanitizedConfig = normalizeSessionNodeConfig(nameOrConfig);
     const normalizedName = typeof configOrName === 'string' ? normalizeName(configOrName) || 'Workout' : 'Workout';
-    return {
+    return normalizeWorkoutSessionNode({
         id: createId(),
         type: 'workout',
         name: normalizedName,
         config: sanitizedConfig,
         sourceWorkoutId: typeof nowIsoOrSourceWorkoutId === 'string' ? nowIsoOrSourceWorkoutId : null,
         notes: '',
+        completedSessionsSinceProgression: 0,
         createdAt: nowIso,
         updatedAt: nowIso,
-    };
+    });
 };
+
+/**
+ * Create a valid, unlinked workout block using the generic session defaults.
+ * This intentionally does not read the standalone workout form state.
+ */
+export const createDefaultWorkoutSessionNode = (
+    name = 'Workout',
+    nowIso = new Date().toISOString(),
+): WorkoutSessionNode => createWorkoutSessionNode(
+    name,
+    createDefaultWorkoutConfig(),
+    nowIso,
+    null,
+);
+
+/** Short alias for callers that refer to session entries as blocks. */
+export const createDefaultWorkoutNode = createDefaultWorkoutSessionNode;
 
 export const createRestSessionNode = (
     nameOrSeconds: string | number,
@@ -366,15 +413,27 @@ export const createRestSessionNode = (
     };
 };
 
-export const cloneSessionNode = <T extends SessionNode>(node: T, nowIso?: string): T => {
-    return cloneNodeIdentity(node, nowIso);
+export const cloneSessionNode = <T extends SessionNode>(
+    node: T,
+    nowIsoOrOptions?: string | CloneSessionOptions,
+    legacyOptions?: LegacyCloneOptions,
+): T => {
+    return cloneNodeIdentity(node, nowIsoOrOptions, legacyOptions);
 };
 
-export const cloneSavedSession = <T extends SavedSession>(session: T, nowIso?: string): T => {
-    if (!nowIso) {
+export const cloneSavedSession = <T extends SavedSession>(
+    session: T,
+    nowIsoOrOptions?: string | CloneSessionOptions,
+    legacyOptions?: LegacyCloneOptions,
+): T => {
+    const options = resolveCloneOptions(nowIsoOrOptions, legacyOptions);
+    const regenerateIdentity = options.regenerateIdentity === true;
+    const generatedNowIso = options.nowIso ?? new Date().toISOString();
+
+    if (!regenerateIdentity) {
         return {
             ...session,
-            nodes: session.nodes.map((node) => cloneSessionNode(node)),
+            nodes: session.nodes.map((node) => cloneSessionNode(node, options)),
         };
     }
 
@@ -382,12 +441,32 @@ export const cloneSavedSession = <T extends SavedSession>(session: T, nowIso?: s
     return {
         ...session,
         id,
-        nodes: session.nodes.map((node) => cloneSessionNode(node, nowIso)),
-        createdAt: nowIso,
-        updatedAt: nowIso,
-        sync: createSyncMetadata(id, nowIso),
+        nodes: session.nodes.map((node) => cloneSessionNode(node, options)),
+        createdAt: generatedNowIso,
+        updatedAt: generatedNowIso,
+        sync: createSyncMetadata(id, generatedNowIso),
     };
 };
+
+/** Explicit duplicate operation: new identities and fresh progression state. */
+export const duplicateSessionNode = <T extends SessionNode>(
+    node: T,
+    nowIso?: string,
+): T => cloneSessionNode(node, {
+    nowIso,
+    regenerateIdentity: true,
+    resetProgression: true,
+});
+
+/** Explicit duplicate operation: new identities and fresh progression state. */
+export const duplicateSavedSession = <T extends SavedSession>(
+    session: T,
+    nowIso?: string,
+): T => cloneSavedSession(session, {
+    nowIso,
+    regenerateIdentity: true,
+    resetProgression: true,
+});
 
 export const moveNodeInArray = <T>(items: T[], index: number, direction: 'left' | 'right'): T[] => {
     const nextItems = [...items];

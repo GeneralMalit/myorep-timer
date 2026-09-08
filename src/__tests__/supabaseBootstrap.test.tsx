@@ -113,7 +113,7 @@ describe('SupabaseBootstrap', () => {
         expect(getSupabaseClientMock).not.toHaveBeenCalled();
     });
 
-    it('boots the session and subscribes to auth changes when supabase is configured', async () => {
+    it('resolves matching getSession and INITIAL_SESSION bootstrap signals exactly once', async () => {
         vi.stubEnv('VITE_ENABLE_SUPABASE', 'true');
         getSupabaseEnvironmentMock.mockReturnValue({
             enabled: true,
@@ -134,15 +134,19 @@ describe('SupabaseBootstrap', () => {
             },
         };
         const unsubscribe = vi.fn();
+        const authStateHandlers: Array<(event: string, nextSession: typeof session | null) => void> = [];
         const client = {
             auth: {
                 getSession: vi.fn().mockResolvedValue({ data: { session }, error: null }),
-                onAuthStateChange: vi.fn().mockReturnValue({
-                    data: {
-                        subscription: {
-                            unsubscribe,
+                onAuthStateChange: vi.fn().mockImplementation((handler) => {
+                    authStateHandlers.push(handler);
+                    return {
+                        data: {
+                            subscription: {
+                                unsubscribe,
+                            },
                         },
-                    },
+                    };
                 }),
             },
         };
@@ -176,11 +180,107 @@ describe('SupabaseBootstrap', () => {
             expect(useAccountStore.getState().profile?.displayName).toBe('Athlete One');
         });
 
+        authStateHandlers[0]?.('INITIAL_SESSION', session);
+
+        await waitFor(() => {
+            expect(useAccountStore.getState().session?.user.id).toBe('user-1');
+        });
+
         expect(client.auth.getSession).toHaveBeenCalledTimes(1);
         expect(client.auth.onAuthStateChange).toHaveBeenCalledTimes(1);
         expect(appAddListenerMock).not.toHaveBeenCalled();
-        expect(loadSupabaseAccountStateMock).toHaveBeenCalledWith(client, session);
+        expect(loadSupabaseAccountStateMock).toHaveBeenCalledTimes(1);
+        expect(loadSupabaseAccountStateMock).toHaveBeenNthCalledWith(1, client, session);
         expect(unsubscribe).not.toHaveBeenCalled();
+    });
+
+    it('updates a routine refreshed token without recomputing unchanged account state', async () => {
+        vi.stubEnv('VITE_ENABLE_SUPABASE', 'true');
+        getSupabaseEnvironmentMock.mockReturnValue({
+            enabled: true,
+            configured: true,
+            url: 'https://example.supabase.co',
+            anonKey: 'anon-key',
+            redirectUrl: 'https://app.example.com',
+            missing: [],
+        });
+        const session = {
+            access_token: 'initial-access-token',
+            refresh_token: 'refresh-token',
+            expires_in: 3600,
+            token_type: 'bearer',
+            user: {
+                id: 'user-token-refresh',
+                email: 'refresh@example.com',
+                created_at: '2026-03-01T00:00:00.000Z',
+                updated_at: '2026-03-02T00:00:00.000Z',
+                user_metadata: {
+                    full_name: 'Refresh Athlete',
+                },
+            },
+        };
+        const refreshedSession = {
+            ...session,
+            access_token: 'refreshed-access-token',
+            expires_at: 1_800_000_000,
+        };
+        const authStateHandlers: Array<(event: string, nextSession: typeof refreshedSession | null) => void> = [];
+        const client = {
+            auth: {
+                getSession: vi.fn().mockResolvedValue({ data: { session }, error: null }),
+                onAuthStateChange: vi.fn().mockImplementation((handler) => {
+                    authStateHandlers.push(handler);
+                    return {
+                        data: {
+                            subscription: {
+                                unsubscribe: vi.fn(),
+                            },
+                        },
+                    };
+                }),
+            },
+        };
+        loadSupabaseAccountStateMock.mockResolvedValue({
+            session,
+            profile: {
+                userId: 'user-token-refresh',
+                username: 'refresh_athlete',
+                email: 'refresh@example.com',
+                displayName: 'Refresh Athlete',
+                createdAt: '2026-03-01T00:00:00.000Z',
+                updatedAt: '2026-03-02T00:00:00.000Z',
+            },
+            entitlement: {
+                userId: 'user-token-refresh',
+                plan: 'plus',
+                cloudSyncEnabled: true,
+                updatedAt: '2026-03-02T00:00:00.000Z',
+                source: 'supabase',
+            },
+            mode: 'signed-in-plus',
+            syncStatus: 'idle',
+        });
+        getSupabaseClientMock.mockReturnValue(client);
+
+        render(<SupabaseBootstrap />);
+
+        await waitFor(() => {
+            expect(useAccountStore.getState().bootstrapStatus).toBe('ready');
+            expect(useAccountStore.getState().session?.access_token).toBe('initial-access-token');
+        });
+
+        authStateHandlers[0]?.('TOKEN_REFRESHED', refreshedSession);
+
+        await waitFor(() => {
+            expect(useAccountStore.getState().session?.access_token).toBe('refreshed-access-token');
+        });
+
+        expect(client.auth.getSession).toHaveBeenCalledTimes(1);
+        expect(client.auth.onAuthStateChange).toHaveBeenCalledTimes(1);
+        expect(loadSupabaseAccountStateMock).toHaveBeenCalledTimes(1);
+        expect(loadSupabaseAccountStateMock).toHaveBeenNthCalledWith(1, client, session);
+        expect(useAccountStore.getState().profile?.username).toBe('refresh_athlete');
+        expect(useAccountStore.getState().entitlement?.plan).toBe('plus');
     });
 
     it('settles to a guest-ready state when the first session lookup is empty', async () => {

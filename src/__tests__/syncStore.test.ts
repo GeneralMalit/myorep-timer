@@ -2,7 +2,7 @@ import { act } from '@testing-library/react';
 import type { Session } from '@supabase/supabase-js';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { useAccountStore } from '@/store/useAccountStore';
-import { useSyncStore } from '@/store/useSyncStore';
+import { migratePersistedSyncState, useSyncStore } from '@/store/useSyncStore';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
 import {
     buildAccountEntitlementFromSupabaseRow,
@@ -90,6 +90,7 @@ const resetSyncStore = () => {
         syncEnabled: false,
         firstSyncState: 'idle',
         currentUserId: null,
+        authGeneration: 'test-auth-generation',
         onboardingRemoteHasData: false,
         recoveryBackup: null,
         pendingChoice: null,
@@ -112,6 +113,36 @@ describe('sync store behavior', () => {
 
     afterEach(() => {
         vi.useRealTimers();
+    });
+
+    it('skips runtime-only persistence and batches synchronous queue writes', async () => {
+        await Promise.resolve();
+        const setItemSpy = vi.spyOn(window.localStorage, 'setItem');
+
+        act(() => {
+            useSyncStore.getState().markQueueSyncing();
+            useSyncStore.getState().markQueuePausedOffline();
+        });
+        await Promise.resolve();
+        expect(setItemSpy).not.toHaveBeenCalled();
+
+        act(() => {
+            useSyncStore.getState().setCurrentUser('persisted-user');
+            useSyncStore.setState({ syncEnabled: true });
+            useSyncStore.getState().enqueueEntityChange({
+                entityType: 'workout',
+                entityId: 'persisted-workout',
+                localId: 'persisted-workout',
+                operation: 'upsert',
+                revision: 1,
+            });
+        });
+        await Promise.resolve();
+
+        expect(setItemSpy).toHaveBeenCalledTimes(1);
+        const persistedValue = JSON.parse(setItemSpy.mock.calls[0][1]) as { state: { queuedOperations: unknown[] } };
+        expect(persistedValue.state.queuedOperations).toHaveLength(1);
+        setItemSpy.mockRestore();
     });
 
     it('maps Supabase rows into local account state', () => {
@@ -435,6 +466,7 @@ describe('sync store behavior', () => {
 
     it('dedupes repeated queue entries for the same entity to the newest write', () => {
         act(() => {
+            useSyncStore.getState().setCurrentUser('user-queue');
             useSyncStore.setState({ syncEnabled: true });
             useSyncStore.getState().enqueueEntityChange({
                 entityType: 'workout',
@@ -442,6 +474,7 @@ describe('sync store behavior', () => {
                 localId: 'workout-1',
                 operation: 'upsert',
                 revision: 2,
+                expectedRemoteRevision: 1,
                 queuedAt: '2026-04-12T09:00:00.000Z',
             });
             useSyncStore.getState().enqueueEntityChange({
@@ -450,6 +483,7 @@ describe('sync store behavior', () => {
                 localId: 'workout-1',
                 operation: 'upsert',
                 revision: 3,
+                expectedRemoteRevision: 1,
                 queuedAt: '2026-04-12T09:05:00.000Z',
             });
         });
@@ -457,6 +491,9 @@ describe('sync store behavior', () => {
         expect(useSyncStore.getState().queuedOperations).toHaveLength(1);
         expect(useSyncStore.getState().queuedOperations[0]).toMatchObject({
             revision: 3,
+            expectedRemoteRevision: 1,
+            ownerUserId: 'user-queue',
+            authGeneration: useSyncStore.getState().authGeneration,
             queuedAt: '2026-04-12T09:05:00.000Z',
         });
         expect(useSyncStore.getState().pendingCounts).toMatchObject({
@@ -468,6 +505,7 @@ describe('sync store behavior', () => {
 
     it('clears queued work when sync is turned off on the device', () => {
         act(() => {
+            useSyncStore.getState().setCurrentUser('user-disable');
             useSyncStore.setState({ syncEnabled: true });
             useSyncStore.getState().enqueueEntityChange({
                 entityType: 'session',
@@ -475,6 +513,7 @@ describe('sync store behavior', () => {
                 localId: 'session-1',
                 operation: 'delete',
                 revision: 4,
+                expectedRemoteRevision: 3,
             });
             useSyncStore.getState().disableSync();
         });
@@ -490,5 +529,183 @@ describe('sync store behavior', () => {
                 deletes: 0,
             },
         });
+    });
+
+    it('keeps replacement operations when a stale acknowledgement arrives', () => {
+        act(() => {
+            useSyncStore.getState().setCurrentUser('user-stale');
+            useSyncStore.setState({ syncEnabled: true });
+            useSyncStore.getState().enqueueEntityChange({
+                entityType: 'workout',
+                entityId: 'workout-stale',
+                localId: 'workout-stale',
+                operation: 'upsert',
+                revision: 2,
+                expectedRemoteRevision: 1,
+            });
+        });
+        const staleOperation = useSyncStore.getState().queuedOperations[0];
+
+        act(() => {
+            useSyncStore.getState().enqueueEntityChange({
+                entityType: 'workout',
+                entityId: 'workout-stale',
+                localId: 'workout-stale',
+                operation: 'upsert',
+                revision: 3,
+                expectedRemoteRevision: 1,
+            });
+        });
+        const replacement = useSyncStore.getState().queuedOperations[0];
+
+        let acknowledged = true;
+        act(() => {
+            acknowledged = useSyncStore.getState().acknowledgeUpsert({
+                ...staleOperation,
+                syncedAt: '2026-04-12T10:00:00.000Z',
+            });
+        });
+
+        expect(acknowledged).toBe(false);
+        expect(replacement.operationId).not.toBe(staleOperation.operationId);
+        expect(useSyncStore.getState().queuedOperations).toEqual([replacement]);
+    });
+
+    it('rotates auth ownership and clears the previous account queue', () => {
+        act(() => {
+            useSyncStore.getState().setCurrentUser('user-a');
+            useSyncStore.setState({ syncEnabled: true });
+            useSyncStore.getState().enqueueEntityChange({
+                entityType: 'session',
+                entityId: 'session-a',
+                localId: 'session-a',
+                operation: 'upsert',
+                revision: 1,
+                expectedRemoteRevision: 0,
+            });
+        });
+        const generationA = useSyncStore.getState().authGeneration;
+        expect(useSyncStore.getState().queuedOperations[0].ownerUserId).toBe('user-a');
+
+        act(() => {
+            useSyncStore.getState().setCurrentUser('user-b');
+        });
+
+        expect(useSyncStore.getState()).toMatchObject({
+            currentUserId: 'user-b',
+            syncEnabled: false,
+            queuedOperations: [],
+        });
+        expect(useSyncStore.getState().authGeneration).not.toBe(generationA);
+    });
+
+    it('exposes dead letters for manual retry without changing their immutable token', () => {
+        act(() => {
+            useSyncStore.getState().setCurrentUser('user-retry');
+            useSyncStore.setState({ syncEnabled: true });
+            useSyncStore.getState().enqueueEntityChange({
+                entityType: 'workout',
+                entityId: 'workout-retry',
+                localId: 'workout-retry',
+                operation: 'upsert',
+                revision: 4,
+                expectedRemoteRevision: 3,
+            });
+        });
+        const operation = useSyncStore.getState().queuedOperations[0];
+
+        act(() => {
+            useSyncStore.getState().incrementAttempt({
+                ...operation,
+                nextRetryAt: null,
+                error: 'Permanent validation failure.',
+                deadLetter: true,
+                failedAt: '2026-04-12T11:00:00.000Z',
+            });
+        });
+        expect(useSyncStore.getState()).toMatchObject({
+            queueStatus: 'dead-letter',
+            pendingCounts: { deadLetters: 1 },
+        });
+        expect(useSyncStore.getState().queuedOperations[0]).toMatchObject({
+            operationId: operation.operationId,
+            attempts: 1,
+            deadLetteredAt: '2026-04-12T11:00:00.000Z',
+        });
+
+        act(() => {
+            useSyncStore.getState().retryFailedOperations();
+        });
+        expect(useSyncStore.getState().queuedOperations[0]).toMatchObject({
+            operationId: operation.operationId,
+            attempts: 0,
+            nextRetryAt: null,
+            lastError: null,
+            deadLetteredAt: null,
+        });
+        expect(useSyncStore.getState().queueStatus).toBe('pending');
+    });
+
+    it('expires recovery backups and clears them after success or disable', () => {
+        const backup = {
+            createdAt: '2026-04-01T00:00:00.000Z',
+            workouts: [],
+            sessions: [],
+        };
+
+        act(() => {
+            useSyncStore.getState().setCurrentUser('user-backup');
+            useSyncStore.getState().beginEnableSync(backup, false);
+        });
+        expect(useSyncStore.getState().recoveryBackup?.expiresAt).toBeTruthy();
+
+        act(() => {
+            useSyncStore.getState().completeEnableSync('user-backup', '2026-04-01T00:01:00.000Z');
+        });
+        expect(useSyncStore.getState().recoveryBackup).toBeNull();
+
+        act(() => {
+            useSyncStore.getState().beginEnableSync({
+                ...backup,
+                expiresAt: '2026-04-02T00:00:00.000Z',
+            }, false);
+            useSyncStore.getState().clearExpiredRecoveryBackup(new Date('2026-04-03T00:00:00.000Z').getTime());
+        });
+        expect(useSyncStore.getState().recoveryBackup).toBeNull();
+
+        act(() => {
+            useSyncStore.getState().beginEnableSync(backup, false);
+            useSyncStore.getState().disableSync();
+        });
+        expect(useSyncStore.getState().recoveryBackup).toBeNull();
+    });
+
+    it('migrates legacy owned queue entries with safe unknown base revisions', () => {
+        const migrated = migratePersistedSyncState({
+            syncEnabled: true,
+            currentUserId: 'legacy-user',
+            queuedOperations: [{
+                id: 'workout:legacy-workout',
+                entityType: 'workout',
+                entityId: 'legacy-workout',
+                localId: 'legacy-workout',
+                operation: 'upsert',
+                revision: 7,
+                queuedAt: '2026-04-01T00:00:00.000Z',
+                attempts: 2,
+                nextRetryAt: null,
+                lastError: null,
+            }],
+        });
+
+        expect(migrated.queuedOperations[0]).toMatchObject({
+            ownerUserId: 'legacy-user',
+            authGeneration: migrated.authGeneration,
+            expectedRemoteRevision: null,
+            revision: 7,
+            attempts: 2,
+            deadLetteredAt: null,
+        });
+        expect(migrated.queuedOperations[0].operationId).toBeTruthy();
     });
 });

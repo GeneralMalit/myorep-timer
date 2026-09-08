@@ -144,6 +144,13 @@
 - [x] Notes are visible in the session builder canvas cards and editable in the node editor.
 - [x] Notes persist through local save/load, import/export, and sync payloads.
 
+## Session Progression Reminders
+- [x] Track completed sessions per workout block and show a configurable progression reminder at the threshold.
+- [x] Reset a block's counter when its workout settings, notes, or linked workout change while preserving name-only edits.
+- [x] Keep progression metadata intact through persistence, import/export, and cloud sync.
+- [x] Move session block creation to the end of both builder timelines and keep workout-library linking in the block inspector.
+- [x] Automatically dismiss session-builder success notifications, including repeated block-removal messages.
+
 ## Phase 3.5: Mobile UX Design and Approval
 ### Outcomes
 - [x] Define the mobile information architecture and key screen flows before Phase 4 shared-app redesign work starts.

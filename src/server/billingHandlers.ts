@@ -1,5 +1,6 @@
 import { getBillingEnvironment } from './billingEnv.ts';
 import {
+    applyPaddleSubscriptionEvent,
     authenticateSupabaseUser,
     createSupabaseAdminClient,
     createSupabaseAuthClient,
@@ -7,7 +8,6 @@ import {
     getBillingAccountByUserId,
     upsertBillingAccount,
 } from './billingData.ts';
-import { syncResolvedEntitlement } from './entitlements.ts';
 import {
     buildEntitlementProjectionFromPaddleSubscription,
     buildPaddleHostedCheckoutUrl,
@@ -157,20 +157,14 @@ export const handlePaddlePortalRequest = async (request: Request): Promise<Respo
 
 const resolveUserIdForPaddleSubscription = async (
     subscription: PaddleSubscription,
-    requestEventId: string,
-): Promise<{ userId: string; duplicate: boolean }> => {
-    const env = getBillingEnvironment();
-    const adminClient = createSupabaseAdminClient(env);
+    adminClient: ReturnType<typeof createSupabaseAdminClient>,
+): Promise<string> => {
     const metadataUserId = typeof subscription.custom_data?.supabaseUserId === 'string'
         ? subscription.custom_data.supabaseUserId
         : null;
 
     if (metadataUserId) {
-        const existingAccount = await getBillingAccountByUserId(adminClient, metadataUserId);
-        return {
-            userId: metadataUserId,
-            duplicate: existingAccount?.last_event_id === requestEventId,
-        };
+        return metadataUserId;
     }
 
     if (!subscription.customer_id) {
@@ -182,10 +176,7 @@ const resolveUserIdForPaddleSubscription = async (
         throw new Error('No billing account mapping exists for this Paddle customer.');
     }
 
-    return {
-        userId: billingAccount.user_id,
-        duplicate: billingAccount.last_event_id === requestEventId,
-    };
+    return billingAccount.user_id;
 };
 
 const syncPaddleSubscriptionProjection = async (
@@ -193,29 +184,31 @@ const syncPaddleSubscriptionProjection = async (
 ): Promise<Response> => {
     const env = getBillingEnvironment();
     const adminClient = createSupabaseAdminClient(env);
-    const { userId, duplicate } = await resolveUserIdForPaddleSubscription(event.data, event.event_id);
-    if (duplicate) {
+    const userId = await resolveUserIdForPaddleSubscription(event.data, adminClient);
+    const projection = buildEntitlementProjectionFromPaddleSubscription(event.data, userId, event.occurred_at);
+    if (!projection.occurredAt) {
+        throw new Error('Paddle subscription event is missing occurred_at.');
+    }
+
+    const acceptance = await applyPaddleSubscriptionEvent(adminClient, {
+        eventId: event.event_id,
+        eventType: event.event_type,
+        occurredAt: projection.occurredAt,
+        userId: projection.userId,
+        paddleCustomerId: projection.paddleCustomerId,
+        paddleSubscriptionId: projection.paddleSubscriptionId,
+        paddlePriceId: projection.paddlePriceId,
+        subscriptionStatus: projection.subscriptionStatus,
+        currentPeriodEnd: projection.currentPeriodEnd,
+    });
+
+    if (acceptance === 'duplicate') {
         return jsonResponse(200, { received: true, duplicate: true });
     }
 
-    const projection = buildEntitlementProjectionFromPaddleSubscription(event.data, userId, event.occurred_at);
-    const updatedAt = new Date().toISOString();
-
-    await upsertBillingAccount(adminClient, {
-        user_id: projection.userId,
-        paddle_customer_id: projection.paddleCustomerId,
-        paddle_subscription_id: projection.paddleSubscriptionId,
-        paddle_price_id: projection.paddlePriceId,
-        subscription_status: projection.subscriptionStatus,
-        current_period_end: projection.currentPeriodEnd,
-        last_event_id: event.event_id,
-        last_event_occurred_at: projection.occurredAt,
-        updated_at: updatedAt,
-    });
-    await syncResolvedEntitlement(adminClient, {
-        userId: projection.userId,
-        updatedAt,
-    });
+    if (acceptance === 'stale') {
+        return jsonResponse(200, { received: true, stale: true });
+    }
 
     return jsonResponse(200, { received: true });
 };
@@ -230,11 +223,16 @@ export const handlePaddleWebhookRequest = async (request: Request): Promise<Resp
         return jsonResponse(400, { error: 'Missing Paddle signature.' });
     }
 
+    const env = getBillingEnvironment();
+    const payload = await request.text();
+    let event: PaddleWebhookEvent;
     try {
-        const env = getBillingEnvironment();
-        const payload = await request.text();
-        const event = verifyAndParsePaddleWebhookEvent(payload, signature, env.paddleNotificationSecretKey);
+        event = verifyAndParsePaddleWebhookEvent(payload, signature, env.paddleNotificationSecretKey);
+    } catch {
+        return jsonResponse(400, { error: 'Invalid Paddle webhook.' });
+    }
 
+    try {
         if (
             event.event_type === 'subscription.created'
             || event.event_type === 'subscription.updated'
@@ -245,13 +243,11 @@ export const handlePaddleWebhookRequest = async (request: Request): Promise<Resp
             || event.event_type === 'subscription.resumed'
             || event.event_type === 'subscription.past_due'
         ) {
-            return syncPaddleSubscriptionProjection(event as PaddleWebhookEvent<PaddleSubscription>);
+            return await syncPaddleSubscriptionProjection(event as PaddleWebhookEvent<PaddleSubscription>);
         }
 
         return jsonResponse(200, { received: true });
-    } catch (error: unknown) {
-        return jsonResponse(400, {
-            error: error instanceof Error ? error.message : 'Could not process Paddle webhook.',
-        });
+    } catch {
+        return jsonResponse(500, { error: 'Could not process Paddle webhook.' });
     }
 };

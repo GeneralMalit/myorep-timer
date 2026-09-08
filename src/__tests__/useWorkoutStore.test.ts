@@ -53,13 +53,16 @@ describe('useWorkoutStore', () => {
                 isRunningSession: false,
                 sessionNodeRuntimeType: null,
                 sessionRestTimeLeft: 0,
-                sessionLastTickSecond: -1,
+                    sessionLastTickSecond: -1,
                 completedSessionWorkoutNodeIds: [],
+                pendingElapsedSeconds: 0,
+                designVariant: 'classic',
             });
             useSyncStore.setState({
                 syncEnabled: false,
                 firstSyncState: 'idle',
                 currentUserId: null,
+                authGeneration: 'workout-test-auth',
                 onboardingRemoteHasData: false,
                 recoveryBackup: null,
                 pendingChoice: null,
@@ -139,6 +142,7 @@ describe('useWorkoutStore', () => {
             expect(state.settings.prepTime).toBe(5);
             expect(state.settings.fullScreenMode).toBe(false);
             expect(state.settings.metronomeEnabled).toBe(true);
+            expect(state.designVariant).toBe('classic');
         });
     });
 
@@ -190,6 +194,24 @@ describe('useWorkoutStore', () => {
             });
 
             expect(useWorkoutStore.getState().settings.concentricSecond).toBe(3);
+        });
+    });
+
+    describe('design mode', () => {
+        it('defaults to Classic and persists a selected Kinetic Console variant', () => {
+            const store = useWorkoutStore.getState();
+            expect(store.designVariant).toBe('classic');
+
+            act(() => {
+                store.setDesignVariant('kinetic');
+            });
+
+            expect(useWorkoutStore.getState().designVariant).toBe('kinetic');
+
+            act(() => {
+                store.setDesignVariant('classic');
+            });
+            expect(useWorkoutStore.getState().designVariant).toBe('classic');
         });
     });
 
@@ -1393,6 +1415,48 @@ describe('useWorkoutStore', () => {
             expect(state.setElapsedTime).toBe(1);
         });
 
+        it('retains elapsed time beyond the bounded 1000-transition catch-up pass', () => {
+            const store = useWorkoutStore.getState();
+
+            act(() => {
+                useWorkoutStore.setState({
+                    appPhase: 'timer',
+                    timerStatus: 'Main Set',
+                    isTimerRunning: true,
+                    isWorking: true,
+                    isMainRep: true,
+                    currentSet: 1,
+                    currentRep: 1,
+                    sets: '1',
+                    reps: '1002',
+                    seconds: '1',
+                    rest: '',
+                    myoReps: '',
+                    myoWorkSecs: '',
+                    timeLeft: 1,
+                    setElapsedTime: 0,
+                    setTotalDuration: 1002,
+                    pendingElapsedSeconds: 0,
+                });
+                store.applyTimerElapsed(1001.5);
+            });
+
+            expect(useWorkoutStore.getState()).toMatchObject({
+                currentRep: 1001,
+                timeLeft: 1,
+                pendingElapsedSeconds: 1.5,
+            });
+
+            act(() => {
+                store.applyTimerElapsed(0);
+            });
+            expect(useWorkoutStore.getState()).toMatchObject({
+                currentRep: 1002,
+                pendingElapsedSeconds: 0,
+            });
+            expect(useWorkoutStore.getState().timeLeft).toBeCloseTo(0.5);
+        });
+
         it('should finish a standalone workout when elapsed time exceeds the remaining duration', () => {
             const store = useWorkoutStore.getState();
 
@@ -1697,6 +1761,7 @@ describe('useWorkoutStore', () => {
         it('tombstones synced workout deletes until the remote acknowledgement lands', () => {
             const store = useWorkoutStore.getState();
             act(() => {
+                useSyncStore.getState().setCurrentUser('workout-test-user');
                 useSyncStore.setState({ syncEnabled: true });
                 store.setWorkoutConfig(validConfig);
             });
@@ -1704,6 +1769,7 @@ describe('useWorkoutStore', () => {
             const saveResult = store.saveCurrentWorkout('Synced Workout');
             expect(saveResult.ok).toBe(true);
             const workout = useWorkoutStore.getState().savedWorkouts[0];
+            const upsertOperation = useSyncStore.getState().queuedOperations[0];
 
             act(() => {
                 store.acknowledgeSyncedWorkout({
@@ -1716,8 +1782,7 @@ describe('useWorkoutStore', () => {
                     },
                 });
                 useSyncStore.getState().acknowledgeUpsert({
-                    entityType: 'workout',
-                    localId: workout.id,
+                    ...upsertOperation,
                     syncedAt: '2026-04-10T00:00:00.000Z',
                 });
             });
@@ -1734,17 +1799,60 @@ describe('useWorkoutStore', () => {
                 operation: 'delete',
                 localId: workout.id,
             });
+            const deleteOperation = useSyncStore.getState().queuedOperations[0];
 
             act(() => {
                 useSyncStore.getState().acknowledgeDelete({
-                    entityType: 'workout',
-                    localId: workout.id,
+                    ...deleteOperation,
                     syncedAt: '2026-04-11T00:00:00.000Z',
                 });
                 store.purgeDeletedWorkout(workout.id);
             });
 
             expect(useWorkoutStore.getState().savedWorkouts).toHaveLength(0);
+        });
+
+        it('queues only explicitly saved session snapshots, never mutable draft edits', () => {
+            const store = useWorkoutStore.getState();
+            act(() => {
+                useSyncStore.getState().setCurrentUser('session-draft-user');
+                useSyncStore.setState({ syncEnabled: true });
+                store.setWorkoutConfig(validConfig);
+                store.createSession('Draft Safety');
+                store.addWorkoutNodeFromCurrentSetup();
+                store.addRestNode('20');
+            });
+
+            expect(useSyncStore.getState().queuedOperations).toHaveLength(0);
+
+            act(() => {
+                store.saveSessionDraft();
+            });
+            const savedOperation = useSyncStore.getState().queuedOperations[0];
+            const savedSession = useWorkoutStore.getState().savedSessions[0];
+            expect(savedOperation).toMatchObject({
+                entityType: 'session',
+                revision: savedSession.sync?.revision,
+                expectedRemoteRevision: savedSession.sync?.baseRevision,
+            });
+
+            const workoutNode = useWorkoutStore.getState().editingSessionDraft?.nodes.find((node) => node.type === 'workout');
+            act(() => {
+                if (workoutNode?.type === 'workout') {
+                    store.updateWorkoutNode(workoutNode.id, workoutNode.config, 'Unsaved Draft Name');
+                }
+            });
+
+            expect(useSyncStore.getState().queuedOperations[0]).toEqual(savedOperation);
+            expect(useWorkoutStore.getState().savedSessions[0].nodes[0].name).not.toBe('Unsaved Draft Name');
+
+            act(() => {
+                store.saveSessionDraft();
+            });
+            expect(useSyncStore.getState().queuedOperations[0].operationId).not.toBe(savedOperation.operationId);
+            expect(useSyncStore.getState().queuedOperations[0].revision).toBe(
+                useWorkoutStore.getState().savedSessions[0].sync?.revision,
+            );
         });
 
         it('should only record workout usage when a loaded template finishes', () => {

@@ -3,11 +3,52 @@ import type { SavedSession } from '@/types/savedSessions';
 import type { SavedWorkout } from '@/types/savedWorkouts';
 import type {
     SupabaseSavedSessionRow,
-    SupabaseSavedSessionWriteRow,
     SupabaseSavedWorkoutRow,
-    SupabaseSavedWorkoutWriteRow,
 } from '@/types/sync';
 import { clearSyncMetadata, normalizeSyncMetadata, toSupabaseSavedSessionWriteRow, toSupabaseSavedWorkoutWriteRow } from '@/utils/sync';
+import { normalizeSessionNodeForPersistence } from '@/utils/workoutProgression';
+
+export const SYNC_SNAPSHOT_PAGE_SIZE = 250;
+export const SYNC_MAX_LIBRARY_ROWS = 5_000;
+
+const WORKOUT_SELECT = 'id,user_id,local_id,name,sets,reps,seconds,rest,myo_reps,myo_work_secs,times_used,last_used_at,revision,updated_at,deleted_at,created_at';
+const SESSION_SELECT = 'id,user_id,local_id,name,nodes,times_used,last_used_at,revision,updated_at,deleted_at,created_at';
+
+export type SyncMutationConflictReason = 'stale_revision' | 'tombstone_wins' | 'revision_mismatch';
+
+export type SyncMutationResult<TRecord> =
+    | {
+        status: 'applied';
+        record: TRecord;
+        remoteRevision: number;
+    }
+    | {
+        status: 'deleted';
+        record: null;
+        remoteRevision: number;
+    }
+    | {
+        status: 'conflict';
+        reason: SyncMutationConflictReason;
+        expectedRevision: number;
+        remoteRevision: number;
+        remoteDeletedAt: string | null;
+        remoteRecord: TRecord | null;
+    };
+
+interface MutationRpcResponse<TRow> {
+    status: 'applied' | 'deleted' | 'conflict';
+    reason: SyncMutationConflictReason | null;
+    expected_revision: number;
+    remote_revision: number;
+    remote_deleted_at: string | null;
+    remote_record: TRow | null;
+}
+
+interface OverwriteLibraryRpcResponse {
+    workouts: SupabaseSavedWorkoutRow[];
+    sessions: SupabaseSavedSessionRow[];
+}
 
 const mapSupabaseSessionNodeSourceWorkoutIds = (nodes: unknown[]): unknown[] => {
     return nodes.map((node) => {
@@ -24,11 +65,11 @@ const mapSupabaseSessionNodeSourceWorkoutIds = (nodes: unknown[]): unknown[] => 
             ? record.sourceWorkoutId
             : null;
 
-        return {
+        return normalizeSessionNodeForPersistence({
             ...record,
             sourceWorkoutId,
             notes: typeof record.notes === 'string' ? record.notes : '',
-        };
+        });
     });
 };
 
@@ -43,7 +84,7 @@ export const fromSupabaseSavedWorkoutRow = (row: SupabaseSavedWorkoutRow): Saved
     myoWorkSecs: row.myo_work_secs,
     timesUsed: row.times_used,
     lastUsedAt: row.last_used_at,
-    createdAt: row.created_at,
+    createdAt: row.created_at ?? row.updated_at,
     updatedAt: row.updated_at,
     sync: clearSyncMetadata(
         normalizeSyncMetadata({
@@ -67,7 +108,7 @@ export const fromSupabaseSavedSessionRow = (row: SupabaseSavedSessionRow): Saved
     nodes: mapSupabaseSessionNodeSourceWorkoutIds(Array.isArray(row.nodes) ? row.nodes : []) as SavedSession['nodes'],
     timesUsed: row.times_used,
     lastUsedAt: row.last_used_at,
-    createdAt: row.created_at,
+    createdAt: row.created_at ?? row.updated_at,
     updatedAt: row.updated_at,
     sync: clearSyncMetadata(
         normalizeSyncMetadata({
@@ -119,83 +160,209 @@ export const inspectRemoteSyncPresence = async (
     };
 };
 
+const fetchActiveRows = async <TRow>(
+    client: SupabaseClient,
+    table: 'saved_workouts' | 'saved_sessions',
+    select: string,
+    userId: string,
+): Promise<TRow[]> => {
+    const rows: TRow[] = [];
+    let offset = 0;
+
+    while (rows.length <= SYNC_MAX_LIBRARY_ROWS) {
+        const remainingWithOverflowSentinel = (SYNC_MAX_LIBRARY_ROWS + 1) - rows.length;
+        const pageSize = Math.min(SYNC_SNAPSHOT_PAGE_SIZE, remainingWithOverflowSentinel);
+        const result = await client
+            .from(table)
+            .select(select)
+            .eq('user_id', userId)
+            .is('deleted_at', null)
+            .order('local_id', { ascending: true })
+            .range(offset, offset + pageSize - 1);
+
+        if (result.error) {
+            throw result.error;
+        }
+
+        const page = (result.data ?? []) as TRow[];
+        rows.push(...page);
+
+        if (rows.length > SYNC_MAX_LIBRARY_ROWS) {
+            throw new Error(`Cloud ${table === 'saved_workouts' ? 'workout' : 'session'} library exceeds the ${SYNC_MAX_LIBRARY_ROWS}-record sync limit.`);
+        }
+
+        if (page.length < pageSize) {
+            return rows;
+        }
+
+        offset += page.length;
+    }
+
+    return rows;
+};
+
 export const fetchRemoteLibrarySnapshot = async (
     client: SupabaseClient,
     userId: string,
 ): Promise<{ workouts: SavedWorkout[]; sessions: SavedSession[] }> => {
-    const [workoutsResult, sessionsResult] = await Promise.all([
-        client
-            .from('saved_workouts')
-            .select('id,user_id,local_id,name,sets,reps,seconds,rest,myo_reps,myo_work_secs,times_used,last_used_at,revision,updated_at,deleted_at,created_at')
-            .eq('user_id', userId),
-        client
-            .from('saved_sessions')
-            .select('id,user_id,local_id,name,nodes,times_used,last_used_at,revision,updated_at,deleted_at,created_at')
-            .eq('user_id', userId),
+    const [workoutRows, sessionRows] = await Promise.all([
+        fetchActiveRows<SupabaseSavedWorkoutRow>(client, 'saved_workouts', WORKOUT_SELECT, userId),
+        fetchActiveRows<SupabaseSavedSessionRow>(client, 'saved_sessions', SESSION_SELECT, userId),
     ]);
 
-    if (workoutsResult.error) {
-        throw workoutsResult.error;
-    }
-    if (sessionsResult.error) {
-        throw sessionsResult.error;
-    }
-
     return {
-        workouts: (workoutsResult.data as SupabaseSavedWorkoutRow[])
-            .filter((row) => row.deleted_at === null)
-            .map(fromSupabaseSavedWorkoutRow),
-        sessions: (sessionsResult.data as SupabaseSavedSessionRow[])
-            .filter((row) => row.deleted_at === null)
-            .map(fromSupabaseSavedSessionRow),
+        workouts: workoutRows.map(fromSupabaseSavedWorkoutRow),
+        sessions: sessionRows.map(fromSupabaseSavedSessionRow),
     };
 };
 
-const buildDeletedWorkoutRows = (
-    remoteRows: SupabaseSavedWorkoutRow[],
-    localIds: Set<string>,
-): SupabaseSavedWorkoutWriteRow[] => {
-    const nowIso = new Date().toISOString();
-    return remoteRows
-        .filter((row) => !localIds.has(row.local_id) && row.deleted_at === null)
-        .map((row) => ({
-            id: row.id,
-            user_id: row.user_id,
-            local_id: row.local_id,
-            name: row.name,
-            sets: row.sets,
-            reps: row.reps,
-            seconds: row.seconds,
-            rest: row.rest,
-            myo_reps: row.myo_reps,
-            myo_work_secs: row.myo_work_secs,
-            times_used: row.times_used,
-            last_used_at: row.last_used_at,
-            revision: row.revision + 1,
-            updated_at: nowIso,
-            deleted_at: nowIso,
-        }));
+const isRecord = (value: unknown): value is Record<string, unknown> => (
+    Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+);
+
+const parseRevision = (value: unknown, field: string): number => {
+    const revision = typeof value === 'number' ? value : Number(value);
+    if (!Number.isSafeInteger(revision) || revision < 0) {
+        throw new Error(`Invalid ${field} returned by the sync service.`);
+    }
+    return revision;
 };
 
-const buildDeletedSessionRows = (
-    remoteRows: SupabaseSavedSessionRow[],
-    localIds: Set<string>,
-): SupabaseSavedSessionWriteRow[] => {
-    const nowIso = new Date().toISOString();
-    return remoteRows
-        .filter((row) => !localIds.has(row.local_id) && row.deleted_at === null)
-        .map((row) => ({
-            id: row.id,
-            user_id: row.user_id,
-            local_id: row.local_id,
-            name: row.name,
-            nodes: row.nodes,
-            times_used: row.times_used,
-            last_used_at: row.last_used_at,
-            revision: row.revision + 1,
-            updated_at: nowIso,
-            deleted_at: nowIso,
-        }));
+const isConflictReason = (value: unknown): value is SyncMutationConflictReason => (
+    value === 'stale_revision' || value === 'tombstone_wins' || value === 'revision_mismatch'
+);
+
+const decodeMutationRpcResponse = <TRow>(value: unknown): MutationRpcResponse<TRow> => {
+    if (!isRecord(value)) {
+        throw new Error('Invalid mutation response returned by the sync service.');
+    }
+
+    const status = value.status;
+    if (status !== 'applied' && status !== 'deleted' && status !== 'conflict') {
+        throw new Error('Invalid mutation status returned by the sync service.');
+    }
+
+    const reason = value.reason;
+    if (status === 'conflict' && !isConflictReason(reason)) {
+        throw new Error('Invalid mutation conflict returned by the sync service.');
+    }
+
+    const remoteRecord = value.remote_record;
+    if (remoteRecord !== null && !isRecord(remoteRecord)) {
+        throw new Error('Invalid remote record returned by the sync service.');
+    }
+
+    const remoteDeletedAt = value.remote_deleted_at;
+    if (remoteDeletedAt !== null && typeof remoteDeletedAt !== 'string') {
+        throw new Error('Invalid tombstone timestamp returned by the sync service.');
+    }
+
+    return {
+        status,
+        reason: status === 'conflict' ? reason as SyncMutationConflictReason : null,
+        expected_revision: parseRevision(value.expected_revision, 'expected revision'),
+        remote_revision: parseRevision(value.remote_revision, 'remote revision'),
+        remote_deleted_at: remoteDeletedAt,
+        remote_record: remoteRecord as TRow | null,
+    };
+};
+
+const decodeOverwriteResponse = (value: unknown): OverwriteLibraryRpcResponse => {
+    if (!isRecord(value) || !Array.isArray(value.workouts) || !Array.isArray(value.sessions)) {
+        throw new Error('Invalid library response returned by the sync service.');
+    }
+
+    return {
+        workouts: value.workouts as SupabaseSavedWorkoutRow[],
+        sessions: value.sessions as SupabaseSavedSessionRow[],
+    };
+};
+
+const resolveExpectedRevision = (
+    suppliedRevision: number | null | undefined,
+    remoteId: string | null | undefined,
+    incomingRevision: number,
+): number => {
+    const expectedRevision = suppliedRevision
+        ?? (remoteId ? Math.max(0, incomingRevision - 1) : 0);
+
+    if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0) {
+        throw new Error('Expected remote revision must be a non-negative safe integer.');
+    }
+
+    return expectedRevision;
+};
+
+const toWorkoutMutationResult = (
+    response: MutationRpcResponse<SupabaseSavedWorkoutRow>,
+): SyncMutationResult<SavedWorkout> => {
+    if (response.status === 'conflict') {
+        const remoteRecord = response.remote_record && response.remote_record.deleted_at === null
+            ? fromSupabaseSavedWorkoutRow(response.remote_record)
+            : null;
+        return {
+            status: 'conflict',
+            reason: response.reason as SyncMutationConflictReason,
+            expectedRevision: response.expected_revision,
+            remoteRevision: response.remote_revision,
+            remoteDeletedAt: response.remote_deleted_at,
+            remoteRecord,
+        };
+    }
+
+    if (response.status === 'deleted') {
+        return {
+            status: 'deleted',
+            record: null,
+            remoteRevision: response.remote_revision,
+        };
+    }
+
+    if (!response.remote_record || response.remote_record.deleted_at !== null) {
+        throw new Error('Applied workout mutation did not return an active record.');
+    }
+
+    return {
+        status: 'applied',
+        record: fromSupabaseSavedWorkoutRow(response.remote_record),
+        remoteRevision: response.remote_revision,
+    };
+};
+
+const toSessionMutationResult = (
+    response: MutationRpcResponse<SupabaseSavedSessionRow>,
+): SyncMutationResult<SavedSession> => {
+    if (response.status === 'conflict') {
+        const remoteRecord = response.remote_record && response.remote_record.deleted_at === null
+            ? fromSupabaseSavedSessionRow(response.remote_record)
+            : null;
+        return {
+            status: 'conflict',
+            reason: response.reason as SyncMutationConflictReason,
+            expectedRevision: response.expected_revision,
+            remoteRevision: response.remote_revision,
+            remoteDeletedAt: response.remote_deleted_at,
+            remoteRecord,
+        };
+    }
+
+    if (response.status === 'deleted') {
+        return {
+            status: 'deleted',
+            record: null,
+            remoteRevision: response.remote_revision,
+        };
+    }
+
+    if (!response.remote_record || response.remote_record.deleted_at !== null) {
+        throw new Error('Applied session mutation did not return an active record.');
+    }
+
+    return {
+        status: 'applied',
+        record: fromSupabaseSavedSessionRow(response.remote_record),
+        remoteRevision: response.remote_revision,
+    };
 };
 
 export const overwriteRemoteLibraryWithLocal = async (
@@ -204,65 +371,30 @@ export const overwriteRemoteLibraryWithLocal = async (
     workouts: SavedWorkout[],
     sessions: SavedSession[],
 ): Promise<{ workouts: SavedWorkout[]; sessions: SavedSession[] }> => {
-    const [remoteWorkoutsResult, remoteSessionsResult] = await Promise.all([
-        client
-            .from('saved_workouts')
-            .select('id,user_id,local_id,name,sets,reps,seconds,rest,myo_reps,myo_work_secs,times_used,last_used_at,revision,updated_at,deleted_at,created_at')
-            .eq('user_id', userId),
-        client
-            .from('saved_sessions')
-            .select('id,user_id,local_id,name,nodes,times_used,last_used_at,revision,updated_at,deleted_at,created_at')
-            .eq('user_id', userId),
-    ]);
+    const activeWorkouts = workouts.filter((workout) => !workout.sync?.pendingDelete);
+    const activeSessions = sessions.filter((session) => !session.sync?.pendingDelete);
 
-    if (remoteWorkoutsResult.error) {
-        throw remoteWorkoutsResult.error;
-    }
-    if (remoteSessionsResult.error) {
-        throw remoteSessionsResult.error;
+    if (activeWorkouts.length > SYNC_MAX_LIBRARY_ROWS || activeSessions.length > SYNC_MAX_LIBRARY_ROWS) {
+        throw new Error(`Local library exceeds the ${SYNC_MAX_LIBRARY_ROWS}-record sync limit.`);
     }
 
-    const remoteWorkouts = remoteWorkoutsResult.data as SupabaseSavedWorkoutRow[];
-    const remoteSessions = remoteSessionsResult.data as SupabaseSavedSessionRow[];
-    const localWorkoutIds = new Set(workouts.map((workout) => workout.sync?.localId ?? workout.id));
-    const localSessionIds = new Set(sessions.map((session) => session.sync?.localId ?? session.id));
+    const { data, error } = await client.rpc('overwrite_sync_library', {
+        p_workouts: activeWorkouts.map((workout) => toSupabaseSavedWorkoutWriteRow(workout, userId)),
+        p_sessions: activeSessions.map((session) => toSupabaseSavedSessionWriteRow(session, userId)),
+    });
 
-    const workoutWrites = workouts.map((workout) => toSupabaseSavedWorkoutWriteRow(workout, userId));
-    const sessionWrites = sessions.map((session) => toSupabaseSavedSessionWriteRow(session, userId));
-    const deletedWorkoutWrites = buildDeletedWorkoutRows(remoteWorkouts, localWorkoutIds);
-    const deletedSessionWrites = buildDeletedSessionRows(remoteSessions, localSessionIds);
-
-    const [workoutUpsertResult, sessionUpsertResult, workoutDeleteResult, sessionDeleteResult] = await Promise.all([
-        workoutWrites.length > 0
-            ? client.from('saved_workouts').upsert(workoutWrites, { onConflict: 'user_id,local_id' }).select('id,user_id,local_id,name,sets,reps,seconds,rest,myo_reps,myo_work_secs,times_used,last_used_at,revision,updated_at,deleted_at,created_at')
-            : Promise.resolve({ data: [] as SupabaseSavedWorkoutRow[], error: null }),
-        sessionWrites.length > 0
-            ? client.from('saved_sessions').upsert(sessionWrites, { onConflict: 'user_id,local_id' }).select('id,user_id,local_id,name,nodes,times_used,last_used_at,revision,updated_at,deleted_at,created_at')
-            : Promise.resolve({ data: [] as SupabaseSavedSessionRow[], error: null }),
-        deletedWorkoutWrites.length > 0
-            ? client.from('saved_workouts').upsert(deletedWorkoutWrites, { onConflict: 'user_id,local_id' })
-            : Promise.resolve({ error: null }),
-        deletedSessionWrites.length > 0
-            ? client.from('saved_sessions').upsert(deletedSessionWrites, { onConflict: 'user_id,local_id' })
-            : Promise.resolve({ error: null }),
-    ]);
-
-    if (workoutUpsertResult.error) {
-        throw workoutUpsertResult.error;
-    }
-    if (sessionUpsertResult.error) {
-        throw sessionUpsertResult.error;
-    }
-    if (workoutDeleteResult.error) {
-        throw workoutDeleteResult.error;
-    }
-    if (sessionDeleteResult.error) {
-        throw sessionDeleteResult.error;
+    if (error) {
+        throw error;
     }
 
+    const response = decodeOverwriteResponse(data);
     return {
-        workouts: (workoutUpsertResult.data as SupabaseSavedWorkoutRow[]).map(fromSupabaseSavedWorkoutRow),
-        sessions: (sessionUpsertResult.data as SupabaseSavedSessionRow[]).map(fromSupabaseSavedSessionRow),
+        workouts: response.workouts
+            .filter((row) => row.deleted_at === null)
+            .map(fromSupabaseSavedWorkoutRow),
+        sessions: response.sessions
+            .filter((row) => row.deleted_at === null)
+            .map(fromSupabaseSavedSessionRow),
     };
 };
 
@@ -270,44 +402,54 @@ export const pushWorkoutMutation = async (
     client: SupabaseClient,
     userId: string,
     workout: SavedWorkout,
-): Promise<SavedWorkout | null> => {
+    expectedRemoteRevision?: number | null,
+): Promise<SyncMutationResult<SavedWorkout>> => {
     if (workout.sync?.pendingDelete && !workout.sync.remoteId) {
-        return null;
+        return {
+            status: 'deleted',
+            record: null,
+            remoteRevision: 0,
+        };
     }
 
     const row = toSupabaseSavedWorkoutWriteRow(workout, userId);
-    const { data, error } = await client
-        .from('saved_workouts')
-        .upsert(row, { onConflict: 'user_id,local_id' })
-        .select('id,user_id,local_id,name,sets,reps,seconds,rest,myo_reps,myo_work_secs,times_used,last_used_at,revision,updated_at,deleted_at,created_at')
-        .single<SupabaseSavedWorkoutRow>();
+    const expectedRevision = resolveExpectedRevision(expectedRemoteRevision, workout.sync?.remoteId, row.revision);
+    const { data, error } = await client.rpc('mutate_saved_workout', {
+        p_expected_revision: expectedRevision,
+        p_row: row,
+    });
 
     if (error) {
         throw error;
     }
 
-    return data.deleted_at ? null : fromSupabaseSavedWorkoutRow(data);
+    return toWorkoutMutationResult(decodeMutationRpcResponse<SupabaseSavedWorkoutRow>(data));
 };
 
 export const pushSessionMutation = async (
     client: SupabaseClient,
     userId: string,
     session: SavedSession,
-): Promise<SavedSession | null> => {
+    expectedRemoteRevision?: number | null,
+): Promise<SyncMutationResult<SavedSession>> => {
     if (session.sync?.pendingDelete && !session.sync.remoteId) {
-        return null;
+        return {
+            status: 'deleted',
+            record: null,
+            remoteRevision: 0,
+        };
     }
 
     const row = toSupabaseSavedSessionWriteRow(session, userId);
-    const { data, error } = await client
-        .from('saved_sessions')
-        .upsert(row, { onConflict: 'user_id,local_id' })
-        .select('id,user_id,local_id,name,nodes,times_used,last_used_at,revision,updated_at,deleted_at,created_at')
-        .single<SupabaseSavedSessionRow>();
+    const expectedRevision = resolveExpectedRevision(expectedRemoteRevision, session.sync?.remoteId, row.revision);
+    const { data, error } = await client.rpc('mutate_saved_session', {
+        p_expected_revision: expectedRevision,
+        p_row: row,
+    });
 
     if (error) {
         throw error;
     }
 
-    return data.deleted_at ? null : fromSupabaseSavedSessionRow(data);
+    return toSessionMutationResult(decodeMutationRpcResponse<SupabaseSavedSessionRow>(data));
 };

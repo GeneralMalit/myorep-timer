@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Plus } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import type { SessionNode } from '@/types/savedSessions';
-import { cn } from '@/lib/utils';
 import SessionNodeCard from '@/components/SessionNodeCard';
 
 interface SessionCanvasProps {
@@ -13,7 +14,24 @@ interface SessionCanvasProps {
     onRemoveNode: (nodeId: string) => void;
     onMoveNode: (nodeId: string, direction: 'left' | 'right') => void;
     onMoveNodeToIndex: (nodeId: string, targetIndex: number) => void;
+    onAddWorkout?: () => void;
+    onAddRest?: () => void;
 }
+
+interface CanvasOffset {
+    x: number;
+    y: number;
+}
+
+const getDefaultCanvasOffset = (mobileViewport: boolean): CanvasOffset => (
+    mobileViewport ? { x: 28, y: 28 } : { x: 0, y: 0 }
+);
+
+const getInitialMobileViewport = (): boolean => (
+    typeof window !== 'undefined'
+    && typeof window.matchMedia === 'function'
+    && window.matchMedia('(max-width: 767px)').matches
+);
 
 const SessionCanvas = ({
     nodes,
@@ -25,12 +43,19 @@ const SessionCanvas = ({
     onRemoveNode,
     onMoveNode,
     onMoveNodeToIndex,
+    onAddWorkout = () => {},
+    onAddRest = () => {},
 }: SessionCanvasProps) => {
     const [draggedNodeId, setDraggedNodeId] = useState<string | null>(null);
     const [dropIndex, setDropIndex] = useState<number | null>(null);
-    const [isMobileViewport, setIsMobileViewport] = useState(false);
-    const [canvasOffset, setCanvasOffset] = useState({ x: 28, y: 28 });
+    const [isMobileViewport, setIsMobileViewport] = useState(getInitialMobileViewport);
+    const [canvasOffset, setCanvasOffset] = useState(() => getDefaultCanvasOffset(isMobileViewport));
     const panStateRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
+    const boardRef = useRef<HTMLDivElement | null>(null);
+    const committedOffsetRef = useRef<CanvasOffset>(canvasOffset);
+    const liveOffsetRef = useRef<CanvasOffset>(canvasOffset);
+    const pendingPanPointRef = useRef<{ clientX: number; clientY: number } | null>(null);
+    const panFrameRef = useRef<number | null>(null);
     const isInteractiveTarget = (target: EventTarget | null) => {
         if (!(target instanceof HTMLElement)) {
             return false;
@@ -47,7 +72,6 @@ const SessionCanvas = ({
         const mediaQuery = window.matchMedia('(max-width: 767px)');
         const handleViewportChange = (event: MediaQueryListEvent | MediaQueryList) => {
             setIsMobileViewport(event.matches);
-            setCanvasOffset(event.matches ? { x: 28, y: 28 } : { x: 0, y: 0 });
         };
 
         handleViewportChange(mediaQuery);
@@ -70,7 +94,6 @@ const SessionCanvas = ({
     const boardHeight = isMobileViewport ? 440 : 380;
     const hasUnsavedChanges = sessionDraftStatus === 'unsaved changes';
     const displaySessionName = (sessionName?.trim() || 'SESSION').toUpperCase();
-    const getDefaultCanvasOffset = (mobileViewport: boolean) => (mobileViewport ? { x: 28, y: 28 } : { x: 0, y: 0 });
 
     const handleDrop = (targetIndex: number) => {
         if (!draggedNodeId) {
@@ -86,31 +109,137 @@ const SessionCanvas = ({
         panStateRef.current = {
             startX: clientX,
             startY: clientY,
-            originX: canvasOffset.x,
-            originY: canvasOffset.y,
+            originX: committedOffsetRef.current.x,
+            originY: committedOffsetRef.current.y,
         };
+        if (boardRef.current) {
+            boardRef.current.style.transition = 'none';
+        }
+    };
+
+    const flushPendingPan = (): CanvasOffset => {
+        const currentPan = panStateRef.current;
+        const pendingPoint = pendingPanPointRef.current;
+        if (!currentPan || !pendingPoint) {
+            return liveOffsetRef.current;
+        }
+
+        const nextOffset = {
+            x: currentPan.originX + (pendingPoint.clientX - currentPan.startX),
+            y: currentPan.originY + (pendingPoint.clientY - currentPan.startY),
+        };
+        pendingPanPointRef.current = null;
+        liveOffsetRef.current = nextOffset;
+        if (boardRef.current) {
+            boardRef.current.style.transform = `translate3d(${nextOffset.x}px, ${nextOffset.y}px, 0)`;
+        }
+        return nextOffset;
     };
 
     const updatePan = (clientX: number, clientY: number) => {
-        const currentPan = panStateRef.current;
-        if (!currentPan || !isMobileViewport) {
+        if (!panStateRef.current || !isMobileViewport) {
             return;
         }
 
-        setCanvasOffset({
-            x: currentPan.originX + (clientX - currentPan.startX),
-            y: currentPan.originY + (clientY - currentPan.startY),
+        pendingPanPointRef.current = { clientX, clientY };
+        if (panFrameRef.current !== null) {
+            return;
+        }
+
+        panFrameRef.current = requestAnimationFrame(() => {
+            panFrameRef.current = null;
+            flushPendingPan();
         });
     };
 
     const endPan = () => {
+        if (panFrameRef.current !== null) {
+            cancelAnimationFrame(panFrameRef.current);
+            panFrameRef.current = null;
+        }
+
+        const finalOffset = flushPendingPan();
         panStateRef.current = null;
+        committedOffsetRef.current = finalOffset;
+        setCanvasOffset((currentOffset) => (
+            currentOffset.x === finalOffset.x && currentOffset.y === finalOffset.y
+                ? currentOffset
+                : finalOffset
+        ));
+        if (boardRef.current) {
+            boardRef.current.style.transition = 'transform 160ms ease';
+        }
     };
 
     useEffect(() => {
-        endPan();
-        setCanvasOffset(getDefaultCanvasOffset(isMobileViewport));
+        if (panFrameRef.current !== null) {
+            cancelAnimationFrame(panFrameRef.current);
+            panFrameRef.current = null;
+        }
+        panStateRef.current = null;
+        pendingPanPointRef.current = null;
+        const defaultOffset = getDefaultCanvasOffset(isMobileViewport);
+        committedOffsetRef.current = defaultOffset;
+        liveOffsetRef.current = defaultOffset;
+        setCanvasOffset((currentOffset) => (
+            currentOffset.x === defaultOffset.x && currentOffset.y === defaultOffset.y
+                ? currentOffset
+                : defaultOffset
+        ));
     }, [isMobileViewport, sessionId]);
+
+    useEffect(() => () => {
+        if (panFrameRef.current !== null) {
+            cancelAnimationFrame(panFrameRef.current);
+        }
+    }, []);
+
+    useEffect(() => {
+        if (!activeNodeId || typeof document === 'undefined') {
+            return;
+        }
+
+        const frame = requestAnimationFrame(() => {
+            const nodeElement = document.querySelector<HTMLElement>(`[data-session-node-id="${activeNodeId}"]`);
+            if (nodeElement && typeof nodeElement.scrollIntoView === 'function') {
+                nodeElement.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+            }
+        });
+
+        return () => cancelAnimationFrame(frame);
+    }, [activeNodeId]);
+
+    const renderAddActions = (compact = false) => (
+        <div
+            data-testid="session-canvas-add-controls"
+            className={compact
+                ? 'flex shrink-0 flex-col gap-2'
+                : 'flex shrink-0 flex-wrap items-center gap-2'}
+        >
+            <Button
+                type="button"
+                variant="secondary"
+                onClick={(event) => {
+                    event.stopPropagation();
+                    onAddWorkout();
+                }}
+                className="gap-2 rounded-xl px-3 font-semibold"
+            >
+                <Plus size={15} /> Add workout
+            </Button>
+            <Button
+                type="button"
+                variant="outline"
+                onClick={(event) => {
+                    event.stopPropagation();
+                    onAddRest();
+                }}
+                className="gap-2 rounded-xl px-3 font-semibold"
+            >
+                <Plus size={15} /> Add rest
+            </Button>
+        </div>
+    );
 
     return isMobileViewport ? (
         <div
@@ -176,6 +305,7 @@ const SessionCanvas = ({
                 }}
             >
                 <div
+                    ref={boardRef}
                     data-testid="session-canvas-board"
                     className="absolute left-0 top-0"
                     style={{
@@ -186,14 +316,18 @@ const SessionCanvas = ({
                     }}
                 >
                     {nodes.length === 0 ? (
-                        <div className="flex h-full w-full items-center justify-center px-6 py-6">
-                            <div className="h-[220px] w-full rounded-[28px] border border-dashed border-white/10 bg-white/[0.02]" />
+                        <div className="flex h-full w-full items-center justify-center gap-4 px-6 py-6">
+                            <div className="flex h-[220px] min-w-[220px] flex-1 items-center justify-center rounded-[28px] border border-dashed border-white/10 bg-white/[0.02] px-4 text-center text-sm text-muted-foreground">
+                                Add a workout or rest block to start this session.
+                            </div>
+                            {renderAddActions(true)}
                         </div>
                     ) : (
                         <div className="absolute left-10 top-1/2 flex -translate-y-1/2 items-center gap-3 md:gap-4">
                             {nodes.map((node, index) => (
                                 <div
                                     key={node.id}
+                                    data-session-node-id={node.id}
                                     className="flex items-center gap-2"
                                     onDragOver={(event) => {
                                         event.preventDefault();
@@ -228,6 +362,7 @@ const SessionCanvas = ({
                                     />
                                 </div>
                             ))}
+                            {renderAddActions(true)}
                         </div>
                     )}
                 </div>
@@ -270,20 +405,22 @@ const SessionCanvas = ({
                         <div className="flex min-h-full flex-1 items-center overflow-x-auto py-6">
                             <div className="flex min-h-full min-w-full items-center gap-2.5 md:gap-3">
                                 {nodes.length === 0 ? (
-                                    <div className="flex min-h-[320px] min-w-[320px] flex-1 items-center justify-center rounded-[28px] border border-dashed border-white/10 bg-white/3 px-8 text-center">
+                                    <div className="flex min-h-[320px] min-w-[320px] flex-1 items-center justify-center gap-4 rounded-[28px] border border-dashed border-white/10 bg-white/3 px-8 text-center">
                                         <div className="max-w-sm space-y-2">
                                             <div className="text-sm font-black italic tracking-tight text-foreground">
                                                 Empty canvas
                                             </div>
                                             <div className="text-sm text-muted-foreground">
-                                                Add workout and rest nodes from the builder actions, then drag them around here.
+                                                Add workout or rest blocks below to start building this session.
                                             </div>
                                         </div>
+                                        {renderAddActions()}
                                     </div>
                                 ) : (
                                     nodes.map((node, index) => (
                                         <div
                                             key={node.id}
+                                            data-session-node-id={node.id}
                                             className="flex items-center gap-2"
                                             onDragOver={(event) => {
                                                 event.preventDefault();
@@ -318,6 +455,7 @@ const SessionCanvas = ({
                                         </div>
                                     ))
                                 )}
+                                {nodes.length > 0 && renderAddActions()}
                             </div>
                         </div>
                     </div>

@@ -96,21 +96,26 @@ export const loadSupabaseAccountState = async (
         return buildAccountStateFromSession(session);
     }
 
-    let refreshedEntitlement: SupabaseEntitlementRow | null = null;
-    try {
-        refreshedEntitlement = await refreshResolvedEntitlement(session);
-    } catch {
-        // Refresh is opportunistic. We still want to read the persisted
-        // Supabase rows so a transient API failure does not force the user
-        // into the free path.
-    }
+    const loadEntitlement = async (): Promise<SupabaseEntitlementRow | null> => {
+        try {
+            const refreshedEntitlement = await refreshResolvedEntitlement(session);
+            if (refreshedEntitlement) {
+                return refreshedEntitlement;
+            }
+        } catch {
+            // Refresh is opportunistic. Fall through to the persisted row so a
+            // transient API failure does not force the user into the free path.
+        }
+
+        return readSupabaseEntitlement(client, session.user.id);
+    };
 
     const [profileRow, entitlementRow] = await Promise.all([
         readSupabaseProfile(client, session.user.id),
-        readSupabaseEntitlement(client, session.user.id),
+        loadEntitlement(),
     ]);
 
-    return buildAccountStateFromSupabaseRows(session, profileRow, entitlementRow ?? refreshedEntitlement);
+    return buildAccountStateFromSupabaseRows(session, profileRow, entitlementRow);
 };
 
 export const signInSupabaseWithPassword = async (

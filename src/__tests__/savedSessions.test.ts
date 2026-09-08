@@ -5,7 +5,9 @@ import {
     cloneSessionNode,
     createRestSessionNode,
     createSavedSession,
+    createDefaultWorkoutSessionNode,
     createWorkoutSessionNode,
+    duplicateSavedSession,
     estimateWorkoutDurationSeconds,
     estimateSessionDurationSeconds,
     formatEstimatedSessionDuration,
@@ -380,5 +382,72 @@ describe('savedSessions utilities', () => {
         expect(imported.sessions).toHaveLength(3);
         expect(new Set(imported.sessions.map((session) => session.id)).size).toBe(3);
         expect(imported.sessions.some((session) => session.name.startsWith('Day One (Imported'))).toBe(true);
+    });
+
+    it('normalizes, preserves, and explicitly resets progression metadata', () => {
+        const nowIso = '2026-01-01T00:00:00.000Z';
+        const sourceNode = createWorkoutSessionNode(
+            'Progression block',
+            {
+                sets: '3',
+                reps: '15',
+                seconds: '2',
+                rest: '20',
+                myoReps: '5',
+                myoWorkSecs: '2',
+            },
+            nowIso,
+        );
+        sourceNode.completedSessionsSinceProgression = 4;
+        const session = createSavedSession('Progression session', [sourceNode], nowIso);
+
+        expect(session.nodes[0].type === 'workout'
+            ? session.nodes[0].completedSessionsSinceProgression
+            : -1).toBe(4);
+
+        const ordinaryClone = cloneSavedSession(session);
+        expect(ordinaryClone.nodes[0].type === 'workout'
+            ? ordinaryClone.nodes[0].completedSessionsSinceProgression
+            : -1).toBe(4);
+
+        const identityClone = cloneSavedSession(session, {
+            nowIso,
+            regenerateIdentity: true,
+        });
+        expect(identityClone.id).not.toBe(session.id);
+        expect(identityClone.nodes[0].type === 'workout'
+            ? identityClone.nodes[0].completedSessionsSinceProgression
+            : -1).toBe(4);
+
+        const duplicate = duplicateSavedSession(session, nowIso);
+        expect(duplicate.id).not.toBe(session.id);
+        expect(duplicate.nodes[0].type === 'workout'
+            ? duplicate.nodes[0].completedSessionsSinceProgression
+            : -1).toBe(0);
+
+        const exportPayload = buildSavedSessionsExport([session], nowIso);
+        const imported = mergeSavedSessionsFromImport([], exportPayload);
+        expect(imported.sessions[0].nodes[0].type === 'workout'
+            ? imported.sessions[0].nodes[0].completedSessionsSinceProgression
+            : -1).toBe(4);
+    });
+
+    it('gives a new workout block the generic valid defaults independent of standalone setup', () => {
+        const node = createDefaultWorkoutSessionNode('Workout 2', '2026-01-01T00:00:00.000Z');
+
+        expect(node).toMatchObject({
+            name: 'Workout 2',
+            sourceWorkoutId: null,
+            notes: '',
+            completedSessionsSinceProgression: 0,
+            config: {
+                sets: '3',
+                reps: '15',
+                seconds: '2',
+                rest: '20',
+                myoReps: '5',
+                myoWorkSecs: '2',
+            },
+        });
     });
 });

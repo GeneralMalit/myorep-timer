@@ -17,7 +17,7 @@ describe('supabaseAccount', () => {
         vi.stubGlobal('fetch', fetchMock);
     });
 
-    it('refreshes the resolved entitlement before reading account rows', async () => {
+    it('uses the refreshed entitlement payload without re-reading the entitlement row', async () => {
         const maybeSingleProfile = vi.fn().mockResolvedValue({
                 data: {
                     id: 'user-1',
@@ -59,7 +59,14 @@ describe('supabaseAccount', () => {
 
         fetchMock.mockResolvedValue({
             ok: true,
-            json: vi.fn().mockResolvedValue({}),
+            json: vi.fn().mockResolvedValue({
+                entitlement: {
+                    user_id: 'user-1',
+                    plan: 'plus',
+                    cloud_sync_enabled: true,
+                    updated_at: '2026-04-16T00:00:00.000Z',
+                },
+            }),
         });
 
         const resolved = await loadSupabaseAccountState(client as never, session as never);
@@ -70,13 +77,18 @@ describe('supabaseAccount', () => {
                 Authorization: 'Bearer access-token',
             },
         });
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        expect(client.from).toHaveBeenCalledTimes(1);
+        expect(client.from).toHaveBeenNthCalledWith(1, 'profiles');
+        expect(maybeSingleProfile).toHaveBeenCalledTimes(1);
+        expect(maybeSingleEntitlement).not.toHaveBeenCalled();
         expect(resolved.mode).toBe('signed-in-plus');
         expect(resolved.profile?.username).toBe('athlete_one');
         expect(resolved.entitlement?.plan).toBe('plus');
         expect(resolved.entitlement?.cloudSyncEnabled).toBe(true);
     });
 
-    it('uses the refreshed entitlement payload when the row read is still missing', async () => {
+    it('falls back to the persisted entitlement row when the refresh payload omits it', async () => {
         const maybeSingleProfile = vi.fn().mockResolvedValue({
             data: {
                 id: 'user-1',
@@ -89,7 +101,12 @@ describe('supabaseAccount', () => {
             error: null,
         });
         const maybeSingleEntitlement = vi.fn().mockResolvedValue({
-            data: null,
+            data: {
+                user_id: 'user-1',
+                plan: 'plus',
+                cloud_sync_enabled: true,
+                updated_at: '2026-04-16T00:00:00.000Z',
+            },
             error: null,
         });
         const client = {
@@ -113,18 +130,15 @@ describe('supabaseAccount', () => {
 
         fetchMock.mockResolvedValue({
             ok: true,
-            json: vi.fn().mockResolvedValue({
-                entitlement: {
-                    user_id: 'user-1',
-                    plan: 'plus',
-                    cloud_sync_enabled: true,
-                    updated_at: '2026-04-16T00:00:00.000Z',
-                },
-            }),
+            json: vi.fn().mockResolvedValue({}),
         });
 
         const resolved = await loadSupabaseAccountState(client as never, session as never);
 
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        expect(client.from).toHaveBeenCalledTimes(2);
+        expect(maybeSingleProfile).toHaveBeenCalledTimes(1);
+        expect(maybeSingleEntitlement).toHaveBeenCalledTimes(1);
         expect(resolved.mode).toBe('signed-in-plus');
         expect(resolved.entitlement?.plan).toBe('plus');
         expect(resolved.entitlement?.cloudSyncEnabled).toBe(true);
@@ -180,7 +194,10 @@ describe('supabaseAccount', () => {
 
         const resolved = await loadSupabaseAccountState(client as never, session as never);
 
+        expect(fetchMock).toHaveBeenCalledTimes(1);
         expect(client.from).toHaveBeenCalledTimes(2);
+        expect(maybeSingleProfile).toHaveBeenCalledTimes(1);
+        expect(maybeSingleEntitlement).toHaveBeenCalledTimes(1);
         expect(resolved.mode).toBe('signed-in-plus');
         expect(resolved.entitlement?.plan).toBe('plus');
         expect(resolved.entitlement?.cloudSyncEnabled).toBe(true);
