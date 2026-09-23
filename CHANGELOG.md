@@ -1,3 +1,10 @@
+## [3.10.1](https://github.com/GeneralMalit/myorep-timer/compare/v3.10.0...v3.10.1) (2026-09-23)
+
+
+### Bug Fixes
+
+* defer session access until entitlement check completes ([67e76c8](https://github.com/GeneralMalit/myorep-timer/commit/67e76c8508cb7281b7114093db0aaa7999b19099))
+
 # [3.10.0](https://github.com/GeneralMalit/myorep-timer/compare/v3.9.1...v3.10.0) (2026-09-08)
 
 
