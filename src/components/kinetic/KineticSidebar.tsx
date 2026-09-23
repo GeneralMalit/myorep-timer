@@ -244,6 +244,7 @@ const KineticSidebar = ({
     canAccessSessionBuilder = true,
     onUpgradeToPlus,
     onManageSubscription,
+    onCheckPlusAccess,
     onNavigate,
     setupMode,
     width = 248,
@@ -631,6 +632,7 @@ const KineticSidebar = ({
                                         onSignOut={onSignOut}
                                         onUpgradeToPlus={onUpgradeToPlus}
                                         onManageSubscription={onManageSubscription}
+                                        onCheckPlusAccess={onCheckPlusAccess}
                                     />
                                 </div>
                             )}

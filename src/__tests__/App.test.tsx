@@ -627,6 +627,83 @@ describe('App', () => {
         expect(startBillingCheckoutMock).not.toHaveBeenCalled();
     });
 
+    it('keeps session access neutral while the account entitlement is still loading', () => {
+        useAccountStore.setState({
+            bootstrapStatus: 'bootstrapping',
+            mode: 'guest',
+            session: null,
+            profile: null,
+            entitlement: null,
+            syncStatus: 'disabled',
+            error: null,
+            requiresPasswordReset: false,
+        });
+        useWorkoutStore.setState({
+            savedSessions: [{
+                id: 'pending-session',
+                name: 'Pending Session',
+                nodes: [],
+                timesUsed: 0,
+                lastUsedAt: null,
+                createdAt: '2026-03-01T00:00:00.000Z',
+                updatedAt: '2026-03-01T00:00:00.000Z',
+            }],
+        });
+
+        render(<App />);
+
+        expect(screen.getByText(/checking account access/i)).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: /^load$/i }));
+
+        expect(screen.getByRole('dialog', { name: /checking account access/i })).toBeInTheDocument();
+        expect(screen.queryByRole('dialog', { name: /sign in to unlock session builder/i })).not.toBeInTheDocument();
+        expect(startBillingCheckoutMock).not.toHaveBeenCalled();
+    });
+
+    it('lets signed-in free users manually recheck Plus access from account details', async () => {
+        const resolvedPlusState = {
+            session: { user: { id: 'user-1', email: 'athlete@example.com' } },
+            profile: {
+                userId: 'user-1',
+                username: 'athlete_one',
+                email: 'athlete@example.com',
+                displayName: 'Athlete One',
+                createdAt: '2026-03-01T00:00:00.000Z',
+                updatedAt: '2026-03-01T00:00:00.000Z',
+            },
+            entitlement: {
+                userId: 'user-1',
+                plan: 'plus' as const,
+                cloudSyncEnabled: true,
+                updatedAt: '2026-03-01T00:00:00.000Z',
+                source: 'supabase' as const,
+            },
+            mode: 'signed-in-plus' as const,
+            syncStatus: 'idle' as const,
+        };
+        refreshBillingEntitlementStateMock.mockResolvedValue(resolvedPlusState);
+        useAccountStore.setState({
+            bootstrapStatus: 'error',
+            mode: 'signed-in-free',
+            session: resolvedPlusState.session as never,
+            profile: resolvedPlusState.profile,
+            entitlement: { ...resolvedPlusState.entitlement, plan: 'free', cloudSyncEnabled: false },
+            syncStatus: 'error',
+            error: 'Entitlement lookup failed',
+            requiresPasswordReset: false,
+        });
+
+        render(<App />);
+        fireEvent.click(screen.getByRole('button', { name: /check plus access/i }));
+
+        await waitFor(() => {
+            expect(refreshBillingEntitlementStateMock).toHaveBeenCalledTimes(1);
+            expect(useAccountStore.getState().mode).toBe('signed-in-plus');
+            expect(useAccountStore.getState().bootstrapStatus).toBe('ready');
+        });
+        expect(await screen.findByText(/plus features are active on this account/i)).toBeInTheDocument();
+    });
+
     it('starts checkout when a signed-in free user tries to unlock session builder', async () => {
         useAccountStore.setState({
             bootstrapStatus: 'ready',
@@ -639,6 +716,7 @@ describe('App', () => {
             } as never,
             profile: {
                 userId: 'user-1',
+                username: 'athlete_one',
                 email: 'athlete@example.com',
                 displayName: 'Athlete One',
                 createdAt: '2026-03-01T00:00:00.000Z',

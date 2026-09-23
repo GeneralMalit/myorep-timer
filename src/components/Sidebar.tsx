@@ -65,8 +65,10 @@ export interface SidebarProps {
     onUpdatePassword?: (password: string) => Promise<AccountActionResult>;
     onSignOut?: () => Promise<AccountActionResult>;
     canAccessSessionBuilder?: boolean;
+    isAccountCheckPending?: boolean;
     onUpgradeToPlus?: () => Promise<AccountActionResult>;
     onManageSubscription?: () => Promise<AccountActionResult>;
+    onCheckPlusAccess?: () => Promise<AccountActionResult>;
 }
 
 const themes = [
@@ -115,8 +117,10 @@ const Sidebar: React.FC<SidebarProps> = ({
     onUpdatePassword,
     onSignOut,
     canAccessSessionBuilder = true,
+    isAccountCheckPending = false,
     onUpgradeToPlus,
     onManageSubscription,
+    onCheckPlusAccess,
 }) => {
     const fileInputRef = useRef<HTMLInputElement | null>(null);
     const prepTime = useWorkoutStore((state) => state.settings.prepTime);
@@ -196,6 +200,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                                     onSignOut={onSignOut}
                                     onUpgradeToPlus={onUpgradeToPlus}
                                     onManageSubscription={onManageSubscription}
+                                    onCheckPlusAccess={onCheckPlusAccess}
                                 />
                             </section>
                         )}
@@ -251,12 +256,12 @@ const Sidebar: React.FC<SidebarProps> = ({
                                     <div className={layout.sectionEyebrow}>Library</div>
                                     <div className={layout.sessionsTitle}>Saved Sessions</div>
                                 </div>
-                                <Button variant="outline" size="sm" onClick={onCreateSession} className={layout.sessionsNewButton} disabled={!isSetupMode || !canAccessSessionBuilder}>
+                                <Button variant="outline" size="sm" onClick={onCreateSession} className={layout.sessionsNewButton} disabled={!isSetupMode}>
                                     New
                                 </Button>
                             </div>
 
-                            {!canAccessSessionBuilder ? (
+                            {!canAccessSessionBuilder && !isAccountCheckPending ? (
                                 <div className={layout.plusCard}>
                                     <div className={layout.plusTitle}>Plus Feature</div>
                                     <div className={layout.plusDescription}>Session Builder is part of Plus.</div>
@@ -277,6 +282,9 @@ const Sidebar: React.FC<SidebarProps> = ({
                                 </div>
                             ) : (
                                 <div className={layout.sessionsList}>
+                                    {!canAccessSessionBuilder && isAccountCheckPending && (
+                                        <div className={layout.sessionsEmpty} role="status">Checking account access…</div>
+                                    )}
                                     {savedSessions.length === 0 && (
                                         <div className={layout.sessionsEmpty}>
                                             No saved sessions yet

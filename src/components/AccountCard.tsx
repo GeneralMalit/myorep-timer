@@ -45,6 +45,7 @@ export interface AccountCardProps {
     onSignOut?: () => Promise<AccountActionResult>;
     onUpgradeToPlus?: () => Promise<AccountActionResult>;
     onManageSubscription?: () => Promise<AccountActionResult>;
+    onCheckPlusAccess?: () => Promise<AccountActionResult>;
 }
 
 type SyncDialogState =
@@ -266,6 +267,7 @@ const AccountCard = ({
     onSignOut,
     onUpgradeToPlus,
     onManageSubscription,
+    onCheckPlusAccess,
 }: AccountCardProps) => {
     const [username, setUsername] = useState(account.profile?.username ?? '');
     const [email, setEmail] = useState(account.profile?.email ?? '');
@@ -315,7 +317,7 @@ const AccountCard = ({
 
     const title = useMemo(() => {
         if (account.requiresPasswordReset) return 'Set a new password';
-        if (account.bootstrapStatus === 'bootstrapping') return 'Checking account';
+        if (account.bootstrapStatus === 'bootstrapping' || account.bootstrapStatus === 'idle') return 'Checking account';
         if (account.bootstrapStatus === 'disabled') return 'Local only';
         if (account.bootstrapStatus === 'error') return 'Account error';
         if (account.mode === 'signed-in-plus') return 'Signed in';
@@ -325,7 +327,7 @@ const AccountCard = ({
 
     const supportingCopy = useMemo(() => {
         if (account.requiresPasswordReset) return 'Your reset link is active. Set a new password to finish recovering this account.';
-        if (account.bootstrapStatus === 'bootstrapping') return 'Loading your session and entitlement state.';
+        if (account.bootstrapStatus === 'bootstrapping' || account.bootstrapStatus === 'idle') return 'Loading your session and entitlement state.';
         if (account.bootstrapStatus === 'disabled') return 'Supabase is off, so the app stays local-only.';
         if (account.bootstrapStatus === 'error') return account.error ?? 'We could not load the account state.';
         if (account.mode === 'signed-in-plus') return 'Plus features are active on this account.';
@@ -334,11 +336,11 @@ const AccountCard = ({
     }, [account.bootstrapStatus, account.error, account.mode, account.requiresPasswordReset]);
 
     const badge = useMemo(() => {
+        if (account.bootstrapStatus === 'bootstrapping' || account.bootstrapStatus === 'idle') return 'Loading';
         if (account.mode === 'signed-in-plus') return 'Plus';
         if (account.mode === 'signed-in-free') return 'Free';
         if (account.bootstrapStatus === 'disabled') return 'Local';
         if (account.bootstrapStatus === 'error') return 'Error';
-        if (account.bootstrapStatus === 'bootstrapping') return 'Loading';
         return 'Guest';
     }, [account.bootstrapStatus, account.mode]);
 
@@ -644,6 +646,21 @@ const AccountCard = ({
         }
     };
 
+    const handleCheckPlusAccess = async () => {
+        if (!onCheckPlusAccess || isSubmitting) {
+            return;
+        }
+
+        setIsSubmitting(true);
+        setNotice(null);
+        try {
+            const result = await onCheckPlusAccess();
+            setNotice({ tone: result.ok ? 'success' : 'error', text: result.message });
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
     const canUsePasswordAuth = account.bootstrapStatus !== 'bootstrapping' && account.bootstrapStatus !== 'disabled';
     const canSignOut = Boolean(onSignOut) && account.mode !== 'guest' && account.bootstrapStatus !== 'bootstrapping';
 
@@ -827,6 +844,20 @@ const AccountCard = ({
                             >
                                 <Sparkles size={16} />
                                 Upgrade to Plus
+                            </Button>
+                        )}
+                        {account.mode === 'signed-in-free' && onCheckPlusAccess && account.bootstrapStatus !== 'disabled' && (
+                            <Button
+                                type="button"
+                                variant="secondary"
+                                className="h-11 w-full justify-center rounded-xl font-bold"
+                                onClick={handleCheckPlusAccess}
+                                disabled={isSubmitting || account.bootstrapStatus === 'bootstrapping'}
+                            >
+                                {isSubmitting || account.bootstrapStatus === 'bootstrapping'
+                                    ? <Loader2 className="animate-spin" size={16} />
+                                    : <RefreshCw size={16} />}
+                                {account.bootstrapStatus === 'bootstrapping' ? 'Checking Plus access' : 'Check Plus access'}
                             </Button>
                         )}
                         {account.mode === 'signed-in-plus' && onManageSubscription && (

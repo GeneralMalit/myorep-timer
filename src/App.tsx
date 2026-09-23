@@ -773,6 +773,8 @@ export default function App() {
         syncStatus,
         error,
         requiresPasswordReset,
+        applySession,
+        setBootstrapStatus,
         setPasswordRecoveryMode,
     } = useAccountStore(useShallow((state) => ({
         applyAccountState: state.applyAccountState,
@@ -784,6 +786,8 @@ export default function App() {
         syncStatus: state.syncStatus,
         error: state.error,
         requiresPasswordReset: state.requiresPasswordReset,
+        applySession: state.applySession,
+        setBootstrapStatus: state.setBootstrapStatus,
         setPasswordRecoveryMode: state.setPasswordRecoveryMode,
     })));
     const [showProtocolIntel, setShowProtocolIntel] = useState(false);
@@ -795,6 +799,7 @@ export default function App() {
     const dialogConfirmRef = useRef<((value: string) => void) | null>(null);
     const loadedWorkout = selectedSavedWorkoutId ? savedWorkouts.find((workout) => workout.id === selectedSavedWorkoutId) ?? null : null;
     const canUseSessionBuilder = isLocalPlusPreview || canAccessSessionBuilder(entitlement);
+    const isAccountCheckPending = bootstrapStatus === 'bootstrapping';
     const canUseCloudSync = mode === 'signed-in-plus' && entitlement?.cloudSyncEnabled === true;
     const isSessionSetup = appPhase === 'setup' && setupMode === 'session' && canUseSessionBuilder;
     const nodeCount = editingSessionDraft?.nodes.length ?? 0;
@@ -1011,7 +1016,49 @@ export default function App() {
         const { openBillingPortal } = await import('@/lib/billing');
         return openBillingPortal();
     }, [account.mode]);
+    const handleCheckPlusAccess = useCallback(async (): Promise<AccountActionResult> => {
+        if (!session) {
+            return { ok: false, message: 'Sign in to check Plus access for this account.' };
+        }
+
+        setBootstrapStatus('bootstrapping');
+        try {
+            const { refreshBillingEntitlementState } = await import('@/lib/billing');
+            const resolvedState = await refreshBillingEntitlementState();
+            if (!resolvedState) {
+                applySession(session);
+                setBootstrapStatus('error');
+                return { ok: false, message: 'Could not check Plus access. Try again in a moment.' };
+            }
+
+            applyAccountState(resolvedState);
+            setBootstrapStatus('ready');
+            return {
+                ok: true,
+                message: canAccessSessionBuilder(resolvedState.entitlement)
+                    ? 'Plus access is active.'
+                    : 'No active Plus access was found for this account.',
+            };
+        } catch (refreshError: unknown) {
+            applySession(session);
+            setBootstrapStatus('error');
+            return {
+                ok: false,
+                message: refreshError instanceof Error
+                    ? `Could not check Plus access: ${refreshError.message}`
+                    : 'Could not check Plus access. Try again in a moment.',
+            };
+        }
+    }, [applyAccountState, applySession, session, setBootstrapStatus]);
     const handleSessionBuilderLocked = useCallback(() => {
+        if (isAccountCheckPending) {
+            openMessageDialog(
+                'Checking account access',
+                'Your session is saved. Wait for the account check to finish, then try again.',
+            );
+            return;
+        }
+
         if (account.mode === 'guest') {
             setIsSidebarCollapsed(false);
             openMessageDialog(
@@ -1031,7 +1078,7 @@ export default function App() {
                 void handleUpgradeToPlus();
             },
         );
-    }, [account.mode, handleUpgradeToPlus, openMessageDialog, setIsSidebarCollapsed]);
+    }, [account.mode, handleUpgradeToPlus, isAccountCheckPending, openMessageDialog, setIsSidebarCollapsed]);
     const handleCreateSession = useCallback(() => {
         if (!canUseSessionBuilder) {
             handleSessionBuilderLocked();
@@ -1431,6 +1478,8 @@ export default function App() {
         canAccessSessionBuilder: canUseSessionBuilder,
         onUpgradeToPlus: handleUpgradeToPlus,
         onManageSubscription: handleManageSubscription,
+        onCheckPlusAccess: handleCheckPlusAccess,
+        isAccountCheckPending,
     };
 
     return (
