@@ -36,6 +36,7 @@ import type { SidebarProps } from '../Sidebar';
  */
 export type KineticSidebarProps = SidebarProps & {
     onNavigate?: (destination: 'workout' | 'session') => void;
+    onCloseMobileDrawer?: () => void;
     setupMode?: 'workout' | 'session';
     width?: number;
     onWidthChange?: (width: number) => void;
@@ -76,7 +77,7 @@ const NavButton = ({ icon, label, active = false, disabled = false, collapsed = 
         aria-label={collapsed ? label : undefined}
         title={collapsed ? label : undefined}
         className={cn(
-            'group flex min-h-10 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold transition-colors duration-150',
+            'group flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold transition-colors duration-150 md:min-h-10',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--kinetic-theme-color)] focus-visible:ring-offset-2 focus-visible:ring-offset-[#151617]',
             active
                 ? 'bg-[var(--kinetic-theme-color)] text-[#161616]'
@@ -90,7 +91,6 @@ const NavButton = ({ icon, label, active = false, disabled = false, collapsed = 
         {!collapsed && badge && <span className="text-[10px] font-medium text-current/55">{badge}</span>}
     </button>
 );
-
 interface ActionButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
     label: string;
     children: React.ReactNode;
@@ -102,7 +102,7 @@ const ActionButton = ({ label, children, className, ...props }: ActionButtonProp
         aria-label={label}
         title={label}
         className={cn(
-            'inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-white/10 text-[#aaa39f] transition-colors duration-150',
+            'inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-white/10 text-[#aaa39f] transition-colors duration-150 md:h-7 md:w-7',
             'hover:border-white/20 hover:bg-white/[0.08] hover:text-[#f2f0ed]',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--kinetic-theme-color)] focus-visible:ring-offset-1 focus-visible:ring-offset-[#1c1e20]',
             'disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent',
@@ -131,7 +131,7 @@ const SessionRow = ({ session, duration, disabled, onLoad, onDuplicate, onRename
                 type="button"
                 onClick={onLoad}
                 disabled={disabled}
-                className="min-w-0 flex-1 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--kinetic-theme-color)] focus-visible:ring-offset-1 focus-visible:ring-offset-[#151617] disabled:cursor-not-allowed disabled:opacity-50"
+                className="min-h-11 min-w-0 flex-1 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--kinetic-theme-color)] focus-visible:ring-offset-1 focus-visible:ring-offset-[#151617] disabled:cursor-not-allowed disabled:opacity-50 md:min-h-0"
                 title={`Load ${session.name}`}
             >
                 <div className="truncate text-xs font-semibold text-[#e7e3df] group-hover:text-white">{session.name}</div>
@@ -177,7 +177,7 @@ const WorkoutRow = ({ workout, disabled, onLoad, onRename, onDelete }: WorkoutRo
                 type="button"
                 onClick={onLoad}
                 disabled={disabled}
-                className="min-w-0 flex-1 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--kinetic-theme-color)] focus-visible:ring-offset-1 focus-visible:ring-offset-[#151617] disabled:cursor-not-allowed disabled:opacity-50"
+                className="min-h-11 min-w-0 flex-1 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--kinetic-theme-color)] focus-visible:ring-offset-1 focus-visible:ring-offset-[#151617] disabled:cursor-not-allowed disabled:opacity-50 md:min-h-0"
                 title={`Load ${workout.name}`}
             >
                 <div className="truncate text-xs font-semibold text-[#e7e3df] group-hover:text-white">{workout.name}</div>
@@ -246,6 +246,7 @@ const KineticSidebar = ({
     onManageSubscription,
     onCheckPlusAccess,
     onNavigate,
+    onCloseMobileDrawer,
     setupMode,
     width = 248,
     onWidthChange,
@@ -262,6 +263,19 @@ const KineticSidebar = ({
     const appliedRailWidth = isCollapsed && !isMobileViewport
         ? 72
         : (isMobileViewport ? Math.min(railWidth, 320) : railWidth);
+    const closeMobileDrawer = onCloseMobileDrawer ?? toggleSidebar;
+
+    useEffect(() => {
+        if (!isDrawerOpenOnMobile) return;
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                closeMobileDrawer();
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [closeMobileDrawer, isDrawerOpenOnMobile]);
 
     useEffect(() => {
         if (account?.mode !== 'guest') {
@@ -351,16 +365,20 @@ const KineticSidebar = ({
         <aside
             data-testid="kinetic-sidebar"
             aria-label="MyoREP navigation"
+            inert={isMobileViewport && !isDrawerOpenOnMobile}
             className={cn(
                 'fixed inset-y-0 left-0 z-50 flex h-[100dvh] flex-col overflow-x-hidden border-r border-white/10 bg-[#151617] text-[#f2f0ed] shadow-[8px_0_28px_rgba(0,0,0,0.22)] transition-[width,transform] duration-200 ease-out md:shadow-none',
                 isDrawerOpenOnMobile ? 'translate-x-0' : isMobileViewport ? '-translate-x-full' : 'translate-x-0',
             )}
             style={{
-                width: isMobileViewport ? `min(${appliedRailWidth}px, calc(100vw - 1rem))` : `${appliedRailWidth}px`,
+                width: isMobileViewport ? `min(${appliedRailWidth}px, calc(100vw - max(1rem, var(--safe-left)) - var(--safe-right)))` : `${appliedRailWidth}px`,
                 minWidth: isMobileViewport ? 0 : `${appliedRailWidth}px`,
-                maxWidth: isMobileViewport ? 'calc(100vw - 1rem)' : `${MAX_RAIL_WIDTH}px`,
-                paddingTop: 'env(safe-area-inset-top, 0px)',
-                paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+                maxWidth: isMobileViewport ? 'calc(100vw - max(1rem, var(--safe-left)) - var(--safe-right))' : `${MAX_RAIL_WIDTH}px`,
+                height: isMobileViewport ? 'var(--viewport-dynamic)' : undefined,
+                paddingTop: 'var(--safe-top)',
+                paddingBottom: 'var(--safe-bottom)',
+                paddingLeft: isMobileViewport ? 'var(--safe-left)' : undefined,
+                paddingRight: isMobileViewport ? 'var(--safe-right)' : undefined,
             }}
         >
             {!isMobileViewport && !isCollapsed && onWidthChange && (
@@ -409,11 +427,11 @@ const KineticSidebar = ({
                 </div>
                 <button
                     type="button"
-                    onClick={toggleSidebar}
+                    onClick={isDrawerOpenOnMobile ? closeMobileDrawer : toggleSidebar}
                     aria-label={isCollapsed ? 'Open navigation' : 'Collapse navigation'}
                     aria-expanded={!isCollapsed}
                     className={cn(
-                        'grid h-8 w-8 shrink-0 place-items-center rounded-md text-[#918a85] transition-colors hover:bg-white/[0.08] hover:text-white',
+                        'grid h-11 w-11 shrink-0 place-items-center rounded-md text-[#918a85] transition-colors hover:bg-white/[0.08] hover:text-white md:h-8 md:w-8',
                         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--kinetic-theme-color)] focus-visible:ring-offset-2 focus-visible:ring-offset-[#151617]',
                         isCollapsed && !isMobileViewport && 'md:hidden',
                     )}
@@ -467,7 +485,7 @@ const KineticSidebar = ({
                                     type="button"
                                     onClick={onCreateSession}
                                     disabled={!isSetupMode || !canAccessSessionBuilder}
-                                    className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold text-[var(--kinetic-theme-color)] transition-colors hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--kinetic-theme-color)] disabled:cursor-not-allowed disabled:opacity-40"
+                                    className="inline-flex min-h-11 items-center gap-1 rounded-md px-3 py-1 text-[10px] font-semibold text-[var(--kinetic-theme-color)] transition-colors hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--kinetic-theme-color)] disabled:cursor-not-allowed disabled:opacity-40 md:min-h-0 md:px-2"
                                 >
                                     <Plus size={13} />
                                     New
@@ -491,7 +509,7 @@ const KineticSidebar = ({
                                 aria-selected={libraryTab === 'sessions'}
                                 onClick={() => setLibraryTab('sessions')}
                                 className={cn(
-                                    'flex-1 border-b-2 px-1 pb-2 text-[11px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--kinetic-theme-color)] focus-visible:ring-inset',
+                                    'min-h-11 flex-1 border-b-2 px-1 pb-2 text-[11px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--kinetic-theme-color)] focus-visible:ring-inset md:min-h-0',
                                     libraryTab === 'sessions' ? 'border-[var(--kinetic-theme-color)] text-[#f2f0ed]' : 'border-transparent text-[#77716d] hover:text-[#c0bab5]',
                                 )}
                             >
@@ -503,7 +521,7 @@ const KineticSidebar = ({
                                 aria-selected={libraryTab === 'workouts'}
                                 onClick={() => setLibraryTab('workouts')}
                                 className={cn(
-                                    'flex-1 border-b-2 px-1 pb-2 text-[11px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--kinetic-theme-color)] focus-visible:ring-inset',
+                                    'min-h-11 flex-1 border-b-2 px-1 pb-2 text-[11px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--kinetic-theme-color)] focus-visible:ring-inset md:min-h-0',
                                     libraryTab === 'workouts' ? 'border-[var(--kinetic-theme-color)] text-[#f2f0ed]' : 'border-transparent text-[#77716d] hover:text-[#c0bab5]',
                                 )}
                             >
@@ -537,7 +555,7 @@ const KineticSidebar = ({
                                         type="button"
                                         onClick={onSaveCurrent}
                                         disabled={!isSetupMode}
-                                        className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md bg-[var(--kinetic-theme-color)] px-2 text-[10px] font-bold text-[#161616] transition-colors hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--kinetic-theme-color)] focus-visible:ring-offset-1 focus-visible:ring-offset-[#151617] disabled:cursor-not-allowed disabled:opacity-40"
+                                        className="inline-flex h-11 items-center justify-center gap-1.5 rounded-md bg-[var(--kinetic-theme-color)] px-2 text-[10px] font-bold text-[#161616] transition-colors hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--kinetic-theme-color)] focus-visible:ring-offset-1 focus-visible:ring-offset-[#151617] disabled:cursor-not-allowed disabled:opacity-40 md:h-8"
                                     >
                                         <Save size={12} />
                                         Save
@@ -546,7 +564,7 @@ const KineticSidebar = ({
                                         type="button"
                                         onClick={onSaveAsCurrent}
                                         disabled={!isSetupMode}
-                                        className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-white/10 px-2 text-[10px] font-semibold text-[#b7b1ad] transition-colors hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--kinetic-theme-color)] focus-visible:ring-offset-1 focus-visible:ring-offset-[#151617] disabled:cursor-not-allowed disabled:opacity-40"
+                                        className="inline-flex h-11 items-center justify-center gap-1.5 rounded-md border border-white/10 px-2 text-[10px] font-semibold text-[#b7b1ad] transition-colors hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--kinetic-theme-color)] focus-visible:ring-offset-1 focus-visible:ring-offset-[#151617] disabled:cursor-not-allowed disabled:opacity-40 md:h-8"
                                     >
                                         <Copy size={12} />
                                         Save as
@@ -610,13 +628,13 @@ const KineticSidebar = ({
                                     onClick={onToggleAccountCardCollapsed}
                                     aria-expanded={!isAccountCardCollapsed}
                                     aria-label={isAccountCardCollapsed ? 'Show account details' : 'Hide account details'}
-                                    className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-[#918a85] transition-colors hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--kinetic-theme-color)]"
+                                    className="grid h-11 w-11 shrink-0 place-items-center rounded-md text-[#918a85] transition-colors hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--kinetic-theme-color)] md:h-7 md:w-7"
                                 >
                                     <ChevronDown size={14} className={cn('transition-transform', !isAccountCardCollapsed && 'rotate-180')} />
                                 </button>
                             </div>
                             {!isAccountCardCollapsed && (
-                                <div className="kinetic-account-card max-h-[min(38vh,360px)] min-w-0 overflow-x-hidden overflow-y-auto rounded-lg [&>div]:w-full [&>div]:min-w-0 [&>div]:rounded-lg [&>div]:border-white/10 [&>div]:bg-[#1c1e20] [&>div]:shadow-none [&>div>div]:!p-2 [&_button]:min-w-0 [&_button]:whitespace-normal [&_button]:break-words [&_button]:leading-tight [&_input]:min-w-0">
+                                <div className="kinetic-account-card min-w-0 overflow-x-hidden rounded-lg md:max-h-[min(38vh,360px)] md:overflow-y-auto [&>div]:w-full [&>div]:min-w-0 [&>div]:rounded-lg [&>div]:border-white/10 [&>div]:bg-[#1c1e20] [&>div]:shadow-none [&>div>div]:!p-2 [&_button]:min-h-11 [&_button]:min-w-0 [&_button]:whitespace-normal [&_button]:break-words [&_button]:leading-tight [&_input]:min-h-11 [&_input]:min-w-0 [&_select]:min-h-11 md:[&_button]:min-h-0 md:[&_input]:min-h-0 md:[&_select]:min-h-0">
                                     <AccountCard
                                         account={account}
                                         syncSnapshot={syncSnapshot}
@@ -655,7 +673,7 @@ const KineticSidebar = ({
                     aria-pressed={showSettings}
                     title={isCollapsed && !isMobileViewport ? 'Settings' : undefined}
                     className={cn(
-                        'flex h-10 w-full items-center gap-3 rounded-lg px-3 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--kinetic-theme-color)] focus-visible:ring-offset-2 focus-visible:ring-offset-[#151617]',
+                        'flex h-11 w-full items-center gap-3 rounded-lg px-3 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--kinetic-theme-color)] focus-visible:ring-offset-2 focus-visible:ring-offset-[#151617] md:h-10',
                         showSettings ? 'bg-white/[0.1] text-white' : 'text-[#9d9691] hover:bg-white/[0.07] hover:text-[#f2f0ed]',
                         isCollapsed && !isMobileViewport && 'md:justify-center md:px-0',
                     )}

@@ -1,9 +1,27 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import KineticSessionBuilder from '@/components/kinetic/KineticSessionBuilder';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
 import type { SavedSession, RestSessionNode, WorkoutSessionNode } from '@/types/savedSessions';
 
+const originalMatchMedia = window.matchMedia;
+
+const mockCompactViewport = (matches: boolean) => {
+    Object.defineProperty(window, 'matchMedia', {
+        configurable: true,
+        writable: true,
+        value: vi.fn().mockImplementation((media: string) => ({
+            matches: media === '(max-width: 1023px)' && matches,
+            media,
+            onchange: null,
+            addListener: vi.fn(),
+            removeListener: vi.fn(),
+            addEventListener: vi.fn(),
+            removeEventListener: vi.fn(),
+            dispatchEvent: vi.fn(),
+        })),
+    });
+};
 const workoutConfig = {
     sets: '3',
     reps: '15',
@@ -81,10 +99,16 @@ describe('KineticSessionBuilder', () => {
         vi.useFakeTimers();
         resetStore();
         HTMLElement.prototype.scrollIntoView = vi.fn();
+        mockCompactViewport(false);
     });
 
     afterEach(() => {
         vi.useRealTimers();
+        Object.defineProperty(window, 'matchMedia', {
+            configurable: true,
+            writable: true,
+            value: originalMatchMedia,
+        });
     });
 
     it('keeps the session name in the action row and adds valid default blocks at the timeline end', () => {
@@ -113,6 +137,44 @@ describe('KineticSessionBuilder', () => {
         draft = useWorkoutStore.getState().editingSessionDraft;
         expect(draft?.nodes).toHaveLength(2);
         expect(draft?.nodes[1]).toMatchObject({ type: 'rest', seconds: '60' });
+    });
+
+    it('opens a compact editor sheet and preserves selection when dismissed', () => {
+        mockCompactViewport(true);
+        render(<KineticSessionBuilder />);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Add workout' }));
+        const selectedNodeId = useWorkoutStore.getState().editingSessionNodeId;
+        const editor = screen.getByRole('dialog', { name: 'Block settings' });
+        expect(editor).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Close block settings' })).toHaveFocus();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Close block settings' }));
+        expect(screen.queryByRole('dialog', { name: 'Block settings' })).not.toBeInTheDocument();
+        expect(useWorkoutStore.getState().editingSessionNodeId).toBe(selectedNodeId);
+
+        const selectedCard = screen.getByRole('article', { name: 'Workout Workout 1' });
+        fireEvent.click(selectedCard);
+        expect(screen.getByRole('dialog', { name: 'Block settings' })).toBeInTheDocument();
+        fireEvent.keyDown(window, { key: 'Escape' });
+
+        expect(screen.queryByRole('dialog', { name: 'Block settings' })).not.toBeInTheDocument();
+        expect(selectedCard).toHaveFocus();
+        expect(useWorkoutStore.getState().editingSessionNodeId).toBe(selectedNodeId);
+    });
+
+    it('keeps compact session prompts touch-sized and dismissible by Escape', () => {
+        mockCompactViewport(true);
+        render(<KineticSessionBuilder />);
+
+        fireEvent.click(screen.getByRole('button', { name: 'New' }));
+
+        expect(screen.getByRole('dialog', { name: 'Create a session' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Close dialog' })).toHaveClass('h-11', 'w-11');
+        expect(within(screen.getByRole('dialog', { name: 'Create a session' })).getByRole('textbox', { name: 'Session name' })).toHaveClass('h-11');
+
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(screen.queryByRole('dialog', { name: 'Create a session' })).not.toBeInTheDocument();
     });
 
     it('shows an accessible progression reminder for workout blocks at or above the threshold', () => {

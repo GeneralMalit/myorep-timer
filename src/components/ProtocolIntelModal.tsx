@@ -57,14 +57,14 @@ const ProtocolIntelModal: React.FC<ProtocolIntelModalProps> = ({ isOpen, onClose
                 }
             }}
         >
-            <div className="mx-auto flex h-full w-full max-w-6xl items-center p-4 sm:p-6">
-                <Card className="relative max-h-[92vh] w-full overflow-hidden border-border/70 shadow-2xl">
+            <div className="mx-auto flex h-full w-full max-w-6xl items-center pl-[max(0.5rem,env(safe-area-inset-left,0px))] pr-[max(0.5rem,env(safe-area-inset-right,0px))] pt-[calc(var(--safe-top)+0.5rem)] pb-[calc(var(--safe-bottom)+0.5rem)] sm:pl-[max(1.5rem,env(safe-area-inset-left,0px))] sm:pr-[max(1.5rem,env(safe-area-inset-right,0px))] sm:pt-[max(1.5rem,env(safe-area-inset-top,0px))] sm:pb-[max(1.5rem,env(safe-area-inset-bottom,0px))]">
+                <Card className="relative max-h-[calc(var(--viewport-dynamic)-var(--safe-top)-var(--safe-bottom)-1rem)] w-full overflow-hidden border-border/70 shadow-2xl sm:max-h-[92vh]">
                     <div className="absolute right-4 top-4">
                         <Button
                             variant="ghost"
                             size="icon"
                             onClick={onClose}
-                            className="rounded-full"
+                            className="h-11 w-11 rounded-full sm:h-10 sm:w-10"
                             aria-label="Close protocol intel"
                             title="Close protocol intel"
                         >
@@ -72,7 +72,7 @@ const ProtocolIntelModal: React.FC<ProtocolIntelModalProps> = ({ isOpen, onClose
                         </Button>
                     </div>
 
-                    <CardContent className="flex max-h-[92vh] flex-col overflow-y-auto px-5 pb-6 pt-6 sm:px-8 sm:pb-8 sm:pt-8">
+                    <CardContent className="flex max-h-[calc(var(--viewport-dynamic)-var(--safe-top)-var(--safe-bottom)-1rem)] flex-col overflow-y-auto px-5 pb-6 pt-6 sm:max-h-[92vh] sm:px-8 sm:pb-8 sm:pt-8">
                         <div className="space-y-3 border-b border-border/60 pb-6 pr-12">
                             <div className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.28em] text-primary">
                                 <BrainCircuit size={16} />

@@ -1148,7 +1148,7 @@ const AccountCard = ({
                         role="dialog"
                         aria-modal="true"
                         aria-label={dialogState.title}
-                        className="fixed inset-0 z-[130] flex items-end justify-center bg-black/75 px-[max(1rem,var(--safe-left))] py-[max(1rem,var(--safe-bottom))] backdrop-blur-sm sm:items-center sm:px-4 sm:py-6"
+                        className="fixed inset-0 z-[130] flex items-end justify-center bg-black/75 px-[max(1rem,var(--safe-left))] pt-[max(1rem,var(--safe-top))] pb-[max(1rem,var(--safe-bottom))] backdrop-blur-sm sm:items-center sm:px-4 sm:py-6"
                         onPointerDown={(event) => {
                             if (event.target === event.currentTarget) {
                                 setDialogState(null);
@@ -1202,7 +1202,7 @@ const AccountCard = ({
                                     <Button
                                         type="button"
                                         variant="secondary"
-                                        className="rounded-2xl font-black"
+                                        className="min-h-11 rounded-2xl font-black"
                                         onClick={() => setDialogState(null)}
                                         disabled={isSubmitting}
                                     >
@@ -1211,7 +1211,7 @@ const AccountCard = ({
                                     <Button
                                         type="button"
                                         variant="destructive"
-                                        className="rounded-2xl font-black"
+                                        className="min-h-11 rounded-2xl font-black"
                                         onClick={() => void handleDisableSync()}
                                         disabled={isSubmitting}
                                     >

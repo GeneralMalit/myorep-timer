@@ -86,7 +86,7 @@ const KineticWorkoutSetup = ({ onStart, onSelectSession, canUseSessionBuilder }:
                     type="button"
                     variant="ghost"
                     onClick={onSelectSession}
-                    className="h-10 self-start rounded-lg border border-white/15 px-3 text-sm text-zinc-300 hover:bg-white/8 hover:text-white sm:self-auto"
+                    className="h-11 min-h-11 self-start rounded-lg border border-white/15 px-3 text-sm text-zinc-300 hover:bg-white/8 hover:text-white sm:h-10 sm:min-h-10 sm:self-auto"
                 >
                     {canUseSessionBuilder ? 'Build a session' : 'Sessions require Plus'}
                 </Button>
@@ -112,27 +112,16 @@ const KineticWorkoutSetup = ({ onStart, onSelectSession, canUseSessionBuilder }:
                 </div>
             </div>
 
-            <div className="mt-7 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="mt-4 grid grid-cols-1 gap-3 min-[360px]:grid-cols-2 sm:mt-7 lg:grid-cols-3">
                 {controls.map((control) => {
                     const Icon = control.icon;
                     return (
-                        <div key={control.key} className={cn('min-h-48 rounded-xl border border-white/10 bg-[#151719] p-5', control.disabled && 'opacity-45')}>
+                        <div key={control.key} className={cn('min-h-0 rounded-xl border border-white/10 bg-[#151719] p-3 sm:min-h-48 sm:p-5', control.disabled && 'opacity-45')}>
                             <Label htmlFor={`kinetic-${control.key}`} className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-zinc-400">
                                 <Icon size={14} style={{ color: control.tone }} />
                                 {control.label}{control.unit ? ` (${control.unit})` : ''}
                             </Label>
-                            <div className="relative mt-10 flex h-16 items-center">
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon"
-                                    aria-label={`Decrease ${control.label}`}
-                                    disabled={control.disabled}
-                                    onClick={() => adjustControl(control.key, control.value, -1)}
-                                    className="absolute left-0 top-1/2 h-7 w-7 -translate-y-1/2 rounded-full bg-white/10 text-zinc-300 hover:bg-white/15 hover:text-white"
-                                >
-                                    −
-                                </Button>
+                            <div className="mt-3 grid grid-cols-1 gap-2 sm:relative sm:mt-10 sm:block sm:h-16">
                                 <Input
                                     id={`kinetic-${control.key}`}
                                     type="number"
@@ -143,19 +132,32 @@ const KineticWorkoutSetup = ({ onStart, onSelectSession, canUseSessionBuilder }:
                                         const value = control.key === 'sets' ? normalizeSetsInput(event.target.value) : event.target.value;
                                         setWorkoutConfig({ [control.key]: value });
                                     }}
-                                    className="absolute inset-x-10 h-16 min-w-0 border-0 bg-transparent p-0 text-center text-5xl font-black tabular-nums tracking-[-0.06em] text-white shadow-none outline-none focus-visible:ring-0"
+                                    className="h-11 w-full min-w-0 border-0 bg-transparent p-0 text-center text-2xl font-black tabular-nums tracking-[-0.06em] text-white shadow-none outline-none focus-visible:ring-0 sm:absolute sm:inset-x-10 sm:h-16 sm:w-auto sm:text-5xl"
                                 />
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon"
-                                    aria-label={`Increase ${control.label}`}
-                                    disabled={control.disabled}
-                                    onClick={() => adjustControl(control.key, control.value, 1)}
-                                    className="absolute right-0 top-1/2 h-7 w-7 -translate-y-1/2 rounded-full bg-white/10 text-zinc-300 hover:bg-white/15 hover:text-white"
-                                >
-                                    +
-                                </Button>
+                                <div className="flex items-center justify-center gap-4 sm:contents">
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        aria-label={`Decrease ${control.label}`}
+                                        disabled={control.disabled}
+                                        onClick={() => adjustControl(control.key, control.value, -1)}
+                                        className="h-11 w-11 shrink-0 rounded-full bg-white/10 text-zinc-300 hover:bg-white/15 hover:text-white sm:absolute sm:left-0 sm:top-1/2 sm:h-7 sm:w-7 sm:-translate-y-1/2"
+                                    >
+                                        −
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        aria-label={`Increase ${control.label}`}
+                                        disabled={control.disabled}
+                                        onClick={() => adjustControl(control.key, control.value, 1)}
+                                        className="h-11 w-11 shrink-0 rounded-full bg-white/10 text-zinc-300 hover:bg-white/15 hover:text-white sm:absolute sm:right-0 sm:top-1/2 sm:h-7 sm:w-7 sm:-translate-y-1/2"
+                                    >
+                                        +
+                                    </Button>
+                                </div>
                             </div>
                         </div>
                     );

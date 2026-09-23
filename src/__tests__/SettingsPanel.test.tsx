@@ -61,6 +61,36 @@ describe('SettingsPanel', () => {
         expect(onClose).toHaveBeenCalledTimes(1);
     });
 
+    it('traps mobile settings focus and restores it when the dialog closes', () => {
+        setMobileViewport(true);
+        useWorkoutStore.setState({ designVariant: 'kinetic' });
+        const opener = document.createElement('button');
+        document.body.appendChild(opener);
+        opener.focus();
+        const onClose = vi.fn();
+        const { rerender } = render(<SettingsPanel isOpen onClose={onClose} />);
+
+        const dialog = screen.getByRole('dialog', { name: /system configuration/i });
+        const closeButton = screen.getByRole('button', { name: /close settings/i });
+        expect(dialog).toHaveAttribute('aria-modal', 'true');
+        expect(closeButton).toHaveClass('h-11', 'w-11');
+        expect(closeButton).toHaveFocus();
+
+        fireEvent.keyDown(window, { key: 'Tab', shiftKey: true });
+        const focusable = dialog.querySelectorAll<HTMLElement>(
+            'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        );
+        expect(document.activeElement).toBe(focusable[focusable.length - 1]);
+        fireEvent.keyDown(window, { key: 'Tab' });
+        expect(closeButton).toHaveFocus();
+
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(onClose).toHaveBeenCalledTimes(1);
+        rerender(<SettingsPanel isOpen={false} onClose={onClose} />);
+        expect(opener).toHaveFocus();
+        opener.remove();
+    });
+
     it('allows selecting Classic or Kinetic Console and updates the persisted store setting', async () => {
         render(<SettingsPanel isOpen onClose={vi.fn()} />);
 

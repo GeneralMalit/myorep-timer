@@ -397,13 +397,81 @@ describe('App', () => {
 
         fireEvent.click(screen.getByRole('button', { name: /^session builder$/i }));
         expect(await screen.findByTestId('kinetic-session-builder')).toBeInTheDocument();
-        expect(screen.getByTestId('kinetic-session-builder-viewport')).toHaveClass(
-            'overflow-hidden',
-            'md:h-[100dvh]',
-        );
 
         fireEvent.click(screen.getByRole('button', { name: /^workout setup$/i }));
         expect(screen.getByTestId('kinetic-workout-setup')).toBeInTheDocument();
+    });
+
+    it('closes Kinetic mobile navigation after navigation and workout load', async () => {
+        grantPlusAccess();
+        setMobileViewport(true);
+        useWorkoutStore.setState({
+            designVariant: 'kinetic',
+            savedWorkouts: [baseWorkout],
+            savedSessions: [
+                {
+                    id: 'session-mobile',
+                    name: 'Recovery Day',
+                    nodes: [{
+                        id: 'rest-mobile',
+                        type: 'rest',
+                        name: 'Cooldown',
+                        seconds: '30',
+                        createdAt: '2026-03-01T00:00:00.000Z',
+                        updatedAt: '2026-03-01T00:00:00.000Z',
+                    }],
+                    timesUsed: 0,
+                    lastUsedAt: null,
+                    createdAt: '2026-03-01T00:00:00.000Z',
+                    updatedAt: '2026-03-01T00:00:00.000Z',
+                },
+            ],
+            sets: '3',
+            reps: '12',
+            seconds: '3',
+            rest: '20',
+            myoReps: '4',
+            myoWorkSecs: '2',
+        });
+
+        render(<App />);
+
+        const sidebar = screen.getByTestId('kinetic-sidebar');
+        const trigger = within(screen.getByTestId('app-main-shell')).getByRole('button', { name: 'Open Navigation' });
+        expect(sidebar).toHaveAttribute('inert');
+
+        fireEvent.click(trigger);
+        expect(sidebar).not.toHaveAttribute('inert');
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(sidebar).toHaveAttribute('inert');
+        expect(trigger).toHaveFocus();
+        fireEvent.click(trigger);
+        fireEvent.click(within(sidebar).getByRole('button', { name: 'Session builder' }));
+        expect(await screen.findByTestId('kinetic-session-builder')).toBeInTheDocument();
+        expect(sidebar).toHaveAttribute('inert');
+        expect(trigger).toHaveFocus();
+
+        fireEvent.click(trigger);
+        fireEvent.click(within(sidebar).getByRole('button', { name: 'Workout setup' }));
+        expect(sidebar).toHaveAttribute('inert');
+        expect(trigger).toHaveFocus();
+
+        fireEvent.click(trigger);
+        fireEvent.click(within(sidebar).getByRole('tab', { name: 'Workouts' }));
+        fireEvent.click(within(sidebar).getByRole('button', { name: 'Load Push Day' }));
+
+        expect(useWorkoutStore.getState().selectedSavedWorkoutId).toBe(baseWorkout.id);
+        expect(sidebar).toHaveAttribute('inert');
+        expect(trigger).toHaveFocus();
+        fireEvent.click(trigger);
+        fireEvent.click(within(sidebar).getByRole('tab', { name: 'Sessions' }));
+        fireEvent.click(within(sidebar).getByRole('button', { name: 'Load Recovery Day' }));
+
+        expect(useWorkoutStore.getState().selectedSavedSessionId).toBe('session-mobile');
+        expect(useWorkoutStore.getState().editingSessionId).toBe('session-mobile');
+        expect(sidebar).toHaveAttribute('inert');
+        expect(screen.getByRole('dialog', { name: 'Block settings' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Close block settings' })).toHaveFocus();
     });
 
     it('keeps the timer controller operational in the Kinetic Console presentation', () => {
@@ -439,6 +507,80 @@ describe('App', () => {
         }));
 
         fireEvent.click(screen.getByRole('button', { name: /pause/i }));
+        expect(useWorkoutStore.getState().isTimerRunning).toBe(false);
+    });
+
+    it('prioritizes mobile Kinetic timer context with the compact dial', () => {
+        setMobileViewport(true);
+        useWorkoutStore.setState({
+            designVariant: 'kinetic',
+            appPhase: 'timer',
+            timerStatus: 'Main Set',
+            isTimerRunning: true,
+            currentSet: 2,
+            currentRep: 3,
+            isMainRep: true,
+            isWorking: true,
+            sets: '3',
+            reps: '12',
+            seconds: '3',
+            rest: '20',
+            myoReps: '4',
+            myoWorkSecs: '2',
+            timeLeft: 2.5,
+            setTotalDuration: 36,
+            setElapsedTime: 3.5,
+            activeSessionId: 'session-mobile-runner',
+            activeSessionNodeIndex: 0,
+            sessionStatus: 'running',
+            isRunningSession: true,
+            sessionNodeRuntimeType: 'workout',
+            savedSessions: [{
+                id: 'session-mobile-runner',
+                name: 'Upper Body Flow',
+                nodes: [
+                    {
+                        id: 'node-mobile-workout',
+                        type: 'workout',
+                        name: 'Rows',
+                        config: {
+                            sets: '4',
+                            reps: '12',
+                            seconds: '3',
+                            rest: '20',
+                            myoReps: '4',
+                            myoWorkSecs: '2',
+                        },
+                        sourceWorkoutId: null,
+                        createdAt: '2026-03-01T00:00:00.000Z',
+                        updatedAt: '2026-03-01T00:00:00.000Z',
+                    },
+                    {
+                        id: 'node-mobile-rest',
+                        type: 'rest',
+                        name: 'Cooldown',
+                        seconds: '30',
+                        createdAt: '2026-03-01T00:00:00.000Z',
+                        updatedAt: '2026-03-01T00:00:00.000Z',
+                    },
+                ],
+                timesUsed: 0,
+                lastUsedAt: null,
+                createdAt: '2026-03-01T00:00:00.000Z',
+                updatedAt: '2026-03-01T00:00:00.000Z',
+            }],
+        });
+
+        render(<App />);
+
+        const timerSurface = screen.getByTestId('kinetic-timer-surface');
+        expect(within(timerSurface).getByText('Upper Body Flow')).toBeInTheDocument();
+        expect(within(timerSurface).getByText(/Block 1 \/ 2/)).toBeInTheDocument();
+        expect(within(timerSurface).getByText(/Set 2 \/ 4/)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'End session' })).toBeInTheDocument();
+        expect(concentricTimerMock).toHaveBeenCalledWith(expect.objectContaining({ compactMobile: true }));
+        fireEvent.click(screen.getByRole('button', { name: 'End session' }));
+        expect(useWorkoutStore.getState().appPhase).toBe('setup');
         expect(useWorkoutStore.getState().isTimerRunning).toBe(false);
     });
 
@@ -526,6 +668,8 @@ describe('App', () => {
         expect(within(timerSurface).getByText('Upper Body Flow')).toBeInTheDocument();
         expect(within(timerSurface).getByText('Block 2 / 3')).toBeInTheDocument();
         expect(within(timerSurface).getByText('Set 2 / 4')).toBeInTheDocument();
+        expect(within(timerSurface).getByRole('list', { name: 'Session progress: Main Set' })).toBeInTheDocument();
+        expect(within(timerSurface).getByText('Cooldown')).toBeInTheDocument();
         expect(within(timerSurface).getByText('Main set')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /pause/i })).toBeInTheDocument();
 

@@ -16,6 +16,7 @@ interface ConcentricTimerProps {
     isFinished: boolean;
     isPreparing: boolean;
     forceInfoVisible?: boolean;
+    compactMobile?: boolean;
     fullScreenForegroundColor?: string;
 }
 
@@ -30,6 +31,7 @@ const ConcentricTimer: React.FC<ConcentricTimerProps> = ({
     isFinished,
     isPreparing,
     forceInfoVisible = false,
+    compactMobile = false,
     fullScreenForegroundColor,
 }) => {
     const settings = useWorkoutStore((state: any) => state.settings);
@@ -143,6 +145,7 @@ const ConcentricTimer: React.FC<ConcentricTimerProps> = ({
         <div
             className={cn(
                 layout.shell,
+                compactMobile && isMobileViewport && 'max-w-[18rem]',
                 upDownMode && layout.shellWithUpDown,
             )}
         >

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import {
     Activity,
     ArrowDown,
@@ -21,7 +21,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
-import type { SavedWorkoutConfig } from '@/types/savedWorkouts';
+import type { SavedWorkout, SavedWorkoutConfig } from '@/types/savedWorkouts';
 import type { SessionNode, WorkoutSessionNode } from '@/types/savedSessions';
 import { estimateSessionDurationSeconds, formatEstimatedSessionDuration } from '@/utils/savedSessions';
 import { audioEngine } from '@/utils/audioEngine';
@@ -56,6 +56,7 @@ const surfaceStyle = {
 const inputClassName = 'h-10 rounded-[9px] border-[#384039] bg-[#111412] text-[#F3F0E6] placeholder:text-[#6F776E] focus-visible:border-[var(--kinetic-theme-color)] focus-visible:ring-[var(--kinetic-theme-color)]/35';
 const quietButtonClassName = 'rounded-[9px] border border-[#384039] bg-[#20251F] text-[#F3F0E6] hover:border-[#596458] hover:bg-[#293029] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--kinetic-theme-color)]/70';
 const iconButtonClassName = 'h-9 w-9 rounded-[8px] border border-[#384039] bg-[#20251F] p-0 text-[#A7B0A4] hover:border-[var(--kinetic-theme-color)] hover:bg-[#2A3029] hover:text-[#F3F0E6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--kinetic-theme-color)]/70';
+const COMPACT_VIEWPORT_QUERY = '(max-width: 1023px)';
 
 type ActionResult = { ok: boolean; error?: string; id?: string };
 
@@ -265,12 +266,14 @@ const Field = ({
     onChange,
     disabled,
     hint,
+    isMobileSheet,
 }: {
     label: string;
     value: string;
     onChange: (value: string) => void;
     disabled?: boolean;
     hint?: string;
+    isMobileSheet?: boolean;
 }) => (
     <label className={cn('block space-y-1.5', disabled && 'opacity-45')}>
         <span className="flex items-center justify-between gap-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#8E988C]">
@@ -284,7 +287,7 @@ const Field = ({
             value={value}
             disabled={disabled}
             onChange={(event) => onChange(event.target.value)}
-            className={inputClassName}
+            className={cn(inputClassName, isMobileSheet && 'h-11')}
         />
     </label>
 );
@@ -297,14 +300,16 @@ const NodeInspector = ({
     onUpdateRest,
     onImportWorkout,
     onDelete,
+    isMobileSheet = false,
 }: {
     node: SessionNode | null;
-    savedWorkouts: ReturnType<typeof useWorkoutStore.getState>['savedWorkouts'];
+    savedWorkouts: SavedWorkout[];
     onClose: () => void;
     onUpdateWorkout: (node: WorkoutSessionNode, config: SavedWorkoutConfig, name: string, notes: string) => void;
     onUpdateRest: (node: Extract<SessionNode, { type: 'rest' }>, seconds: string, name: string) => void;
     onImportWorkout: (nodeId: string, workoutId: string) => void;
     onDelete: (nodeId: string) => void;
+    isMobileSheet?: boolean;
 }) => {
     const [name, setName] = useState(node?.name ?? '');
     const [notes, setNotes] = useState(node?.type === 'workout' ? node.notes ?? '' : '');
@@ -312,6 +317,8 @@ const NodeInspector = ({
     const [config, setConfig] = useState<SavedWorkoutConfig>(node?.type === 'workout' ? node.config : {
         sets: '', reps: '', seconds: '', rest: '', myoReps: '', myoWorkSecs: '',
     });
+    const sheetRef = useRef<HTMLElement | null>(null);
+    const closeButtonRef = useRef<HTMLButtonElement | null>(null);
 
     useEffect(() => {
         setName(node?.name ?? '');
@@ -321,6 +328,43 @@ const NodeInspector = ({
             sets: '', reps: '', seconds: '', rest: '', myoReps: '', myoWorkSecs: '',
         });
     }, [node]);
+
+    useEffect(() => {
+        if (!isMobileSheet) return;
+        closeButtonRef.current?.focus();
+
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                onClose();
+                return;
+            }
+            if (event.key !== 'Tab') return;
+
+            const sheet = sheetRef.current;
+            const focusable = sheet?.querySelectorAll<HTMLElement>(
+                'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+            );
+            if (!sheet || !focusable?.length) {
+                event.preventDefault();
+                sheet?.focus();
+                return;
+            }
+
+            const first = focusable[0];
+            const last = focusable[focusable.length - 1];
+            if (event.shiftKey && (document.activeElement === first || !sheet.contains(document.activeElement))) {
+                event.preventDefault();
+                last.focus();
+            } else if (!event.shiftKey && (document.activeElement === last || !sheet.contains(document.activeElement))) {
+                event.preventDefault();
+                first.focus();
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [isMobileSheet, node?.id, onClose]);
 
     if (!node) {
         return (
@@ -345,21 +389,48 @@ const NodeInspector = ({
     };
 
     return (
-        <aside className="min-h-[520px] border-l border-[#2C322D] lg:min-h-0" style={{ backgroundColor: KINETIC.surface }}>
+        <aside
+            ref={sheetRef}
+            role={isMobileSheet ? 'dialog' : undefined}
+            aria-modal={isMobileSheet ? true : undefined}
+            aria-labelledby="kinetic-block-settings-title"
+            tabIndex={isMobileSheet ? -1 : undefined}
+            className={cn(
+                isMobileSheet
+                    ? 'fixed z-[100] flex max-h-[min(78dvh,720px)] min-h-0 flex-col overflow-hidden rounded-[18px] border border-[#384039] shadow-2xl'
+                    : 'min-h-[520px] border-l border-[#2C322D] lg:min-h-0',
+            )}
+            style={{
+                backgroundColor: KINETIC.surface,
+                ...(isMobileSheet ? {
+                    left: 'max(0.5rem, env(safe-area-inset-left, 0px))',
+                    right: 'max(0.5rem, env(safe-area-inset-right, 0px))',
+                    bottom: 'calc(0.5rem + env(safe-area-inset-bottom, 0px))',
+                } : {}),
+            }}
+        >
             <div className="flex items-start justify-between gap-4 border-b border-[#2C322D] px-5 py-4">
                 <div>
                     <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: nodeAccent(node) }}>
                         {isWorkout ? <Dumbbell size={13} /> : <Timer size={13} />}
                         {isWorkout ? 'Workout block' : 'Rest block'}
                     </div>
-                    <div className="mt-1 text-sm font-semibold" style={{ color: KINETIC.cream }}>Block settings</div>
+                    <div id="kinetic-block-settings-title" className="mt-1 text-sm font-semibold" style={{ color: KINETIC.cream }}>Block settings</div>
                 </div>
-                <Button type="button" variant="ghost" size="icon" className={iconButtonClassName} onClick={onClose} aria-label="Close block settings">
+                <Button
+                    ref={closeButtonRef}
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className={cn(iconButtonClassName, isMobileSheet && 'h-11 w-11 shrink-0')}
+                    onClick={onClose}
+                    aria-label="Close block settings"
+                >
                     <X size={16} />
                 </Button>
             </div>
 
-            <div className="space-y-5 overflow-y-auto p-5">
+            <div className={cn('space-y-5 overflow-y-auto p-5', isMobileSheet && 'min-h-0 flex-1 overscroll-contain')}>
                 <label className="block space-y-1.5">
                     <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#8E988C]">Block name</span>
                     <Input
@@ -370,19 +441,19 @@ const NodeInspector = ({
                             if (node.type === 'workout') onUpdateWorkout(node, config, nextName, notes);
                             else onUpdateRest(node, restSeconds, nextName);
                         }}
-                        className={inputClassName}
+                        className={cn(inputClassName, isMobileSheet && 'h-11')}
                     />
                 </label>
 
                 {isWorkout ? (
                     <>
                         <div className="grid grid-cols-2 gap-3">
-                            <Field label="Sets" value={config.sets} onChange={(value) => updateConfig('sets', value)} hint="total" />
-                            <Field label="Activation reps" value={config.reps} onChange={(value) => updateConfig('reps', value)} />
-                            <Field label="Rep seconds" value={config.seconds} onChange={(value) => updateConfig('seconds', value)} />
-                            <Field label="Rest seconds" value={config.rest} onChange={(value) => updateConfig('rest', value)} disabled={sets === 1} />
-                            <Field label="Myo reps" value={config.myoReps} onChange={(value) => updateConfig('myoReps', value)} disabled={sets === 1} />
-                            <Field label="Myo seconds" value={config.myoWorkSecs} onChange={(value) => updateConfig('myoWorkSecs', value)} disabled={sets === 1} />
+                            <Field label="Sets" value={config.sets} onChange={(value) => updateConfig('sets', value)} hint="total" isMobileSheet={isMobileSheet} />
+                            <Field label="Activation reps" value={config.reps} onChange={(value) => updateConfig('reps', value)} isMobileSheet={isMobileSheet} />
+                            <Field label="Rep seconds" value={config.seconds} onChange={(value) => updateConfig('seconds', value)} isMobileSheet={isMobileSheet} />
+                            <Field label="Rest seconds" value={config.rest} onChange={(value) => updateConfig('rest', value)} disabled={sets === 1} isMobileSheet={isMobileSheet} />
+                            <Field label="Myo reps" value={config.myoReps} onChange={(value) => updateConfig('myoReps', value)} disabled={sets === 1} isMobileSheet={isMobileSheet} />
+                            <Field label="Myo seconds" value={config.myoWorkSecs} onChange={(value) => updateConfig('myoWorkSecs', value)} disabled={sets === 1} isMobileSheet={isMobileSheet} />
                         </div>
 
                         <label className="block space-y-1.5">
@@ -395,7 +466,7 @@ const NodeInspector = ({
                                     setNotes(nextNotes);
                                     onUpdateWorkout(node, config, name, nextNotes);
                                 }}
-                                className={inputClassName}
+                                className={cn(inputClassName, isMobileSheet && 'h-11')}
                             />
                         </label>
 
@@ -407,7 +478,7 @@ const NodeInspector = ({
                                 onChange={(event) => {
                                     if (event.target.value !== '__none__') onImportWorkout(node.id, event.target.value);
                                 }}
-                                className="h-10 w-full rounded-[9px] border border-[#384039] bg-[#111412] px-3 text-sm text-[#F3F0E6] outline-none focus:border-[var(--kinetic-theme-color)]"
+                                className={cn('h-10 w-full rounded-[9px] border border-[#384039] bg-[#111412] px-3 text-sm text-[#F3F0E6] outline-none focus:border-[var(--kinetic-theme-color)]', isMobileSheet && 'h-11')}
                             >
                                 <option value="__none__">Inline block (not linked)</option>
                                 {savedWorkouts.map((workout) => <option key={workout.id} value={workout.id}>{workout.name}</option>)}
@@ -418,24 +489,42 @@ const NodeInspector = ({
                     <Field label="Recovery seconds" value={restSeconds} onChange={(value) => {
                         setRestSeconds(value);
                         onUpdateRest(node, value, name);
-                    }} />
+                    }} isMobileSheet={isMobileSheet} />
                 )}
 
-                <Button type="button" variant="ghost" className="h-10 w-full justify-start gap-2 rounded-[9px] border border-[#573A36] text-[#F28B82] hover:bg-[#30201E] hover:text-[#FFB0A8]" onClick={() => onDelete(node.id)}>
+                <Button
+                    type="button"
+                    variant="ghost"
+                    className={cn('h-10 w-full justify-start gap-2 rounded-[9px] border border-[#573A36] text-[#F28B82] hover:bg-[#30201E] hover:text-[#FFB0A8]', isMobileSheet && 'h-11')}
+                    onClick={() => onDelete(node.id)}
+                >
                     <Trash2 size={15} /> Remove this block
                 </Button>
             </div>
         </aside>
     );
-};
 
-const BuilderDialog = ({ dialog, value, onChangeValue, onClose, onConfirm }: {
+};
+const BuilderDialog = ({ dialog, value, onChangeValue, onClose, onConfirm, isCompactViewport }: {
     dialog: BuilderDialog;
     value: string;
     onChangeValue: (value: string) => void;
     onClose: () => void;
     onConfirm: () => void;
+    isCompactViewport: boolean;
 }) => {
+    useEffect(() => {
+        if (!dialog) return;
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                onClose();
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [dialog, onClose]);
+
     if (!dialog) return null;
     const isPrompt = dialog.kind === 'prompt';
     const dialogLabelColor = dialog.kind === 'prompt'
@@ -445,10 +534,25 @@ const BuilderDialog = ({ dialog, value, onChangeValue, onClose, onConfirm }: {
             : KINETIC.lime;
 
     return (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-[#080A09]/80 p-4" role="dialog" aria-modal="true" aria-label={dialog.title} onPointerDown={(event) => {
-            if (event.target === event.currentTarget) onClose();
-        }}>
-            <div className="w-full max-w-md border border-[#485346] bg-[#171A18] p-5 shadow-[0_12px_50px_rgba(0,0,0,0.5)]" style={{ borderRadius: 10 }} onPointerDown={(event) => event.stopPropagation()}>
+        <div
+            className={cn(
+                'fixed inset-0 z-[120] flex bg-[#080A09]/80',
+                isCompactViewport
+                    ? 'items-end px-[max(0.5rem,env(safe-area-inset-left,0px))] pb-[calc(env(safe-area-inset-bottom,0px)+0.5rem)] pt-[calc(env(safe-area-inset-top,0px)+0.5rem)]'
+                    : 'items-center p-4',
+            )}
+            role="dialog"
+            aria-modal="true"
+            aria-label={dialog.title}
+            onPointerDown={(event) => {
+                if (event.target === event.currentTarget) onClose();
+            }}
+        >
+            <div
+                className="max-h-[calc(var(--viewport-dynamic)-var(--safe-top)-var(--safe-bottom)-1rem)] w-full max-w-md overflow-y-auto overscroll-contain border border-[#485346] bg-[#171A18] p-5 shadow-[0_12px_50px_rgba(0,0,0,0.5)]"
+                style={{ borderRadius: 10 }}
+                onPointerDown={(event) => event.stopPropagation()}
+            >
                 <div className="flex items-start justify-between gap-4">
                     <div>
                         <div className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: dialogLabelColor }}>
@@ -457,19 +561,32 @@ const BuilderDialog = ({ dialog, value, onChangeValue, onClose, onConfirm }: {
                         <div className="mt-2 text-base font-semibold" style={{ color: KINETIC.cream }}>{dialog.title}</div>
                         <p className="mt-2 text-sm leading-relaxed" style={{ color: KINETIC.muted }}>{dialog.description}</p>
                     </div>
-                    <Button type="button" variant="ghost" size="icon" className={iconButtonClassName} onClick={onClose} aria-label="Close dialog"><X size={16} /></Button>
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className={cn(iconButtonClassName, isCompactViewport && 'h-11 w-11 shrink-0')}
+                        onClick={onClose}
+                        aria-label="Close dialog"
+                    >
+                        <X size={16} />
+                    </Button>
                 </div>
                 {isPrompt && (
                     <label className="mt-5 block space-y-1.5">
                         <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#8E988C]">Session name</span>
-                        <Input autoFocus value={value} onChange={(event) => onChangeValue(event.target.value)} className={inputClassName} />
+                        <Input autoFocus value={value} onChange={(event) => onChangeValue(event.target.value)} className={cn(inputClassName, isCompactViewport && 'h-11')} />
                     </label>
                 )}
                 <div className="mt-6 flex justify-end gap-2">
-                    {isPrompt && <Button type="button" variant="ghost" className={quietButtonClassName} onClick={onClose}>Cancel</Button>}
+                    {isPrompt && (
+                        <Button type="button" variant="ghost" className={cn(quietButtonClassName, isCompactViewport && 'h-11')} onClick={onClose}>
+                            Cancel
+                        </Button>
+                    )}
                     <Button
                         type="button"
-                        className={cn('rounded-[9px] border-0', isPrompt ? 'text-[#151411] hover:brightness-110' : 'bg-[#A8FF5A] text-[#151411] hover:bg-[#B9FF7A]')}
+                        className={cn('rounded-[9px] border-0', isCompactViewport && 'h-11', isPrompt ? 'text-[#151411] hover:brightness-110' : 'bg-[#A8FF5A] text-[#151411] hover:bg-[#B9FF7A]')}
                         style={isPrompt ? { backgroundColor: KINETIC.theme, color: KINETIC.ink } : undefined}
                         onClick={onConfirm}
                     >
@@ -526,6 +643,12 @@ const KineticSessionBuilder = ({ className }: KineticSessionBuilderProps) => {
     const moveSessionNodeToIndex = useWorkoutStore((state) => state.moveSessionNodeToIndex);
     const replaceWorkoutNodeWithSavedWorkout = useWorkoutStore((state) => state.replaceWorkoutNodeWithSavedWorkout);
     const setEditingSessionNodeId = useWorkoutStore((state) => state.setEditingSessionNodeId);
+    const [isCompactViewport, setIsCompactViewport] = useState(() => (
+        typeof window !== 'undefined'
+        && typeof window.matchMedia === 'function'
+        && window.matchMedia(COMPACT_VIEWPORT_QUERY).matches
+    ));
+    const [isMobileInspectorOpen, setIsMobileInspectorOpen] = useState(false);
 
     const [draftName, setDraftName] = useState(editingSessionDraft?.name ?? '');
     const [dialog, setDialog] = useState<BuilderDialog>(null);
@@ -537,6 +660,12 @@ const KineticSessionBuilder = ({ className }: KineticSessionBuilderProps) => {
     const statusSequenceRef = useRef(0);
     const nodeCardRefs = useRef(new Map<string, HTMLElement>());
     const pendingScrollNodeIdRef = useRef<string | null>(null);
+    const autoOpenedInspectorSessionIdRef = useRef<string | null>(null);
+
+    const closeMobileInspector = useCallback(() => {
+        setIsMobileInspectorOpen(false);
+        if (editingSessionNodeId) nodeCardRefs.current.get(editingSessionNodeId)?.focus();
+    }, [editingSessionNodeId]);
 
     const nodes = editingSessionDraft?.nodes ?? [];
     const selectedNode = useMemo(() => nodes.find((node) => node.id === editingSessionNodeId) ?? null, [editingSessionNodeId, nodes]);
@@ -551,6 +680,20 @@ const KineticSessionBuilder = ({ className }: KineticSessionBuilderProps) => {
     }, [editingSessionDraft, nodes, savedSessions]);
 
     useEffect(() => {
+        if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+        const mediaQuery = window.matchMedia(COMPACT_VIEWPORT_QUERY);
+        const handleViewportChange = (event: MediaQueryListEvent) => setIsCompactViewport(event.matches);
+        setIsCompactViewport(mediaQuery.matches);
+
+        if (typeof mediaQuery.addEventListener === 'function') {
+            mediaQuery.addEventListener('change', handleViewportChange);
+            return () => mediaQuery.removeEventListener('change', handleViewportChange);
+        }
+
+        mediaQuery.addListener(handleViewportChange);
+        return () => mediaQuery.removeListener(handleViewportChange);
+    }, []);
+    useEffect(() => {
         setDraftName(editingSessionDraft?.name ?? '');
         if (editingSessionDraft?.id) setSessionPicker(editingSessionDraft.id);
     }, [editingSessionDraft?.id, editingSessionDraft?.name]);
@@ -564,6 +707,18 @@ const KineticSessionBuilder = ({ className }: KineticSessionBuilderProps) => {
         if (editingSessionNodeId && nodes.some((node) => node.id === editingSessionNodeId)) return;
         setEditingSessionNodeId(nodes[0]?.id ?? null);
     }, [editingSessionDraft, editingSessionNodeId, nodes, setEditingSessionNodeId]);
+
+    useEffect(() => {
+        if (!isCompactViewport || !editingSessionDraft || nodes.length === 0) return;
+        if (autoOpenedInspectorSessionIdRef.current === editingSessionDraft.id) return;
+
+        autoOpenedInspectorSessionIdRef.current = editingSessionDraft.id;
+        const selectedNodeId = editingSessionNodeId && nodes.some((node) => node.id === editingSessionNodeId)
+            ? editingSessionNodeId
+            : nodes[0].id;
+        if (selectedNodeId !== editingSessionNodeId) setEditingSessionNodeId(selectedNodeId);
+        setIsMobileInspectorOpen(true);
+    }, [editingSessionDraft, editingSessionNodeId, isCompactViewport, nodes, setEditingSessionNodeId]);
 
     useEffect(() => {
         const pendingNodeId = pendingScrollNodeIdRef.current;
@@ -648,6 +803,7 @@ const KineticSessionBuilder = ({ className }: KineticSessionBuilderProps) => {
         if (result.ok && result.id) {
             pendingScrollNodeIdRef.current = result.id;
             setEditingSessionNodeId(result.id);
+            if (isCompactViewport) setIsMobileInspectorOpen(true);
             showSuccess('Block added');
         } else {
             showResult(result);
@@ -678,6 +834,7 @@ const KineticSessionBuilder = ({ className }: KineticSessionBuilderProps) => {
         const nextNode = nodes[index + 1] ?? nodes[index - 1] ?? null;
         removeSessionNode(nodeId);
         setEditingSessionNodeId(nextNode?.id ?? null);
+        if (isCompactViewport) setIsMobileInspectorOpen(Boolean(nextNode));
         showSuccess('Block removed');
     };
 
@@ -685,6 +842,13 @@ const KineticSessionBuilder = ({ className }: KineticSessionBuilderProps) => {
         setSessionPicker(sessionId);
         if (!sessionId) return;
         const result = loadSessionForEditing(sessionId);
+        if (result.ok && isCompactViewport) {
+            const loadedDraft = useWorkoutStore.getState().editingSessionDraft;
+            const firstNodeId = loadedDraft?.nodes[0]?.id ?? null;
+            setEditingSessionNodeId(firstNodeId);
+            autoOpenedInspectorSessionIdRef.current = loadedDraft?.id ?? null;
+            setIsMobileInspectorOpen(Boolean(firstNodeId));
+        }
         showResult(result, 'Session loaded');
     };
 
@@ -759,7 +923,10 @@ const KineticSessionBuilder = ({ className }: KineticSessionBuilderProps) => {
                                             index={index}
                                             total={nodes.length}
                                             selected={node.id === editingSessionNodeId}
-                                            onSelect={() => setEditingSessionNodeId(node.id)}
+                                            onSelect={() => {
+                                                setEditingSessionNodeId(node.id);
+                                                if (isCompactViewport) setIsMobileInspectorOpen(true);
+                                            }}
                                             onMove={(direction) => moveSessionNode(node.id, direction === 'left' ? 'left' : 'right')}
                                             onDelete={() => handleDeleteNode(node.id)}
                                             progressionReminderThreshold={progressionReminderThreshold}
@@ -780,15 +947,37 @@ const KineticSessionBuilder = ({ className }: KineticSessionBuilderProps) => {
                         )}
                     </main>
 
-                    <NodeInspector
-                        node={selectedNode}
-                        savedWorkouts={savedWorkouts}
-                        onClose={() => setEditingSessionNodeId(null)}
-                        onUpdateWorkout={(node, config, name, notes) => updateWorkoutNode(node.id, config, name, notes)}
-                        onUpdateRest={(node, seconds, name) => updateRestNode(node.id, seconds, name)}
-                        onImportWorkout={(nodeId, workoutId) => showResult(replaceWorkoutNodeWithSavedWorkout(nodeId, workoutId), 'Workout linked')}
-                        onDelete={handleDeleteNode}
-                    />
+                    {isCompactViewport ? (
+                        isMobileInspectorOpen && selectedNode ? (
+                            <>
+                                <div
+                                    aria-hidden="true"
+                                    className="fixed inset-0 z-[90] bg-black/60 backdrop-blur-[1px]"
+                                    onClick={closeMobileInspector}
+                                />
+                                <NodeInspector
+                                    node={selectedNode}
+                                    savedWorkouts={savedWorkouts}
+                                    onClose={closeMobileInspector}
+                                    onUpdateWorkout={(node, config, name, notes) => updateWorkoutNode(node.id, config, name, notes)}
+                                    onUpdateRest={(node, seconds, name) => updateRestNode(node.id, seconds, name)}
+                                    onImportWorkout={(nodeId, workoutId) => showResult(replaceWorkoutNodeWithSavedWorkout(nodeId, workoutId), 'Workout linked')}
+                                    onDelete={handleDeleteNode}
+                                    isMobileSheet
+                                />
+                            </>
+                        ) : null
+                    ) : (
+                        <NodeInspector
+                            node={selectedNode}
+                            savedWorkouts={savedWorkouts}
+                            onClose={() => setEditingSessionNodeId(null)}
+                            onUpdateWorkout={(node, config, name, notes) => updateWorkoutNode(node.id, config, name, notes)}
+                            onUpdateRest={(node, seconds, name) => updateRestNode(node.id, seconds, name)}
+                            onImportWorkout={(nodeId, workoutId) => showResult(replaceWorkoutNodeWithSavedWorkout(nodeId, workoutId), 'Workout linked')}
+                            onDelete={handleDeleteNode}
+                        />
+                    )}
                 </div>
             </div>
 
@@ -796,7 +985,7 @@ const KineticSessionBuilder = ({ className }: KineticSessionBuilderProps) => {
                 <div className="flex items-center gap-3"><span>Prep {prepTime}s</span><span className="text-[#4D574C]">/</span><span>{duration} estimated</span></div>
             </footer>
 
-            <BuilderDialog dialog={dialog} value={dialogValue} onChangeValue={setDialogValue} onClose={() => setDialog(null)} onConfirm={handleDialogConfirm} />
+            <BuilderDialog dialog={dialog} value={dialogValue} onChangeValue={setDialogValue} onClose={() => setDialog(null)} onConfirm={handleDialogConfirm} isCompactViewport={isCompactViewport} />
             {statusMessage && (
                 <div
                     role="status"

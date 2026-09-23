@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
 import { useAccountStore } from '@/store/useAccountStore';
@@ -9,6 +9,7 @@ import type { SidebarProps } from '@/components/Sidebar';
 import ConcentricTimer from '@/components/ConcentricTimer';
 import KineticWorkoutSetup from '@/components/kinetic/KineticWorkoutSetup';
 import KineticSidebar from '@/components/kinetic/KineticSidebar';
+import KineticSessionTimeline from '@/components/kinetic/KineticSessionTimeline';
 import SetupModeToggle from '@/components/SetupModeToggle';
 import { getResponsiveLayout } from '@/layout';
 import { appShellMobile } from '@/layout/appShell.mobile';
@@ -137,13 +138,14 @@ interface AppDialogProps {
     onChangeValue: (value: string) => void;
     onClose: () => void;
     onConfirm: () => void;
+    isMobileViewport: boolean;
     layout: {
         dialogOverlay: string;
         dialogPanel: string;
     };
 }
 
-const AppDialog = ({ state, value, onChangeValue, onClose, onConfirm, layout }: AppDialogProps) => {
+const AppDialog = ({ state, value, onChangeValue, onClose, onConfirm, isMobileViewport, layout }: AppDialogProps) => {
     if (!state) {
         return null;
     }
@@ -186,13 +188,19 @@ const AppDialog = ({ state, value, onChangeValue, onClose, onConfirm, layout }: 
                             value={value}
                             onChange={(event) => onChangeValue(event.target.value)}
                             autoFocus
+                            className={cn(isMobileViewport && 'h-11')}
                         />
                     </div>
                 )}
 
                 <div className={cn('mt-6 grid gap-2', isMessage ? 'grid-cols-1' : 'grid-cols-2')}>
                     {!isMessage && (
-                        <Button type="button" variant="secondary" onClick={onClose} className="rounded-2xl font-black italic tracking-tighter">
+                        <Button
+                            type="button"
+                            variant="secondary"
+                            onClick={onClose}
+                            className={cn('rounded-2xl font-black italic tracking-tighter', isMobileViewport && 'h-11')}
+                        >
                             {state.cancelLabel ?? 'Cancel'}
                         </Button>
                     )}
@@ -200,7 +208,7 @@ const AppDialog = ({ state, value, onChangeValue, onClose, onConfirm, layout }: 
                         type="button"
                         variant={state.tone === 'danger' ? 'destructive' : 'default'}
                         onClick={onConfirm}
-                        className="rounded-2xl font-black italic tracking-tighter"
+                        className={cn('rounded-2xl font-black italic tracking-tighter', isMobileViewport && 'h-11')}
                     >
                         {state.confirmLabel}
                     </Button>
@@ -546,20 +554,54 @@ const TimerSurface = ({ isMobileViewport, timerScreenShell }: TimerSurfaceProps)
                 className="flex min-h-full w-full flex-1 flex-col px-4 py-5 text-white sm:px-7 lg:px-10 lg:py-7"
                 style={{ backgroundColor: settings.fullScreenMode ? fullScreenBackgroundColor : '#0e1012', color: settings.fullScreenMode ? kineticFullScreenForeground : '#ffffff' }}
             >
-                <header className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-white/10 pb-4 text-sm">
-                    <div className="font-['Sora'] font-semibold tracking-[-0.025em]" style={{ color: kineticSurfaceForeground }}>
-                        {hasActiveSession ? activeSession?.name : 'Workout'}
-                    </div>
-                    <span className="h-4 border-l border-white/15" />
-                    <span style={{ color: kineticMutedForeground }}>Block {hasActiveSession ? headerBlockIndex : 1} / {hasActiveSession ? activeSession?.nodes.length ?? 0 : 1}</span>
-                    <span className="h-4 border-l border-white/15" />
-                    <span style={{ color: kineticMutedForeground }}>Set {currentSet} / {headerSetTotal || 0}</span>
-                    <span className="h-4 border-l border-white/15" />
-                    <span style={{ color: kineticMutedForeground }}>{isMainRep ? 'Main set' : 'Myo-rep set'}</span>
-                    <button type="button" className="ml-auto text-xs font-medium transition-opacity hover:opacity-100" style={{ color: kineticMutedForeground }} onClick={terminateWorkout}>End {isSessionRunner ? 'session' : 'workout'}</button>
+                <header className={cn(
+                    'flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-white/10 pb-4 text-sm',
+                    isMobileViewport && 'min-h-14 flex-nowrap gap-3 pb-3',
+                )}>
+                    {isMobileViewport ? (
+                        <div className="flex w-full items-center gap-3">
+                            <div className="min-w-0 flex-1">
+                                <div className="truncate font-['Sora'] font-semibold tracking-[-0.025em]" style={{ color: kineticSurfaceForeground }}>
+                                    {hasActiveSession ? activeSession?.name : 'Workout'}
+                                </div>
+                                <div className="mt-1 truncate text-[11px]" style={{ color: kineticMutedForeground }}>
+                                    Block {hasActiveSession ? headerBlockIndex : 1} / {hasActiveSession ? activeSession?.nodes.length ?? 0 : 1}
+                                    <span className="px-1" aria-hidden="true">·</span>
+                                    Set {currentSet} / {headerSetTotal || 0}
+                                    <span className="px-1" aria-hidden="true">·</span>
+                                    {isMainRep ? 'Main set' : 'Myo-rep set'}
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                aria-label={`End ${isSessionRunner ? 'session' : 'workout'}`}
+                                className="inline-flex h-11 min-h-11 min-w-[44px] shrink-0 items-center justify-center rounded-lg border border-white/15 px-3 text-xs font-semibold transition-colors hover:bg-white/8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0e1012]"
+                                style={{ color: kineticMutedForeground }}
+                                onClick={terminateWorkout}
+                            >
+                                End
+                            </button>
+                        </div>
+                    ) : (
+                        <>
+                            <div className="font-['Sora'] font-semibold tracking-[-0.025em]" style={{ color: kineticSurfaceForeground }}>
+                                {hasActiveSession ? activeSession?.name : 'Workout'}
+                            </div>
+                            <span className="h-4 border-l border-white/15" />
+                            <span style={{ color: kineticMutedForeground }}>Block {hasActiveSession ? headerBlockIndex : 1} / {hasActiveSession ? activeSession?.nodes.length ?? 0 : 1}</span>
+                            <span className="h-4 border-l border-white/15" />
+                            <span style={{ color: kineticMutedForeground }}>Set {currentSet} / {headerSetTotal || 0}</span>
+                            <span className="h-4 border-l border-white/15" />
+                            <span style={{ color: kineticMutedForeground }}>{isMainRep ? 'Main set' : 'Myo-rep set'}</span>
+                            <button type="button" className="ml-auto text-xs font-medium transition-opacity hover:opacity-100" style={{ color: kineticMutedForeground }} onClick={terminateWorkout}>End {isSessionRunner ? 'session' : 'workout'}</button>
+                        </>
+                    )}
                 </header>
 
-                <div className="mx-auto grid w-full max-w-[1120px] flex-1 items-center gap-8 py-8 lg:grid-cols-[minmax(0,1fr)_300px]">
+                <div className={cn(
+                    'mx-auto grid w-full max-w-[1120px] flex-1 items-center lg:grid-cols-[minmax(0,1fr)_300px]',
+                    isMobileViewport ? 'gap-6 py-4' : 'gap-8 py-8',
+                )}>
                     <div className="flex flex-col items-center justify-center">
                         <div className="mb-3 text-xs font-semibold uppercase tracking-[0.14em]" style={{ color: kineticMutedForeground }}>
                             {phaseLabel}
@@ -585,9 +627,10 @@ const TimerSurface = ({ isMobileViewport, timerScreenShell }: TimerSurfaceProps)
                             isFinished={timerStatus === 'Finished'}
                             isPreparing={isPreparing}
                             forceInfoVisible
+                            compactMobile
                             fullScreenForegroundColor={isKinetic ? kineticFullScreenForeground : undefined}
                         />
-                        <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+                        <div className={cn('mt-8 flex flex-wrap items-center justify-center gap-3', isMobileViewport && 'mt-4 gap-2')}>
                             <Button onClick={pauseOrResume} className="h-12 rounded-lg px-5 text-sm font-bold hover:brightness-110" style={{ backgroundColor: kineticPalette.theme, color: getReadableForeground(kineticPalette.theme) }}>
                                 {timerStatus === 'Finished' ? <><RotateCcw size={16} /> New workout</> : (isTimerRunning ? <><Square size={15} /> Pause</> : <><Play size={16} /> Resume</>)}
                             </Button>
@@ -600,21 +643,15 @@ const TimerSurface = ({ isMobileViewport, timerScreenShell }: TimerSurfaceProps)
                     </div>
 
                     {isSessionRunner ? (
-                        <aside className="border-l border-white/10 pl-5">
-                                <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">Session timeline</div>
-                            <ol className="mt-5 space-y-1">
-                                {activeSession?.nodes.map((node, index) => {
-                                    const isComplete = index < activeSessionNodeIndex;
-                                    const isActive = index === activeSessionNodeIndex;
-                                    return (
-                                        <li key={node.id} className="border-l-2 py-3 pl-4 text-sm" style={{ borderColor: isComplete ? kineticPalette.finished : (isActive ? kineticPalette.theme : 'rgba(255,255,255,0.15)'), color: isActive ? kineticSurfaceForeground : kineticMutedForeground }}>
-                                            <div className="font-medium">{node.name}</div>
-                                            <div className="mt-1 text-xs text-zinc-500">{node.type === 'rest' ? `${node.seconds} sec rest` : `${node.config.sets} cycles · ${node.config.reps} reps`}</div>
-                                        </li>
-                                    );
-                                })}
-                            </ol>
-                        </aside>
+                        <KineticSessionTimeline
+                            session={activeSession}
+                            activeNodeIndex={activeSessionNodeIndex}
+                            timerStatus={timerStatus}
+                            foregroundColor={kineticSurfaceForeground}
+                            mutedColor={kineticMutedForeground}
+                            finishedColor={kineticPalette.finished}
+                            themeColor={kineticPalette.theme}
+                        />
                     ) : (
                         <aside className="border-l border-white/10 pl-5">
                             <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">Protocol</div>
@@ -791,10 +828,17 @@ export default function App() {
         setPasswordRecoveryMode: state.setPasswordRecoveryMode,
     })));
     const [showProtocolIntel, setShowProtocolIntel] = useState(false);
-    const [isMobileViewport, setIsMobileViewport] = useState(false);
+    const [isMobileViewport, setIsMobileViewport] = useState(() => (
+        typeof window !== 'undefined'
+        && typeof window.matchMedia === 'function'
+        && window.matchMedia('(max-width: 767px)').matches
+    ));
     const [dialogState, setDialogState] = useState<AppDialogState>(null);
     const [dialogValue, setDialogValue] = useState('');
     const [kineticSidebarWidth, setKineticSidebarWidth] = useState(248);
+    const mobileNavigationTriggerRef = useRef<HTMLButtonElement | null>(null);
+    const previousMobileViewportRef = useRef(false);
+    const previousDesktopSidebarCollapsedRef = useRef<boolean | null>(null);
     const isSingleCycle = parseInt(sets, 10) === 1;
     const dialogConfirmRef = useRef<((value: string) => void) | null>(null);
     const loadedWorkout = selectedSavedWorkoutId ? savedWorkouts.find((workout) => workout.id === selectedSavedWorkoutId) ?? null : null;
@@ -835,12 +879,21 @@ export default function App() {
         () => savedSessions.filter((savedSession) => !savedSession.sync?.pendingDelete),
         [savedSessions],
     );
-    useEffect(() => {
+    useLayoutEffect(() => {
         if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
         const mediaQuery = window.matchMedia('(max-width: 767px)');
         const handleViewportChange = (event: MediaQueryListEvent | MediaQueryList) => {
+            const wasMobile = previousMobileViewportRef.current;
             setIsMobileViewport(event.matches);
-            if (event.matches) setIsSidebarCollapsed(true);
+            if (event.matches && !wasMobile) {
+                previousDesktopSidebarCollapsedRef.current = useWorkoutStore.getState().isSidebarCollapsed;
+                setIsSidebarCollapsed(true);
+            } else if (!event.matches && wasMobile) {
+                const previousCollapsed = previousDesktopSidebarCollapsedRef.current;
+                if (previousCollapsed !== null) setIsSidebarCollapsed(previousCollapsed);
+                previousDesktopSidebarCollapsedRef.current = null;
+            }
+            previousMobileViewportRef.current = event.matches;
         };
         handleViewportChange(mediaQuery);
         if (typeof mediaQuery.addEventListener === 'function') {
@@ -850,6 +903,12 @@ export default function App() {
         mediaQuery.addListener(handleViewportChange);
         return () => mediaQuery.removeListener(handleViewportChange);
     }, [setIsSidebarCollapsed]);
+
+    const closeMobileDrawer = useCallback(() => {
+        if (!isMobileViewport) return;
+        setIsSidebarCollapsed(true);
+        mobileNavigationTriggerRef.current?.focus();
+    }, [isMobileViewport, setIsSidebarCollapsed]);
 
     const closeDialog = useCallback(() => {
         setDialogState(null);
@@ -952,8 +1011,12 @@ export default function App() {
     }, [loadedWorkout?.name, openMessageDialog, openPromptDialog, saveCurrentWorkoutAs]);
     const handleLoadWorkout = useCallback((id: string) => {
         const result = loadWorkout(id);
-        if (!result.ok) openMessageDialog('Could not load workout', result.error ?? 'Could not load workout.');
-    }, [loadWorkout, openMessageDialog]);
+        if (!result.ok) {
+            openMessageDialog('Could not load workout', result.error ?? 'Could not load workout.');
+        } else if (designVariant === 'kinetic') {
+            closeMobileDrawer();
+        }
+    }, [closeMobileDrawer, designVariant, loadWorkout, openMessageDialog]);
     const handleRenameWorkout = useCallback((id: string) => {
         const workout = savedWorkouts.find((entry) => entry.id === id);
         openPromptDialog({
@@ -1107,8 +1170,12 @@ export default function App() {
         }
 
         const result = loadSessionForEditing(id);
-        if (!result.ok) openMessageDialog('Could not load session', result.error ?? 'Could not load session.');
-    }, [canUseSessionBuilder, handleSessionBuilderLocked, loadSessionForEditing, openMessageDialog]);
+        if (!result.ok) {
+            openMessageDialog('Could not load session', result.error ?? 'Could not load session.');
+        } else if (designVariant === 'kinetic') {
+            closeMobileDrawer();
+        }
+    }, [canUseSessionBuilder, closeMobileDrawer, designVariant, handleSessionBuilderLocked, loadSessionForEditing, openMessageDialog]);
     const handleDuplicateSession = useCallback((id: string) => {
         if (!canUseSessionBuilder) {
             handleSessionBuilderLocked();
@@ -1176,6 +1243,14 @@ export default function App() {
 
         setSetupMode(nextMode);
     }, [canUseSessionBuilder, handleSessionBuilderLocked, setSetupMode]);
+    const handleKineticNavigate = useCallback((destination: 'workout' | 'session') => {
+        if (destination === 'session' && !canUseSessionBuilder) {
+            handleSetupModeChange(destination);
+            return;
+        }
+        handleSetupModeChange(destination);
+        closeMobileDrawer();
+    }, [canUseSessionBuilder, closeMobileDrawer, handleSetupModeChange]);
     const handleSignOut = useCallback(async (): Promise<AccountActionResult> => {
         const [{ getSupabaseClient }, { signOutSupabase }] = await Promise.all([
             import('@/lib/supabase'),
@@ -1501,13 +1576,22 @@ export default function App() {
                 </Suspense>
             )}
             {isMobileViewport && isSidebarOpen && (
-                <button type="button" className="fixed inset-0 z-40 bg-black/60 md:hidden" onClick={toggleSidebar} aria-label="Close Navigation Overlay" />
+                <button type="button" className="fixed inset-0 z-40 bg-black/60 md:hidden" onClick={closeMobileDrawer} aria-label="Close Navigation Overlay" />
             )}
             {designVariant === 'kinetic' ? (
                 <KineticSidebar
                     {...sidebarProps}
+                    setShowSettings={(show) => {
+                        setShowSettings(show);
+                        if (show) closeMobileDrawer();
+                    }}
+                    onOpenProtocolIntel={() => {
+                        setShowProtocolIntel(true);
+                        closeMobileDrawer();
+                    }}
                     setupMode={setupMode}
-                    onNavigate={handleSetupModeChange}
+                    onNavigate={handleKineticNavigate}
+                    onCloseMobileDrawer={closeMobileDrawer}
                     width={kineticSidebarWidth}
                     onWidthChange={setKineticSidebarWidth}
                 />
@@ -1551,13 +1635,45 @@ export default function App() {
                     appShellLayout.contentShell,
                 )}>
                     {isMobileViewport && (
-                        <header className={appShellLayout.mobileHeader}>
-                            <Button variant="ghost" size="icon" className="h-11 w-11 rounded-2xl" onClick={toggleSidebar} aria-label="Open Navigation"><Menu size={20} /></Button>
+                        <header className={cn(
+                            appShellLayout.mobileHeader,
+                            designVariant === 'kinetic' && 'min-h-11 rounded-none border-x-0 border-t-0 border-b border-[#2c322d] bg-[#101211] px-0 py-2 shadow-none',
+                        )}>
+                            <Button
+                                ref={mobileNavigationTriggerRef}
+                                variant="ghost"
+                                size="icon"
+                                className={cn('h-11 w-11 rounded-2xl', designVariant === 'kinetic' && 'rounded-[9px] border border-[#343833] bg-[#171a17] text-[#f2f0ed]')}
+                                onClick={toggleSidebar}
+                                aria-label="Open Navigation"
+                            >
+                                <Menu size={20} />
+                            </Button>
                             <div className="min-w-0 text-center">
-                                <div className="text-[10px] font-black uppercase tracking-[0.32em] text-primary">MyoREP</div>
-                                <div className="truncate text-sm font-semibold text-muted-foreground">{appPhase === 'setup' ? (isSessionSetup ? 'Session Builder' : 'Workout Setup') : timerStatus}</div>
+                                {designVariant === 'kinetic' ? (
+                                    <div className="truncate text-sm font-semibold text-[#f2f0ed]">
+                                        {appPhase === 'setup' ? (isSessionSetup ? 'Session Builder' : 'Workout Setup') : 'Timer'}
+                                    </div>
+                                ) : (
+                                    <>
+                                        <div className="text-[10px] font-black uppercase tracking-[0.32em] text-primary">MyoREP</div>
+                                        <div className="truncate text-sm font-semibold text-muted-foreground">{appPhase === 'setup' ? (isSessionSetup ? 'Session Builder' : 'Workout Setup') : timerStatus}</div>
+                                    </>
+                                )}
                             </div>
-                            <Button variant={showSettings ? 'default' : 'secondary'} size="icon" className="h-11 w-11 rounded-2xl" onClick={() => setShowSettings(!showSettings)} aria-label={showSettings ? 'Close Settings' : 'Open Settings'}><Settings2 size={18} /></Button>
+                            <Button
+                                variant={showSettings ? 'default' : 'secondary'}
+                                size="icon"
+                                className={cn('h-11 w-11 rounded-2xl', designVariant === 'kinetic' && 'rounded-[9px] border border-[#343833] bg-[#171a17] text-[#f2f0ed]')}
+                                onClick={() => {
+                                    const nextShowSettings = !showSettings;
+                                    setShowSettings(nextShowSettings);
+                                    if (nextShowSettings && designVariant === 'kinetic') closeMobileDrawer();
+                                }}
+                                aria-label={showSettings ? 'Close Settings' : 'Open Settings'}
+                            >
+                                <Settings2 size={18} />
+                            </Button>
                         </header>
                     )}
                     {appPhase === 'setup' ? (
@@ -1565,7 +1681,7 @@ export default function App() {
                             isSessionSetup ? (
                                 <div
                                     data-testid="kinetic-session-builder-viewport"
-                                    className="flex h-[calc(var(--viewport-dynamic)-var(--safe-top)-var(--safe-bottom)-7.5rem)] min-h-[20rem] w-full min-w-0 flex-col overflow-hidden md:h-[100dvh] md:min-h-0"
+                                    className="flex min-h-[max(20rem,calc(var(--viewport-dynamic)-var(--safe-top)-var(--safe-bottom)-7.5rem))] w-full min-w-0 flex-col"
                                 >
                                     <Suspense fallback={null}>
                                         <LazyKineticSessionBuilder className="min-h-0 flex-1" />
@@ -1718,6 +1834,7 @@ export default function App() {
                 onChangeValue={setDialogValue}
                 onClose={closeDialog}
                 onConfirm={handleDialogConfirm}
+                isMobileViewport={isMobileViewport}
                 layout={appShellLayout}
             />
         </div>

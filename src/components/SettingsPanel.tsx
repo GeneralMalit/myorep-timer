@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useWorkoutStore, WorkoutSettings } from '@/store/useWorkoutStore';
 import {
@@ -121,13 +121,21 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
     const isMobileViewport = useMobileViewport();
     const layout = getResponsiveLayout(isMobileViewport, settingsPanelMobileLayout, settingsPanelDesktopLayout);
     const [shouldRenderContent, setShouldRenderContent] = useState(isOpen);
+    const overlayRef = useRef<HTMLDivElement | null>(null);
+    const panelRef = useRef<HTMLDivElement | null>(null);
+    const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+    const onCloseRef = useRef(onClose);
+    onCloseRef.current = onClose;
     const rawProgressionReminderThreshold = settings.progressionReminderThreshold;
     const progressionReminderThreshold = normalizeProgressionReminderThreshold(rawProgressionReminderThreshold);
     const [progressionReminderThresholdDraft, setProgressionReminderThresholdDraft] = useState(
         String(progressionReminderThreshold),
     );
     const kineticSwitchClassName = isKinetic
-        ? 'border-[#424940] bg-[#272c27] data-[state=checked]:border-[#A8FF5A] data-[state=checked]:bg-[#A8FF5A] data-[state=checked]:[&>span]:bg-[#111412] data-[state=unchecked]:bg-[#272c27] focus-visible:ring-[#FF5B36] focus-visible:ring-offset-[#111412]'
+        ? cn(
+            'border-[#424940] bg-[#272c27] data-[state=checked]:border-[#A8FF5A] data-[state=checked]:bg-[#A8FF5A] data-[state=checked]:[&>span]:bg-[#111412] data-[state=unchecked]:bg-[#272c27] focus-visible:ring-[#FF5B36] focus-visible:ring-offset-[#111412]',
+            isMobileViewport && 'h-11 w-14 [&>span]:h-7 [&>span]:w-7 data-[state=checked]:[&>span]:translate-x-6 data-[state=unchecked]:[&>span]:translate-x-0',
+        )
         : undefined;
 
     const getVisualIdentityColor = (item: VisualIdentityItem) => {
@@ -186,8 +194,53 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
         return () => window.cancelAnimationFrame(frame);
     }, [isOpen]);
 
+    useEffect(() => {
+        if (!isOpen) return;
+
+        const previouslyFocused = document.activeElement instanceof HTMLElement
+            ? document.activeElement
+            : null;
+        closeButtonRef.current?.focus();
+
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                onCloseRef.current();
+                return;
+            }
+            if (event.key !== 'Tab') return;
+
+            const panelElement = panelRef.current;
+            const focusable = panelElement?.querySelectorAll<HTMLElement>(
+                'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+            );
+            if (!panelElement || !focusable?.length) {
+                event.preventDefault();
+                panelElement?.focus();
+                return;
+            }
+
+            const first = focusable[0];
+            const last = focusable[focusable.length - 1];
+            if (event.shiftKey && (document.activeElement === first || !panelElement.contains(document.activeElement))) {
+                event.preventDefault();
+                last.focus();
+            } else if (!event.shiftKey && (document.activeElement === last || !panelElement.contains(document.activeElement))) {
+                event.preventDefault();
+                first.focus();
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => {
+            window.removeEventListener('keydown', handleKeyDown);
+            if (previouslyFocused?.isConnected) previouslyFocused.focus();
+        };
+    }, [isOpen]);
+
     const panel = (
         <div
+            ref={overlayRef}
             data-testid="settings-drawer-overlay"
             aria-hidden={!isOpen}
             className={cn(
@@ -203,23 +256,46 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
         >
             <Card
                 data-testid="settings-drawer-panel"
+                ref={panelRef}
+                role={isOpen ? 'dialog' : undefined}
+                aria-modal={isOpen ? true : undefined}
+                aria-labelledby="settings-panel-title"
                 className={cn(
                     layout.panel,
                     isOpen ? layout.panelOpen : layout.panelClosed,
                     isKinetic && 'w-full max-w-[30rem] rounded-none border-[#343833] bg-[#111412] text-[#F2F0ED] shadow-[-8px_0_20px_rgba(0,0,0,0.25)]',
                 )}
             >
-                <CardHeader className={cn(layout.header, isKinetic && 'gap-3 border-[#343833] bg-[#171a17] px-5 pb-4 pt-5')}>
-                    <CardTitle className={cn(layout.title, isKinetic && 'text-base font-semibold not-italic tracking-tight text-[#F2F0ED]')}>
+                <CardHeader className={cn(
+                    layout.header,
+                    isKinetic && 'gap-3 border-[#343833] bg-[#171a17] px-5 pb-4',
+                    isKinetic && (isMobileViewport ? 'pt-[calc(var(--safe-top)+1rem)]' : 'pt-5'),
+                )}>
+                    <CardTitle id="settings-panel-title" className={cn(layout.title, isKinetic && 'text-base font-semibold not-italic tracking-tight text-[#F2F0ED]')}>
                         <Monitor className={cn('text-primary', isKinetic && 'text-[#FF5B36]')} size={20} />
                         System Configuration
                     </CardTitle>
-                    <Button variant="ghost" size="icon" onClick={onClose} className={cn(layout.closeButton, isKinetic && 'h-9 w-9 rounded-[8px] text-[#C6CAC3] hover:bg-[#252925] hover:text-[#F2F0ED]')} aria-label="Close Settings">
+                    <Button
+                        ref={closeButtonRef}
+                        variant="ghost"
+                        size="icon"
+                        onClick={onClose}
+                        className={cn(
+                            layout.closeButton,
+                            isKinetic && 'rounded-[8px] text-[#C6CAC3] hover:bg-[#252925] hover:text-[#F2F0ED]',
+                            isKinetic && !isMobileViewport && 'h-9 w-9',
+                        )}
+                        aria-label="Close Settings"
+                    >
                         <X size={20} />
                     </Button>
                 </CardHeader>
 
-                <CardContent className={cn(layout.content, isKinetic && 'space-y-4 px-5 pb-8 pt-4')}>
+                <CardContent className={cn(
+                    layout.content,
+                    isKinetic && 'space-y-4 px-5 pt-4',
+                    isKinetic && (isMobileViewport ? 'pb-[calc(var(--safe-bottom)+2rem)]' : 'pb-8'),
+                )}>
                     {!shouldRenderContent ? (
                         <div className="space-y-4">
                             <div className={cn('h-32 rounded-[24px] border border-border/60 bg-card/50 p-4', isKinetic && 'rounded-[10px] border-[#343833] bg-[#171a17]')}>
@@ -332,7 +408,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                                                         type="color"
                                                         value={colorValue}
                                                         onChange={(e) => handleChange(item.key as any, e.target.value)}
-                                                        className={cn(layout.colorInput, isKinetic && 'h-8 rounded-[6px] bg-transparent focus-visible:ring-[var(--kinetic-theme-color)] focus-visible:ring-offset-[#111412]')}
+                                                        className={cn(layout.colorInput, isKinetic && cn('rounded-[6px] bg-transparent focus-visible:ring-[var(--kinetic-theme-color)] focus-visible:ring-offset-[#111412]', isMobileViewport ? 'h-11' : 'h-8'))}
                                                     />
                                                 </div>
                                             </div>
@@ -357,7 +433,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                                                 const requested = Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
                                                 handleChange('concentricSecond', concentricMax ? Math.min(requested, concentricMax) : requested);
                                             }}
-                                            className={cn(layout.fieldInput, isKinetic && 'h-10 rounded-[8px] border-[#424940] bg-[#111412] font-medium text-[#F2F0ED] focus-visible:ring-[#FF5B36] focus-visible:ring-offset-[#171a17]')}
+                                            className={cn(layout.fieldInput, isKinetic && cn('rounded-[8px] border-[#424940] bg-[#111412] font-medium text-[#F2F0ED] focus-visible:ring-[#FF5B36] focus-visible:ring-offset-[#171a17]', isMobileViewport ? 'h-11' : 'h-10'))}
                                             min={1}
                                             max={concentricMax}
                                         />
@@ -371,7 +447,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                                             type="number"
                                             value={settings.prepTime}
                                             onChange={(e) => handleChange('prepTime', parseInt(e.target.value) || 0)}
-                                            className={cn(layout.fieldInput, isKinetic && 'h-10 rounded-[8px] border-[#424940] bg-[#111412] font-medium text-[#F2F0ED] focus-visible:ring-[#FF5B36] focus-visible:ring-offset-[#171a17]')}
+                                            className={cn(layout.fieldInput, isKinetic && cn('rounded-[8px] border-[#424940] bg-[#111412] font-medium text-[#F2F0ED] focus-visible:ring-[#FF5B36] focus-visible:ring-offset-[#171a17]', isMobileViewport ? 'h-11' : 'h-10'))}
                                         />
                                     </div>
                                 </div>
@@ -412,7 +488,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                                             onChange={(event) => handleProgressionReminderThresholdChange(event.target.value)}
                                             onBlur={commitProgressionReminderThreshold}
                                             aria-describedby="settings-progression-reminder-threshold-help"
-                                            className={cn(layout.fieldInput, 'max-w-28', isKinetic && 'h-10 rounded-[8px] border-[#424940] bg-[#111412] font-medium text-[#F2F0ED] focus-visible:ring-[#FF5B36] focus-visible:ring-offset-[#171a17]')}
+                                            className={cn(layout.fieldInput, 'max-w-28', isKinetic && cn('rounded-[8px] border-[#424940] bg-[#111412] font-medium text-[#F2F0ED] focus-visible:ring-[#FF5B36] focus-visible:ring-offset-[#171a17]', isMobileViewport ? 'h-11' : 'h-10'))}
                                         />
                                         <span className={cn('text-sm text-muted-foreground', isKinetic && 'text-[#9EA69B]')}>completed sessions</span>
                                     </div>
@@ -490,7 +566,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                                                     <select
                                                         value={settings.metronomeSound}
                                                         onChange={(e) => handleChange('metronomeSound', e.target.value)}
-                                                        className={cn(layout.selectField, isKinetic && 'h-10 rounded-[8px] border-[#424940] bg-[#111412] font-medium text-[#F2F0ED] focus:border-[#FF5B36] focus:outline-none')}
+                                                        className={cn(layout.selectField, isKinetic && cn('rounded-[8px] border-[#424940] bg-[#111412] font-medium text-[#F2F0ED] focus:border-[#FF5B36] focus:outline-none', isMobileViewport ? 'h-11' : 'h-10'))}
                                                     >
                                                         <option value="woodblock">Woodblock</option>
                                                         <option value="mechanical">Mechanical</option>
@@ -501,7 +577,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                                             )}
                                             {settings.ttsEnabled && (
                                                 <div className="flex flex-col justify-end">
-                                                    <Button onClick={testTTS} variant="outline" className={cn(layout.testButton, isKinetic && 'min-h-10 rounded-[8px] border-[#424940] bg-[#111412] font-semibold not-italic tracking-normal text-[#C6CAC3] hover:border-[#4DABF7] hover:bg-[#1A211E] hover:text-[#F2F0ED]')}>
+                                                    <Button onClick={testTTS} variant="outline" className={cn(layout.testButton, isKinetic && cn('rounded-[8px] border-[#424940] bg-[#111412] font-semibold not-italic tracking-normal text-[#C6CAC3] hover:border-[#4DABF7] hover:bg-[#1A211E] hover:text-[#F2F0ED]', isMobileViewport ? 'min-h-11' : 'min-h-10'))}>
                                                         <Play size={14} /> TEST VOICES
                                                     </Button>
                                                 </div>
