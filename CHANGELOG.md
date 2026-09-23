@@ -1,3 +1,10 @@
+# [3.11.0](https://github.com/GeneralMalit/myorep-timer/compare/v3.10.1...v3.11.0) (2026-09-23)
+
+
+### Features
+
+* improve mobile workout experience ([e954e8a](https://github.com/GeneralMalit/myorep-timer/commit/e954e8ae60dfe89ad4fb875ecd8f0b8e43df6fe3))
+
 ## [3.10.1](https://github.com/GeneralMalit/myorep-timer/compare/v3.10.0...v3.10.1) (2026-09-23)
 
 
