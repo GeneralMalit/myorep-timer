@@ -4,7 +4,7 @@ const mainShellParts = {
     base: 'relative overflow-x-hidden overflow-y-auto scroll-contain-y',
     spacing: 'px-[max(1rem,var(--safe-left))] pb-0 pt-6 md:px-6 md:pb-0 md:pt-6',
     motion: 'transition-[margin] duration-300',
-    viewport: 'min-h-[100dvh]',
+    viewport: 'h-[100dvh]',
 };
 
 const contentShellParts = {

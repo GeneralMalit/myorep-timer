@@ -1,3 +1,9 @@
+## Unreleased
+
+### Bug Fixes
+
+* constrain desktop app height so session content can scroll
+
 # [3.11.0](https://github.com/GeneralMalit/myorep-timer/compare/v3.10.1...v3.11.0) (2026-09-23)
 
 

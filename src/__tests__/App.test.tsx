@@ -334,6 +334,12 @@ describe('App', () => {
         expect(screen.getByText(/MYOREP v9.9.9-test/i)).toBeInTheDocument();
     });
 
+    it('keeps the desktop app shell viewport-bounded and vertically scrollable', () => {
+        render(<App />);
+
+        expect(screen.getByTestId('app-main-shell')).toHaveClass('h-[100dvh]', 'overflow-y-auto');
+    });
+
     it('renders a compact mobile workout setup shell with reachable controls', () => {
         setMobileViewport(true);
 
