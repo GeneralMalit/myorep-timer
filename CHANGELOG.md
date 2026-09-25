@@ -1,3 +1,10 @@
+## [3.11.1](https://github.com/GeneralMalit/myorep-timer/compare/v3.11.0...v3.11.1) (2026-09-25)
+
+
+### Bug Fixes
+
+* allow desktop session builder scrolling ([a00b155](https://github.com/GeneralMalit/myorep-timer/commit/a00b15536059aeb1723cb8c02790a17073ffb250))
+
 ## Unreleased
 
 ### Bug Fixes
