@@ -19,6 +19,8 @@ import {
     Zap,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import BuilderSaveFeedback from '@/components/BuilderSaveFeedback';
+import { useBuilderSaveFeedback } from '@/hooks/useBuilderSaveFeedback';
 import { Input } from '@/components/ui/input';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
 import type { SavedWorkout, SavedWorkoutConfig } from '@/types/savedWorkouts';
@@ -483,6 +485,9 @@ const NodeInspector = ({
                                 <option value="__none__">Inline block (not linked)</option>
                                 {savedWorkouts.map((workout) => <option key={workout.id} value={workout.id}>{workout.name}</option>)}
                             </select>
+                            <p className="text-[11px] leading-relaxed text-[#8E988C]">
+                                Edits to a linked workout update every block that uses it when the session is saved. Its settings, notes, and progression are shared; inline blocks keep progression local to this session.
+                            </p>
                         </div>
                     </>
                 ) : (
@@ -643,6 +648,7 @@ const KineticSessionBuilder = ({ className }: KineticSessionBuilderProps) => {
     const moveSessionNodeToIndex = useWorkoutStore((state) => state.moveSessionNodeToIndex);
     const replaceWorkoutNodeWithSavedWorkout = useWorkoutStore((state) => state.replaceWorkoutNodeWithSavedWorkout);
     const setEditingSessionNodeId = useWorkoutStore((state) => state.setEditingSessionNodeId);
+    const { feedback: saveFeedback, dismiss: dismissSaveFeedback, trackSessionSave } = useBuilderSaveFeedback(editingSessionDraft?.id ?? null);
     const [isCompactViewport, setIsCompactViewport] = useState(() => (
         typeof window !== 'undefined'
         && typeof window.matchMedia === 'function'
@@ -779,7 +785,15 @@ const KineticSessionBuilder = ({ className }: KineticSessionBuilderProps) => {
         setDialog({ kind: 'prompt', title: 'Create a session', description: 'Start a clean timeline and add blocks as you go.', value: 'New Session', confirmLabel: 'Create session' });
     };
 
-    const handleSave = () => showResult(saveSessionDraft(draftName || undefined), 'Saved locally');
+    const handleSave = () => {
+        dismissSaveFeedback();
+        const result = saveSessionDraft(draftName || undefined);
+        if (!result.ok) {
+            showResult(result);
+            return;
+        }
+        if (result.id) trackSessionSave(result.id);
+    };
 
     const handleSaveAs = () => {
         if (!editingSessionDraft) {
@@ -819,16 +833,21 @@ const KineticSessionBuilder = ({ className }: KineticSessionBuilderProps) => {
             setDialog(null);
             return;
         }
-        const result = dialog.title === 'Create a session' ? createSession(dialogValue) : saveSessionDraftAs(dialogValue);
+        const isCreate = dialog.title === 'Create a session';
+        if (!isCreate) dismissSaveFeedback();
+        const result = isCreate ? createSession(dialogValue) : saveSessionDraftAs(dialogValue);
         if (!result.ok) {
             setDialog({ kind: 'feedback', title: 'Could not save session', description: result.error ?? 'Please choose another name.', tone: 'error' });
             return;
         }
         setDialog(null);
         setDraftName(dialogValue);
-        showSuccess(dialog.title === 'Create a session' ? 'Session created' : 'Copy saved');
+        if (isCreate) {
+            showSuccess('Session created');
+        } else if (result.id) {
+            trackSessionSave(result.id);
+        }
     };
-
     const handleDeleteNode = (nodeId: string) => {
         const index = nodes.findIndex((node) => node.id === nodeId);
         const nextNode = nodes[index + 1] ?? nodes[index - 1] ?? null;
@@ -986,11 +1005,16 @@ const KineticSessionBuilder = ({ className }: KineticSessionBuilderProps) => {
             </footer>
 
             <BuilderDialog dialog={dialog} value={dialogValue} onChangeValue={setDialogValue} onClose={() => setDialog(null)} onConfirm={handleDialogConfirm} isCompactViewport={isCompactViewport} />
+            <BuilderSaveFeedback
+                feedback={saveFeedback}
+                onDismiss={dismissSaveFeedback}
+                className="fixed bottom-14 left-1/2 z-[111] w-[min(92vw,560px)] -translate-x-1/2"
+            />
             {statusMessage && (
                 <div
                     role="status"
                     aria-live="polite"
-                    className="fixed bottom-14 left-1/2 z-[110] flex -translate-x-1/2 items-center gap-3 border border-[#A8FF5A]/50 bg-[#1C2818] px-3 py-2 text-xs font-semibold text-[#C7FFA0] shadow-[0_8px_24px_rgba(0,0,0,0.3)]"
+                    className="fixed bottom-24 left-1/2 z-[110] flex -translate-x-1/2 items-center gap-3 border border-[#A8FF5A]/50 bg-[#1C2818] px-3 py-2 text-xs font-semibold text-[#C7FFA0] shadow-[0_8px_24px_rgba(0,0,0,0.3)]"
                     style={{ borderRadius: 8 }}
                 >
                     <span>{statusMessage.message}</span>

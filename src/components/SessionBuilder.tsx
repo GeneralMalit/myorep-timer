@@ -12,6 +12,8 @@ import { sessionBuilderMobileLayout } from '@/layout/sessionBuilder.mobile';
 import { estimateSessionDurationSeconds, formatEstimatedSessionDuration } from '@/utils/savedSessions';
 import { audioEngine } from '@/utils/audioEngine';
 import { cn } from '@/lib/utils';
+import BuilderSaveFeedback from '@/components/BuilderSaveFeedback';
+import { useBuilderSaveFeedback } from '@/hooks/useBuilderSaveFeedback';
 
 type SessionBuilderDialogState =
     | {
@@ -141,6 +143,7 @@ const SessionBuilder = () => {
     const removeSessionNode = useWorkoutStore((state) => state.removeSessionNode);
     const moveSessionNode = useWorkoutStore((state) => state.moveSessionNode);
     const moveSessionNodeToIndex = useWorkoutStore((state) => state.moveSessionNodeToIndex);
+    const { feedback: saveFeedback, dismiss: dismissSaveFeedback, trackSessionSave } = useBuilderSaveFeedback(editingSessionDraft?.id ?? null);
     const [dialogState, setDialogState] = useState<SessionBuilderDialogState>(null);
     const [sessionNameDraft, setSessionNameDraft] = useState('');
 
@@ -189,6 +192,7 @@ const SessionBuilder = () => {
     };
 
     const handleSave = () => {
+        dismissSaveFeedback();
         const result = saveSessionDraft(sessionNameDraft);
         if (!result.ok) {
             setDialogState({
@@ -196,9 +200,12 @@ const SessionBuilder = () => {
                 title: 'Could not save this session',
                 description: result.error ?? 'Could not save session.',
             });
+            return;
+        }
+        if (result.id) {
+            trackSessionSave(result.id);
         }
     };
-
     const handleSaveAs = () => {
         if (!editingSessionDraft) {
             setDialogState({
@@ -283,6 +290,9 @@ const SessionBuilder = () => {
             return;
         }
 
+        if (dialogState.type === 'save-session-as') {
+            dismissSaveFeedback();
+        }
         const nextName = dialogState.value ?? '';
         const result = dialogState.type === 'new-session'
             ? createSession(nextName)
@@ -300,8 +310,15 @@ const SessionBuilder = () => {
         }
 
         setDialogState(null);
+        if (dialogState.type === 'save-session-as' && result.id) {
+            trackSessionSave(result.id);
+        }
     };
-    const layout = getResponsiveLayout(isMobileViewport, sessionBuilderMobileLayout, sessionBuilderDesktopLayout);
+    const layout = getResponsiveLayout<typeof sessionBuilderMobileLayout | typeof sessionBuilderDesktopLayout>(
+        isMobileViewport,
+        sessionBuilderMobileLayout,
+        sessionBuilderDesktopLayout,
+    );
 
     return (
         <>
@@ -377,6 +394,11 @@ const SessionBuilder = () => {
                 onChangeValue={handleDialogValueChange}
                 onClose={() => setDialogState(null)}
                 onConfirm={handleDialogConfirm}
+            />
+            <BuilderSaveFeedback
+                feedback={saveFeedback}
+                onDismiss={dismissSaveFeedback}
+                className="mx-auto mt-3 w-full max-w-2xl"
             />
         </>
     );

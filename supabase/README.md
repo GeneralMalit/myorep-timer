@@ -9,6 +9,8 @@ This folder holds the initial schema and setup notes for the MyoRep Supabase fou
 - Use the environment variables listed in `docs/phase-0-supabase-foundation.md`.
 - Apply the migration in `supabase/migrations/0001_phase0_foundation.sql`.
 - Apply `supabase/migrations/0002_phase6_billing_foundation.sql`, then `supabase/migrations/0003_phase6_paddle_billing.sql`, before enabling Paddle-backed billing in any environment.
+- Apply the remaining migrations in numeric order. Before deploying the linked-workout progression update, apply `supabase/migrations/0008_linked_workout_progression.sql` after `0007_billing_event_ordering_signup_indexes.sql`.
+- Migration `0008` adds shared workout notes and progression history, preserves the greatest legacy linked-block count, and updates both workout mutation and first-sync overwrite RPCs. Deploy the schema before the client that reads these columns.
 
 ## Notes
 - This repo intentionally stays local-first for the timer engine.

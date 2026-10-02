@@ -19,6 +19,10 @@ export interface SavedWorkout extends SavedWorkoutConfig {
     lastUsedAt: string | null;
     createdAt: string;
     updatedAt: string;
+    /** Shared reminder/progression count for every linked session block. */
+    completedSessionsSinceProgression?: number;
+    /** Shared workout reminder text projected to linked session blocks. */
+    notes?: string;
     sync?: SyncMetadata;
 }
 

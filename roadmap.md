@@ -145,11 +145,11 @@
 - [x] Notes persist through local save/load, import/export, and sync payloads.
 
 ## Session Progression Reminders
-- [x] Track completed sessions per workout block and show a configurable progression reminder at the threshold.
-- [x] Reset a block's counter when its workout settings, notes, or linked workout change while preserving name-only edits.
-- [x] Keep progression metadata intact through persistence, import/export, and cloud sync.
+- [x] Track completed sessions on the shared workout for linked blocks, or on the session block for unlinked workouts; duplicate links receive one shared increment per completed session.
+- [x] Save linked settings and notes back to the workout library and every linked session instance, resetting shared progression while preserving name-only edits and independent unlinked history.
+- [x] Keep shared progression metadata intact through persistence, import/export, and cloud sync.
 - [x] Move session block creation to the end of both builder timelines and keep workout-library linking in the block inspector.
-- [x] Automatically dismiss session-builder success notifications, including repeated block-removal messages.
+- [x] Automatically dismiss transient session-builder notifications, including repeated block removals, while keeping revision-aware local/cloud save status visible until dismissed or the session changes.
 
 ## Phase 3.5: Mobile UX Design and Approval
 ### Outcomes

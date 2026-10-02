@@ -77,6 +77,28 @@ export const sanitizeSavedWorkoutConfig = (config: Partial<SavedWorkoutConfig>):
     };
 };
 
+export const normalizeCompletedSessionsSinceProgression = (value: unknown): number => (
+    typeof value === 'number'
+        && Number.isFinite(value)
+        && Number.isSafeInteger(value)
+        && value >= 0
+        ? value
+        : 0
+);
+
+export type NormalizedSavedWorkout = SavedWorkout & Required<
+    Pick<SavedWorkout, 'notes' | 'completedSessionsSinceProgression'>
+>;
+
+export const normalizeSavedWorkout = (workout: SavedWorkout): NormalizedSavedWorkout => ({
+    ...workout,
+    notes: typeof workout.notes === 'string' ? workout.notes : '',
+    completedSessionsSinceProgression: normalizeCompletedSessionsSinceProgression(
+        workout.completedSessionsSinceProgression,
+    ),
+});
+
+
 export const isValidWorkoutConfig = (config: SavedWorkoutConfig): boolean => {
     const parsedSets = parsePositiveInt(config.sets);
     if (parsedSets === null || !hasValidBaseConfig(config)) {
@@ -97,16 +119,17 @@ export const createSavedWorkout = (name: string, config: SavedWorkoutConfig, now
         lastUsedAt: null,
         createdAt: nowIso,
         updatedAt: nowIso,
+        completedSessionsSinceProgression: 0,
+        notes: '',
         sync: createSyncMetadata(id, nowIso),
     };
 };
+ 
 
-export const toSavedWorkoutExportRecord = (workout: SavedWorkout, nowIso: string): SavedWorkoutExportRecordV1 => {
-    return {
-        ...workout,
-        sync: normalizeSyncMetadata(workout.sync, workout.id, nowIso),
-    };
-};
+export const toSavedWorkoutExportRecord = (workout: SavedWorkout, nowIso: string): SavedWorkoutExportRecordV1 => ({
+    ...normalizeSavedWorkout(workout),
+    sync: normalizeSyncMetadata(workout.sync, workout.id, nowIso),
+});
 
 export const buildSavedWorkoutsExport = (workouts: SavedWorkout[], exportedAt: string): SavedWorkoutsExportV1 => {
     return {
@@ -204,6 +227,11 @@ const toSavedWorkoutRecord = (value: unknown): SavedWorkout | null => {
         timesUsed: parsePositiveInt(record.timesUsed) ?? 0,
         lastUsedAt: typeof record.lastUsedAt === 'string' ? record.lastUsedAt : null,
         createdAt: typeof record.createdAt === 'string' ? record.createdAt : nowIso,
+        completedSessionsSinceProgression: typeof record.completedSessionsSinceProgression === 'number'
+            && record.completedSessionsSinceProgression === normalizeCompletedSessionsSinceProgression(record.completedSessionsSinceProgression)
+            ? record.completedSessionsSinceProgression
+            : undefined,
+        notes: typeof record.notes === 'string' ? record.notes : undefined,
         updatedAt: typeof record.updatedAt === 'string' ? record.updatedAt : nowIso,
         sync: normalizeSyncMetadata(record.sync, id, nowIso),
     };

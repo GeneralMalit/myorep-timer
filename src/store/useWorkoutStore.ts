@@ -19,6 +19,7 @@ import {
 import {
     createSavedWorkout,
     isValidWorkoutConfig,
+    normalizeSavedWorkout,
     normalizeSetsInput,
     pickConfigFromState,
     sanitizeSavedWorkoutConfig,
@@ -42,6 +43,10 @@ import {
     DEFAULT_SESSION_WORKOUT_CONFIG,
     hasWorkoutProgressionChanged,
     normalizeCompletedSessionsSinceProgression,
+    projectLinkedWorkoutState,
+    reconcileLinkedWorkoutState,
+    workoutConfigsMatch,
+    type LinkedWorkoutNameChange,
 } from '@/utils/workoutProgression';
 
 export type AppPhase = 'setup' | 'timer';
@@ -146,7 +151,7 @@ const DEFAULT_KINETIC_PALETTE = {
     kineticFinishedColor: '#A8FF5A',
 } as const;
 
-const WORKOUT_STORE_PERSIST_VERSION = 7;
+const WORKOUT_STORE_PERSIST_VERSION = 8;
 
 type SessionProgressionSnapshotNode = Pick<WorkoutSessionNode, 'id' | 'config' | 'notes' | 'sourceWorkoutId'>;
 
@@ -182,6 +187,187 @@ const sessionMatchesProgressionSnapshot = (
             const current = workoutNodesById.get(original.id);
             return Boolean(current && !hasWorkoutProgressionChanged(original, current));
         });
+};
+
+const createWorkoutProgressionRecord = (
+    workout: Pick<SavedWorkout, 'id' | 'notes'> & SavedWorkoutConfig,
+): Pick<WorkoutSessionNode, 'config' | 'sourceWorkoutId' | 'notes'> => ({
+    config: sanitizeSavedWorkoutConfig(workout),
+    sourceWorkoutId: workout.id,
+    notes: workout.notes ?? '',
+});
+
+const incrementProgressionCount = (value: unknown): number => {
+    const count = normalizeCompletedSessionsSinceProgression(value);
+    return count === Number.MAX_SAFE_INTEGER ? count : count + 1;
+};
+
+const updateProjectedSession = (
+    previous: SavedSession,
+    projected: SavedSession,
+    nowIso: string,
+): SavedSession => {
+    if (projected === previous) {
+        return previous;
+    }
+
+    const nodes = projected.nodes.map((node, index) => (
+        node === previous.nodes[index] ? node : { ...node, updatedAt: nowIso }
+    ));
+    return {
+        ...projected,
+        nodes,
+        updatedAt: nowIso,
+        sync: touchSyncMetadata(previous.sync, previous.id, nowIso),
+    };
+};
+
+const projectLinkedLibrariesForWrite = (
+    workouts: SavedWorkout[],
+    savedSessions: SavedSession[],
+    editingSessionDraft: SavedSession | null,
+    nameChanges: ReadonlyMap<string, LinkedWorkoutNameChange>,
+    nowIso: string,
+): { savedSessions: SavedSession[]; editingSessionDraft: SavedSession | null } => {
+    const sessions = editingSessionDraft
+        ? [...savedSessions, editingSessionDraft]
+        : savedSessions;
+    const projected = projectLinkedWorkoutState(workouts, sessions, nameChanges).sessions;
+    const nextSavedSessions = savedSessions.map((session, index) => (
+        updateProjectedSession(session, projected[index]!, nowIso)
+    ));
+    const nextEditingSessionDraft = editingSessionDraft
+        ? updateProjectedSession(
+            editingSessionDraft,
+            projected[projected.length - 1]!,
+            nowIso,
+        )
+        : null;
+
+    return {
+        savedSessions: nextSavedSessions,
+        editingSessionDraft: nextEditingSessionDraft,
+    };
+};
+
+type DraftLinkedWorkoutEdit = {
+    nameNode?: WorkoutSessionNode;
+    configNode?: WorkoutSessionNode;
+    notesNode?: WorkoutSessionNode;
+    progressionChanged: boolean;
+};
+
+const collectDraftLinkedWorkoutEdits = (
+    draft: SavedSession,
+    savedSessions: SavedSession[],
+    savedWorkouts: SavedWorkout[],
+): Map<string, DraftLinkedWorkoutEdit> => {
+    const baseline = savedSessions.find((session) => session.id === draft.id);
+    const baselineNodes = new Map(
+        (baseline?.nodes ?? [])
+            .filter(isWorkoutSessionNode)
+            .map((node) => [node.id, node] as const),
+    );
+    const workoutsById = new Map(savedWorkouts.map((workout) => [workout.id, workout] as const));
+    const edits = new Map<string, DraftLinkedWorkoutEdit>();
+
+    draft.nodes.forEach((node) => {
+        if (!isWorkoutSessionNode(node) || !node.sourceWorkoutId) {
+            return;
+        }
+
+        const workout = workoutsById.get(node.sourceWorkoutId);
+        if (!workout || workout.sync?.pendingDelete) {
+            return;
+        }
+
+        const originalNode = baselineNodes.get(node.id);
+        const previousNode = originalNode?.sourceWorkoutId === node.sourceWorkoutId
+            ? originalNode
+            : { ...createWorkoutProgressionRecord(workout), name: workout.name };
+        const configChanged = !workoutConfigsMatch(previousNode.config, node.config);
+        const notesChanged = (previousNode.notes ?? '') !== (node.notes ?? '');
+        const nameChanged = previousNode.name !== node.name;
+        if (!configChanged && !notesChanged && !nameChanged) {
+            return;
+        }
+
+        const current = edits.get(workout.id) ?? { progressionChanged: false };
+        if (configChanged && (!current.configNode || current.configNode.updatedAt <= node.updatedAt)) {
+            current.configNode = node;
+        }
+        if (notesChanged && (!current.notesNode || current.notesNode.updatedAt <= node.updatedAt)) {
+            current.notesNode = node;
+        }
+        if (nameChanged && (!current.nameNode || current.nameNode.updatedAt <= node.updatedAt)) {
+            current.nameNode = node;
+        }
+        current.progressionChanged = current.progressionChanged
+            || hasWorkoutProgressionChanged(previousNode, node);
+        edits.set(workout.id, current);
+    });
+
+    return edits;
+};
+
+const applyDraftLinkedWorkoutEdits = (
+    draft: SavedSession,
+    savedSessions: SavedSession[],
+    savedWorkouts: SavedWorkout[],
+    nowIso: string,
+): { savedWorkouts: SavedWorkout[]; nameChanges: Map<string, LinkedWorkoutNameChange> } => {
+    const edits = collectDraftLinkedWorkoutEdits(draft, savedSessions, savedWorkouts);
+    const nameChanges = new Map<string, LinkedWorkoutNameChange>();
+    const nextSavedWorkouts = savedWorkouts.map((workout) => {
+        const edit = edits.get(workout.id);
+        if (!edit) {
+            return workout;
+        }
+
+        const name = edit.nameNode?.name ?? workout.name;
+        if (name !== workout.name) {
+            nameChanges.set(workout.id, { previousName: workout.name, nextName: name });
+        }
+        return {
+            ...workout,
+            name,
+            ...(edit.configNode ? sanitizeSavedWorkoutConfig(edit.configNode.config) : {}),
+            notes: edit.notesNode ? edit.notesNode.notes ?? '' : workout.notes ?? '',
+            completedSessionsSinceProgression: edit.progressionChanged
+                ? 0
+                : normalizeCompletedSessionsSinceProgression(workout.completedSessionsSinceProgression),
+            updatedAt: nowIso,
+            sync: touchSyncMetadata(workout.sync, workout.id, nowIso),
+        };
+    });
+
+    return { savedWorkouts: nextSavedWorkouts, nameChanges };
+};
+
+const enqueueWorkoutUpsert = (workout: SavedWorkout, queuedAt: string): void => {
+    const sync = normalizeSyncMetadata(workout.sync, workout.id, queuedAt);
+    enqueueSyncChangeIfEnabled({
+        entityType: 'workout',
+        entityId: workout.id,
+        localId: sync.localId,
+        operation: 'upsert',
+        revision: sync.revision,
+        expectedRemoteRevision: sync.baseRevision,
+        queuedAt,
+    });
+};
+
+const enqueueSessionUpsert = (session: SavedSession, queuedAt: string): void => {
+    const sync = normalizeSyncMetadata(session.sync, session.id, queuedAt);
+    enqueueSyncChangeIfEnabled({
+        entityType: 'session',
+        entityId: session.id,
+        localId: sync.localId,
+        operation: 'upsert',
+        revision: sync.revision,
+        expectedRemoteRevision: sync.baseRevision,
+        queuedAt,
+    });
 };
 
 type PersistedWorkoutStoreState = {
@@ -373,12 +559,16 @@ const migratePersistedWorkoutStoreState = (persistedState: unknown): PersistedWo
     const myoWorkSecs = typeof state.myoWorkSecs === 'string' ? state.myoWorkSecs : defaults.myoWorkSecs;
     const limit = getConcentricLimitFromPaces(seconds, myoWorkSecs);
     const nowIso = new Date().toISOString();
-    const savedWorkouts = Array.isArray(state.savedWorkouts)
+    const persistedWorkouts = Array.isArray(state.savedWorkouts)
         ? (state.savedWorkouts as SavedWorkout[]).map((workout) => normalizePersistedWorkout(workout, nowIso))
         : defaults.savedWorkouts;
-    const savedSessions = Array.isArray(state.savedSessions)
+    const persistedSessions = Array.isArray(state.savedSessions)
         ? (state.savedSessions as SavedSession[]).map((session) => normalizePersistedSession(session, nowIso))
         : defaults.savedSessions;
+    const { workouts: savedWorkouts, sessions: savedSessions } = reconcileLinkedWorkoutState(
+        persistedWorkouts,
+        persistedSessions,
+    );
     const selectedSavedWorkoutId = typeof state.selectedSavedWorkoutId === 'string' && savedWorkouts.some((workout) => workout.id === state.selectedSavedWorkoutId)
         ? state.selectedSavedWorkoutId
         : defaults.selectedSavedWorkoutId;
@@ -478,6 +668,7 @@ interface WorkoutState {
     sessionLastTickSecond: number;
     completedSessionWorkoutNodeIds: string[];
     activeSessionProgressionSnapshot: SessionProgressionSnapshot | null;
+    activeSessionRunSnapshot: SavedSession | null;
 
     // UI State
     showSettings: boolean;
@@ -497,7 +688,7 @@ interface WorkoutState {
     setWorkoutConfig: (config: Partial<Pick<WorkoutState, 'sets' | 'reps' | 'seconds' | 'rest' | 'myoReps' | 'myoWorkSecs'>>) => void;
     saveCurrentWorkout: (name: string) => { ok: boolean; error?: string; id?: string };
     saveCurrentWorkoutAs: (name: string) => { ok: boolean; error?: string; id?: string };
-    saveWorkoutFromConfig: (name: string, config: SavedWorkoutConfig, targetWorkoutId?: string | null) => { ok: boolean; error?: string; id?: string };
+    saveWorkoutFromConfig: (name: string, config: SavedWorkoutConfig, targetWorkoutId?: string | null, notes?: string) => { ok: boolean; error?: string; id?: string };
     loadWorkout: (id: string) => { ok: boolean; error?: string };
     renameWorkout: (id: string, name: string) => { ok: boolean; error?: string };
     deleteWorkout: (id: string) => void;
@@ -583,6 +774,7 @@ export const useWorkoutStore = create<WorkoutState>()(
             sessionLastTickSecond: -1,
             completedSessionWorkoutNodeIds: [],
             activeSessionProgressionSnapshot: null,
+            activeSessionRunSnapshot: null,
             showSettings: false,
             isSidebarCollapsed: false,
             isAccountCardCollapsed: false,
@@ -638,7 +830,7 @@ export const useWorkoutStore = create<WorkoutState>()(
                     },
                 };
             }),
-            saveWorkoutFromConfig: (name, config, targetWorkoutId = null) => {
+            saveWorkoutFromConfig: (name, config, targetWorkoutId = null, notes) => {
                 const normalizedName = name.trim();
                 if (!normalizedName) {
                     return { ok: false, error: 'Workout name is required.' };
@@ -660,13 +852,6 @@ export const useWorkoutStore = create<WorkoutState>()(
                 }
 
                 if (targetWorkout) {
-                    const nextWorkout = {
-                        ...targetWorkout,
-                        name: normalizedName,
-                        ...sanitizedConfig,
-                        updatedAt: nowIso,
-                        sync: touchSyncMetadata(targetWorkout.sync, targetWorkout.id, nowIso),
-                    };
                     const duplicateName = state.savedWorkouts.some((workout) => (
                         workout.id !== targetWorkout.id
                         && workout.name.toLowerCase() === normalizedName.toLowerCase()
@@ -675,22 +860,55 @@ export const useWorkoutStore = create<WorkoutState>()(
                         return { ok: false, error: 'Workout name already exists.' };
                     }
 
+                    const notesValue = notes ?? targetWorkout.notes ?? '';
+                    const progressionChanged = hasWorkoutProgressionChanged(
+                        createWorkoutProgressionRecord(targetWorkout),
+                        {
+                            config: sanitizedConfig,
+                            sourceWorkoutId: targetWorkout.id,
+                            notes: notesValue,
+                        },
+                    );
+                    const nextWorkout = normalizeSavedWorkout({
+                        ...targetWorkout,
+                        name: normalizedName,
+                        ...sanitizedConfig,
+                        notes: notesValue,
+                        completedSessionsSinceProgression: progressionChanged
+                            ? 0
+                            : targetWorkout.completedSessionsSinceProgression,
+                        updatedAt: nowIso,
+                        sync: touchSyncMetadata(targetWorkout.sync, targetWorkout.id, nowIso),
+                    });
+                    const savedWorkouts = state.savedWorkouts.map((workout) => (
+                        workout.id === targetWorkout.id ? nextWorkout : workout
+                    ));
+                    const nameChanges = new Map<string, LinkedWorkoutNameChange>();
+                    if (targetWorkout.name !== normalizedName) {
+                        nameChanges.set(targetWorkout.id, {
+                            previousName: targetWorkout.name,
+                            nextName: normalizedName,
+                        });
+                    }
+                    const linked = projectLinkedLibrariesForWrite(
+                        savedWorkouts,
+                        state.savedSessions,
+                        state.editingSessionDraft,
+                        nameChanges,
+                        nowIso,
+                    );
+
                     set({
-                        savedWorkouts: state.savedWorkouts.map((workout) => (
-                            workout.id === targetWorkout.id
-                                ? nextWorkout
-                                : workout
-                        )),
+                        savedWorkouts,
+                        savedSessions: linked.savedSessions,
+                        editingSessionDraft: linked.editingSessionDraft,
                         selectedSavedWorkoutId: targetWorkout.id,
                     });
-                    enqueueSyncChangeIfEnabled({
-                        entityType: 'workout',
-                        entityId: targetWorkout.id,
-                        localId: nextWorkout.sync.localId,
-                        operation: 'upsert',
-                        revision: nextWorkout.sync.revision,
-                        expectedRemoteRevision: nextWorkout.sync.baseRevision,
-                        queuedAt: nowIso,
+                    enqueueWorkoutUpsert(nextWorkout, nowIso);
+                    state.savedSessions.forEach((session, index) => {
+                        if (linked.savedSessions[index] !== session) {
+                            enqueueSessionUpsert(linked.savedSessions[index], nowIso);
+                        }
                     });
 
                     return { ok: true, id: targetWorkout.id };
@@ -702,22 +920,15 @@ export const useWorkoutStore = create<WorkoutState>()(
                 }
 
                 const createdWorkout = createSavedWorkout(normalizedName, sanitizedConfig, nowIso);
-                const newWorkout = {
+                const newWorkout = normalizeSavedWorkout({
                     ...createdWorkout,
+                    notes: notes ?? '',
                     sync: normalizeSyncMetadata(createdWorkout.sync, createdWorkout.id, nowIso),
-                };
+                });
                 set({
                     savedWorkouts: [...state.savedWorkouts, newWorkout],
                 });
-                enqueueSyncChangeIfEnabled({
-                    entityType: 'workout',
-                    entityId: newWorkout.id,
-                    localId: newWorkout.sync.localId,
-                    operation: 'upsert',
-                    revision: newWorkout.sync.revision,
-                    expectedRemoteRevision: newWorkout.sync.baseRevision,
-                    queuedAt: nowIso,
-                });
+                enqueueWorkoutUpsert(newWorkout, nowIso);
 
                 return { ok: true, id: newWorkout.id };
             },
@@ -764,29 +975,37 @@ export const useWorkoutStore = create<WorkoutState>()(
                 if (!nextWorkout) {
                     return { ok: false, error: 'Workout not found.' };
                 }
-                const updatedWorkout = {
+                const updatedWorkout = normalizeSavedWorkout({
                     ...nextWorkout,
                     name: normalizedName,
                     updatedAt: nowIso,
                     sync: touchSyncMetadata(nextWorkout.sync, nextWorkout.id, nowIso),
-                };
+                });
+                const savedWorkouts = state.savedWorkouts.map((workout) => (
+                    workout.id === id ? updatedWorkout : workout
+                ));
+                const nameChanges = new Map<string, LinkedWorkoutNameChange>();
+                if (nextWorkout.name !== normalizedName) {
+                    nameChanges.set(id, { previousName: nextWorkout.name, nextName: normalizedName });
+                }
+                const linked = projectLinkedLibrariesForWrite(
+                    savedWorkouts,
+                    state.savedSessions,
+                    state.editingSessionDraft,
+                    nameChanges,
+                    nowIso,
+                );
                 set({
-                    savedWorkouts: state.savedWorkouts.map((workout) => (
-                        workout.id === id
-                            ? updatedWorkout
-                            : workout
-                    )),
+                    savedWorkouts,
+                    savedSessions: linked.savedSessions,
+                    editingSessionDraft: linked.editingSessionDraft,
                 });
-                enqueueSyncChangeIfEnabled({
-                    entityType: 'workout',
-                    entityId: id,
-                    localId: updatedWorkout.sync.localId,
-                    operation: 'upsert',
-                    revision: updatedWorkout.sync.revision,
-                    expectedRemoteRevision: updatedWorkout.sync.baseRevision,
-                    queuedAt: nowIso,
+                enqueueWorkoutUpsert(updatedWorkout, nowIso);
+                state.savedSessions.forEach((session, index) => {
+                    if (linked.savedSessions[index] !== session) {
+                        enqueueSessionUpsert(linked.savedSessions[index], nowIso);
+                    }
                 });
-
                 return { ok: true };
             },
             deleteWorkout: (id) => set((state) => {
@@ -900,9 +1119,12 @@ export const useWorkoutStore = create<WorkoutState>()(
                     workouts: state.savedWorkouts,
                     sessions: state.savedSessions,
                 }, payload);
+                const linked = reconcileLinkedWorkoutState(workouts, sessions, {
+                    includeLinkedCounters: true,
+                });
                 set({
-                    savedWorkouts: workouts,
-                    savedSessions: sessions,
+                    savedWorkouts: linked.workouts,
+                    savedSessions: linked.sessions,
                     lastImportSummary: summary,
                 });
                 return summary;
@@ -950,34 +1172,53 @@ export const useWorkoutStore = create<WorkoutState>()(
                 }
 
                 const nowIso = new Date().toISOString();
+                const linkedEdits = applyDraftLinkedWorkoutEdits(
+                    draft,
+                    state.savedSessions,
+                    state.savedWorkouts,
+                    nowIso,
+                );
+                const linked = projectLinkedLibrariesForWrite(
+                    linkedEdits.savedWorkouts,
+                    state.savedSessions,
+                    draft,
+                    linkedEdits.nameChanges,
+                    nowIso,
+                );
+                const committedDraft = linked.editingSessionDraft!;
                 const nextSession = {
-                    ...draft,
+                    ...committedDraft,
                     name: normalizedName,
                     updatedAt: nowIso,
-                    sync: touchSyncMetadata(draft.sync, draft.id, nowIso),
+                    sync: touchSyncMetadata(committedDraft.sync, committedDraft.id, nowIso),
                 };
-
-                const exists = state.savedSessions.some((session) => session.id === nextSession.id);
-                const savedSessions = exists
-                    ? state.savedSessions.map((session) => (session.id === nextSession.id ? nextSession : session))
-                    : [...state.savedSessions, nextSession];
+                const found = linked.savedSessions.some((session) => session.id === nextSession.id);
+                const savedSessions = found
+                    ? linked.savedSessions.map((session) => (
+                        session.id === nextSession.id ? nextSession : session
+                    ))
+                    : [...linked.savedSessions, nextSession];
 
                 set({
+                    savedWorkouts: linkedEdits.savedWorkouts,
                     savedSessions,
                     editingSessionDraft: nextSession,
                     editingSessionId: nextSession.id,
                     selectedSavedSessionId: nextSession.id,
                     setupMode: 'session',
                 });
-                enqueueSyncChangeIfEnabled({
-                    entityType: 'session',
-                    entityId: nextSession.id,
-                    localId: nextSession.sync.localId,
-                    operation: 'upsert',
-                    revision: nextSession.sync.revision,
-                    expectedRemoteRevision: nextSession.sync.baseRevision,
-                    queuedAt: nowIso,
+                state.savedWorkouts.forEach((workout, index) => {
+                    if (linkedEdits.savedWorkouts[index] !== workout) {
+                        enqueueWorkoutUpsert(linkedEdits.savedWorkouts[index], nowIso);
+                    }
                 });
+                state.savedSessions.forEach((session, index) => {
+                    const updated = linked.savedSessions[index];
+                    if (updated !== session && updated.id !== nextSession.id) {
+                        enqueueSessionUpsert(updated, nowIso);
+                    }
+                });
+                enqueueSessionUpsert(nextSession, nowIso);
 
                 return { ok: true, id: nextSession.id };
             },
@@ -998,30 +1239,52 @@ export const useWorkoutStore = create<WorkoutState>()(
                 }
 
                 const nowIso = new Date().toISOString();
-                const copiedDraft = duplicateSavedSession(draft, nowIso);
+                const linkedEdits = applyDraftLinkedWorkoutEdits(
+                    draft,
+                    state.savedSessions,
+                    state.savedWorkouts,
+                    nowIso,
+                );
+                const linked = projectLinkedLibrariesForWrite(
+                    linkedEdits.savedWorkouts,
+                    state.savedSessions,
+                    draft,
+                    linkedEdits.nameChanges,
+                    nowIso,
+                );
+                const copiedDraft = duplicateSavedSession(linked.editingSessionDraft!, nowIso);
+                const copiedNodes = projectLinkedWorkoutState(
+                    linkedEdits.savedWorkouts,
+                    [copiedDraft],
+                    linkedEdits.nameChanges,
+                ).sessions[0]!;
                 const session = {
-                    ...copiedDraft,
+                    ...copiedNodes,
                     name: normalizedName,
                     updatedAt: nowIso,
-                    sync: touchSyncMetadata(copiedDraft.sync, copiedDraft.id, nowIso),
+                    sync: touchSyncMetadata(copiedNodes.sync, copiedNodes.id, nowIso),
                 };
 
                 set({
-                    savedSessions: [...state.savedSessions, session],
+                    savedWorkouts: linkedEdits.savedWorkouts,
+                    savedSessions: [...linked.savedSessions, session],
                     editingSessionId: session.id,
                     editingSessionDraft: session,
                     selectedSavedSessionId: session.id,
                     setupMode: 'session',
                 });
-                enqueueSyncChangeIfEnabled({
-                    entityType: 'session',
-                    entityId: session.id,
-                    localId: session.sync.localId,
-                    operation: 'upsert',
-                    revision: session.sync.revision,
-                    expectedRemoteRevision: session.sync.baseRevision,
-                    queuedAt: nowIso,
+                state.savedWorkouts.forEach((workout, index) => {
+                    if (linkedEdits.savedWorkouts[index] !== workout) {
+                        enqueueWorkoutUpsert(linkedEdits.savedWorkouts[index], nowIso);
+                    }
                 });
+                state.savedSessions.forEach((savedSession, index) => {
+                    const updated = linked.savedSessions[index];
+                    if (updated !== savedSession) {
+                        enqueueSessionUpsert(updated, nowIso);
+                    }
+                });
+                enqueueSessionUpsert(session, nowIso);
 
                 return { ok: true, id: session.id };
             },
@@ -1118,6 +1381,7 @@ export const useWorkoutStore = create<WorkoutState>()(
                     sessionLastTickSecond: state.activeSessionId === id ? -1 : state.sessionLastTickSecond,
                     isTimerRunning: state.activeSessionId === id ? false : state.isTimerRunning,
                     activeSessionProgressionSnapshot: state.activeSessionId === id ? null : state.activeSessionProgressionSnapshot,
+                    activeSessionRunSnapshot: state.activeSessionId === id ? null : state.activeSessionRunSnapshot,
                     completedSessionWorkoutNodeIds: state.activeSessionId === id ? [] : state.completedSessionWorkoutNodeIds,
                 };
 
@@ -1170,11 +1434,15 @@ export const useWorkoutStore = create<WorkoutState>()(
 
                 const nowIso = new Date().toISOString();
                 const clone = duplicateSavedSession(session, nowIso);
+                const projectedClone = projectLinkedWorkoutState(
+                    state.savedWorkouts,
+                    [clone],
+                ).sessions[0]!;
                 const duplicated = {
-                    ...clone,
+                    ...projectedClone,
                     name: normalizedName,
                     updatedAt: nowIso,
-                    sync: touchSyncMetadata(clone.sync, clone.id, nowIso),
+                    sync: touchSyncMetadata(projectedClone.sync, projectedClone.id, nowIso),
                 };
                 set({
                     savedSessions: [...state.savedSessions, duplicated],
@@ -1251,12 +1519,18 @@ export const useWorkoutStore = create<WorkoutState>()(
 
                 const nowIso = new Date().toISOString();
                 const draft = state.editingSessionDraft ?? createEmptySessionDraft('Session', nowIso);
-                const node = createWorkoutSessionNode(
-                    workout.name,
-                    sanitizeSavedWorkoutConfig(workout),
-                    nowIso,
-                    workout.id,
-                );
+                const node = {
+                    ...createWorkoutSessionNode(
+                        workout.name,
+                        sanitizeSavedWorkoutConfig(workout),
+                        nowIso,
+                        workout.id,
+                    ),
+                    notes: workout.notes ?? '',
+                    completedSessionsSinceProgression: normalizeCompletedSessionsSinceProgression(
+                        workout.completedSessionsSinceProgression,
+                    ),
+                };
                 const nextDraft = {
                     ...draft,
                     nodes: [...draft.nodes, node],
@@ -1486,19 +1760,17 @@ export const useWorkoutStore = create<WorkoutState>()(
                 const sanitizedConfig = sanitizeSavedWorkoutConfig(workout);
                 const nextNodes = draft.nodes.map((node) => (
                     node.id === nodeId && isWorkoutSessionNode(node)
-                        ? (() => {
-                            const nextNode = {
-                                ...node,
-                                name: workout.name,
-                                notes: node.notes ?? '',
-                                config: sanitizedConfig,
-                                sourceWorkoutId: workout.id,
-                                updatedAt: nowIso,
-                            };
-                            return hasWorkoutProgressionChanged(node, nextNode)
-                                ? { ...nextNode, completedSessionsSinceProgression: 0 }
-                                : nextNode;
-                        })()
+                        ? {
+                            ...node,
+                            name: workout.name,
+                            notes: workout.notes ?? '',
+                            config: sanitizedConfig,
+                            sourceWorkoutId: workout.id,
+                            completedSessionsSinceProgression: normalizeCompletedSessionsSinceProgression(
+                                workout.completedSessionsSinceProgression,
+                            ),
+                            updatedAt: nowIso,
+                        }
                         : node
                 ));
 
@@ -1561,6 +1833,7 @@ export const useWorkoutStore = create<WorkoutState>()(
                     sessionLastTickSecond: -1,
                     completedSessionWorkoutNodeIds: [],
                     activeSessionProgressionSnapshot: createSessionProgressionSnapshot(nextSession),
+                    activeSessionRunSnapshot: nextSession,
                 });
                 return { ok: true };
             },
@@ -1570,8 +1843,10 @@ export const useWorkoutStore = create<WorkoutState>()(
                 isRunningSession: false,
             })),
             resumeSession: () => set((state) => {
-                const session = state.savedSessions.find((item) => item.id === state.activeSessionId)
-                    ?? (state.editingSessionDraft?.id === state.activeSessionId ? state.editingSessionDraft : null);
+                const session = state.activeSessionRunSnapshot?.id === state.activeSessionId
+                    ? state.activeSessionRunSnapshot
+                    : state.savedSessions.find((item) => item.id === state.activeSessionId)
+                        ?? (state.editingSessionDraft?.id === state.activeSessionId ? state.editingSessionDraft : null);
                 const hasActiveNode = Boolean(
                     session
                     && state.activeSessionNodeIndex >= 0
@@ -1598,6 +1873,7 @@ export const useWorkoutStore = create<WorkoutState>()(
                 sessionLastTickSecond: -1,
                 completedSessionWorkoutNodeIds: [],
                 activeSessionProgressionSnapshot: null,
+                activeSessionRunSnapshot: null,
                 isTimerRunning: false,
                 timeLeft: 0,
                 setElapsedTime: 0,
@@ -1606,7 +1882,9 @@ export const useWorkoutStore = create<WorkoutState>()(
             }),
             advanceSessionNode: () => {
                 const state = get();
-                const session = state.savedSessions.find((item) => item.id === state.activeSessionId) ?? state.editingSessionDraft;
+                const session = state.activeSessionRunSnapshot?.id === state.activeSessionId
+                    ? state.activeSessionRunSnapshot
+                    : state.savedSessions.find((item) => item.id === state.activeSessionId) ?? state.editingSessionDraft;
                 if (!session) {
                     set({
                         sessionStatus: 'idle',
@@ -1623,6 +1901,7 @@ export const useWorkoutStore = create<WorkoutState>()(
                         lastTickSecond: -1,
                         completedSessionWorkoutNodeIds: [],
                         activeSessionProgressionSnapshot: null,
+                        activeSessionRunSnapshot: null,
                     });
                     return;
                 }
@@ -1635,62 +1914,128 @@ export const useWorkoutStore = create<WorkoutState>()(
                 if (nextIndex >= session.nodes.length) {
                     const snapshot = state.activeSessionProgressionSnapshot;
                     const completedNodeIds = new Set(state.completedSessionWorkoutNodeIds);
+                    const savedSession = state.savedSessions.find((item) => item.id === session.id);
                     const matchingDraft = state.editingSessionDraft?.id === session.id
                         ? state.editingSessionDraft
                         : null;
+                    const currentSession = savedSession ?? matchingDraft ?? session;
                     const shouldIncrementProgression = Boolean(
                         snapshot
                         && snapshot.workoutNodes.length > 0
-                        && sessionMatchesProgressionSnapshot(session, snapshot)
+                        && sessionMatchesProgressionSnapshot(currentSession, snapshot)
                         && (!matchingDraft || sessionMatchesProgressionSnapshot(matchingDraft, snapshot))
                         && snapshot.workoutNodes.every((node) => completedNodeIds.has(node.id)),
                     );
                     const nowIso = new Date().toISOString();
-                    const incrementedNodes = session.nodes.map((node) => (
-                        shouldIncrementProgression && isWorkoutSessionNode(node)
-                            ? {
-                                ...node,
-                                completedSessionsSinceProgression: normalizeCompletedSessionsSinceProgression(
-                                    node.completedSessionsSinceProgression,
-                                ) === Number.MAX_SAFE_INTEGER
-                                    ? Number.MAX_SAFE_INTEGER
-                                    : normalizeCompletedSessionsSinceProgression(node.completedSessionsSinceProgression) + 1,
+                    const progressionSourceIds = new Set<string>();
+                    if (shouldIncrementProgression) {
+                        const availableWorkoutIds = new Set(
+                            state.savedWorkouts
+                                .filter((workout) => !workout.sync?.pendingDelete)
+                                .map((workout) => workout.id),
+                        );
+                        snapshot!.workoutNodes.forEach((node) => {
+                            if (node.sourceWorkoutId && availableWorkoutIds.has(node.sourceWorkoutId)) {
+                                progressionSourceIds.add(node.sourceWorkoutId);
                             }
-                            : node
-                    ));
-                    const updatedSession = {
-                        ...session,
-                        nodes: incrementedNodes,
-                        timesUsed: session.timesUsed + 1,
-                        lastUsedAt: nowIso,
-                        updatedAt: nowIso,
-                        sync: touchSyncMetadata(session.sync, session.id, nowIso),
-                    };
-                    const incrementedCounts = new Map<string, number | undefined>(
+                        });
+                    }
+                    const savedWorkouts = shouldIncrementProgression
+                        ? state.savedWorkouts.map((workout) => {
+                            if (!progressionSourceIds.has(workout.id)) {
+                                return workout;
+                            }
+
+                            const completedSessionsSinceProgression = incrementProgressionCount(
+                                workout.completedSessionsSinceProgression,
+                            );
+                            if (completedSessionsSinceProgression === normalizeCompletedSessionsSinceProgression(
+                                workout.completedSessionsSinceProgression,
+                            )) {
+                                return workout;
+                            }
+
+                            return normalizeSavedWorkout({
+                                ...workout,
+                                completedSessionsSinceProgression,
+                                updatedAt: nowIso,
+                                sync: touchSyncMetadata(workout.sync, workout.id, nowIso),
+                            });
+                        })
+                        : state.savedWorkouts;
+                    const linked = shouldIncrementProgression
+                        ? projectLinkedLibrariesForWrite(
+                            savedWorkouts,
+                            state.savedSessions,
+                            state.editingSessionDraft,
+                            new Map(),
+                            nowIso,
+                        )
+                        : {
+                            savedSessions: state.savedSessions,
+                            editingSessionDraft: state.editingSessionDraft,
+                        };
+                    const projectedCurrentSession = linked.savedSessions.find((item) => item.id === session.id)
+                        ?? currentSession;
+                    const unlinkedNodes = new Set(
                         shouldIncrementProgression
-                            ? incrementedNodes
-                                .filter(isWorkoutSessionNode)
-                                .map((node) => [node.id, node.completedSessionsSinceProgression] as const)
+                            ? snapshot!.workoutNodes
+                                .filter((node) => !node.sourceWorkoutId || !progressionSourceIds.has(node.sourceWorkoutId))
+                                .map((node) => node.id)
                             : [],
                     );
-                    const editingSessionDraft = state.editingSessionDraft?.id === session.id
+                    const updatedSession = {
+                        ...projectedCurrentSession,
+                        nodes: projectedCurrentSession.nodes.map((node) => (
+                            isWorkoutSessionNode(node) && unlinkedNodes.has(node.id) && completedNodeIds.has(node.id)
+                                ? {
+                                    ...node,
+                                    completedSessionsSinceProgression: incrementProgressionCount(
+                                        node.completedSessionsSinceProgression,
+                                    ),
+                                    updatedAt: nowIso,
+                                }
+                                : node
+                        )),
+                        timesUsed: currentSession.timesUsed + 1,
+                        lastUsedAt: nowIso,
+                        updatedAt: nowIso,
+                        sync: touchSyncMetadata(currentSession.sync, currentSession.id, nowIso),
+                    };
+                    const savedSessions = state.savedSessions.some((entry) => entry.id === session.id)
+                        ? linked.savedSessions.map((entry) => (
+                            entry.id === session.id ? updatedSession : entry
+                        ))
+                        : [...linked.savedSessions, updatedSession];
+                    const projectedDraft = linked.editingSessionDraft;
+                    const editingSessionDraft = projectedDraft?.id === session.id
                         ? {
-                            ...state.editingSessionDraft,
-                            nodes: state.editingSessionDraft.nodes.map((node) => (
-                                isWorkoutSessionNode(node) && incrementedCounts.has(node.id)
-                                    ? { ...node, completedSessionsSinceProgression: incrementedCounts.get(node.id)! }
-                                    : node
-                            )),
-                            timesUsed: state.editingSessionDraft.timesUsed + 1,
+                            ...projectedDraft,
+                            nodes: projectedDraft.nodes.map((node) => {
+                                if (!shouldIncrementProgression || !isWorkoutSessionNode(node)) {
+                                    return node;
+                                }
+
+                                const currentNode = updatedSession.nodes.find((entry) => (
+                                    isWorkoutSessionNode(entry) && entry.id === node.id
+                                ));
+                                return currentNode && isWorkoutSessionNode(currentNode)
+                                    ? {
+                                        ...node,
+                                        completedSessionsSinceProgression: currentNode.completedSessionsSinceProgression,
+                                    }
+                                    : node;
+                            }),
+                            timesUsed: projectedDraft.timesUsed + 1,
                             lastUsedAt: nowIso,
                             updatedAt: nowIso,
                             sync: updatedSession.sync,
                         }
-                        : state.editingSessionDraft;
+                        : projectedDraft;
+
                     set({
-                        savedSessions: state.savedSessions.map((entry) => (
-                            entry.id === session.id ? updatedSession : entry
-                        )),
+                        savedWorkouts,
+                        savedSessions,
                         editingSessionDraft,
                         sessionStatus: 'finished',
                         isRunningSession: false,
@@ -1703,15 +2048,17 @@ export const useWorkoutStore = create<WorkoutState>()(
                         sessionRestTimeLeft: 0,
                         completedSessionWorkoutNodeIds: [],
                         activeSessionProgressionSnapshot: null,
+                        activeSessionRunSnapshot: null,
                     });
-                    enqueueSyncChangeIfEnabled({
-                        entityType: 'session',
-                        entityId: updatedSession.id,
-                        localId: updatedSession.sync.localId,
-                        operation: 'upsert',
-                        revision: updatedSession.sync.revision,
-                        expectedRemoteRevision: updatedSession.sync.baseRevision,
-                        queuedAt: nowIso,
+                    state.savedWorkouts.forEach((workout, index) => {
+                        if (savedWorkouts[index] !== workout) {
+                            enqueueWorkoutUpsert(savedWorkouts[index], nowIso);
+                        }
+                    });
+                    state.savedSessions.forEach((saved, index) => {
+                        if (savedSessions[index] !== saved) {
+                            enqueueSessionUpsert(savedSessions[index], nowIso);
+                        }
                     });
                     return;
                 }
@@ -1720,7 +2067,9 @@ export const useWorkoutStore = create<WorkoutState>()(
             },
             startSessionNode: (index) => {
                 const state = get();
-                const session = state.savedSessions.find((item) => item.id === state.activeSessionId) ?? state.editingSessionDraft;
+                const session = state.activeSessionRunSnapshot?.id === state.activeSessionId
+                    ? state.activeSessionRunSnapshot
+                    : state.savedSessions.find((item) => item.id === state.activeSessionId) ?? state.editingSessionDraft;
                 if (!session || index < 0 || index >= session.nodes.length) {
                     set({
                         sessionStatus: 'finished',
@@ -1732,6 +2081,7 @@ export const useWorkoutStore = create<WorkoutState>()(
                         setElapsedTime: 0,
                         completedSessionWorkoutNodeIds: [],
                         activeSessionProgressionSnapshot: null,
+                        activeSessionRunSnapshot: null,
                     });
                     return;
                 }
@@ -1800,7 +2150,9 @@ export const useWorkoutStore = create<WorkoutState>()(
                     return;
                 }
 
-                const session = state.savedSessions.find((item) => item.id === state.activeSessionId) ?? state.editingSessionDraft;
+                const session = state.activeSessionRunSnapshot?.id === state.activeSessionId
+                    ? state.activeSessionRunSnapshot
+                    : state.savedSessions.find((item) => item.id === state.activeSessionId) ?? state.editingSessionDraft;
                 const node = session?.nodes.find((entry) => entry.id === nodeId);
                 const activeNode = session?.nodes[state.activeSessionNodeIndex];
                 if (
@@ -1879,6 +2231,7 @@ export const useWorkoutStore = create<WorkoutState>()(
                         sessionLastTickSecond: -1,
                         completedSessionWorkoutNodeIds: [],
                         activeSessionProgressionSnapshot: null,
+                        activeSessionRunSnapshot: null,
                     });
                 }
             },
@@ -1898,6 +2251,7 @@ export const useWorkoutStore = create<WorkoutState>()(
                 sessionLastTickSecond: -1,
                 completedSessionWorkoutNodeIds: [],
                 activeSessionProgressionSnapshot: null,
+                activeSessionRunSnapshot: null,
             }),
 
             setIsTimerRunning: (running: boolean) => set((state) => ({
@@ -2027,11 +2381,18 @@ export const useWorkoutStore = create<WorkoutState>()(
             },
             replaceLibrariesFromSync: ({ workouts, sessions }) => set((state) => {
                 const nowIso = new Date().toISOString();
-                const nextWorkouts = workouts.map((workout) => ({
-                    ...workout,
-                    sync: normalizeSyncMetadata(workout.sync, workout.id, workout.updatedAt ?? nowIso),
-                }));
-                const nextSessions = sessions.map((session) => normalizePersistedSession(session, session.updatedAt ?? nowIso));
+                const normalizedWorkouts = workouts.map((workout) => normalizePersistedWorkout(
+                    workout,
+                    workout.updatedAt ?? nowIso,
+                ));
+                const normalizedSessions = sessions.map((session) => normalizePersistedSession(
+                    session,
+                    session.updatedAt ?? nowIso,
+                ));
+                const { workouts: nextWorkouts, sessions: nextSessions } = reconcileLinkedWorkoutState(
+                    normalizedWorkouts,
+                    normalizedSessions,
+                );
                 const selectedSavedWorkoutId = state.selectedSavedWorkoutId && nextWorkouts.some((workout) => workout.id === state.selectedSavedWorkoutId)
                     ? state.selectedSavedWorkoutId
                     : null;
@@ -2068,6 +2429,7 @@ export const useWorkoutStore = create<WorkoutState>()(
                         sessionRestTimeLeft: 0,
                         completedSessionWorkoutNodeIds: [],
                         activeSessionProgressionSnapshot: null,
+                        activeSessionRunSnapshot: null,
                     } : {}),
                 };
             }),
@@ -2186,6 +2548,7 @@ export const useWorkoutStore = create<WorkoutState>()(
                     sessionLastTickSecond: state.activeSessionId === id ? -1 : state.sessionLastTickSecond,
                     isTimerRunning: state.activeSessionId === id ? false : state.isTimerRunning,
                     activeSessionProgressionSnapshot: state.activeSessionId === id ? null : state.activeSessionProgressionSnapshot,
+                    activeSessionRunSnapshot: state.activeSessionId === id ? null : state.activeSessionRunSnapshot,
                     completedSessionWorkoutNodeIds: state.activeSessionId === id ? [] : state.completedSessionWorkoutNodeIds,
                 }));
                 return true;
@@ -2240,7 +2603,9 @@ export const useWorkoutStore = create<WorkoutState>()(
                                 lastTickSecond: -1,
                             });
                         } else if (isSessionRunning) {
-                            const session = state.savedSessions.find((item) => item.id === state.activeSessionId) ?? state.editingSessionDraft;
+                            const session = state.activeSessionRunSnapshot?.id === state.activeSessionId
+                                ? state.activeSessionRunSnapshot
+                                : state.savedSessions.find((item) => item.id === state.activeSessionId) ?? state.editingSessionDraft;
                             const activeNode = session?.nodes[state.activeSessionNodeIndex];
                             if (activeNode?.type === 'workout') {
                                 get().recordCompletedSessionWorkoutNode(activeNode.id);
@@ -2279,7 +2644,9 @@ export const useWorkoutStore = create<WorkoutState>()(
                         lastTickSecond: -1,
                     });
                 } else if (isSessionRunning) {
-                    const session = state.savedSessions.find((item) => item.id === state.activeSessionId) ?? state.editingSessionDraft;
+                    const session = state.activeSessionRunSnapshot?.id === state.activeSessionId
+                        ? state.activeSessionRunSnapshot
+                        : state.savedSessions.find((item) => item.id === state.activeSessionId) ?? state.editingSessionDraft;
                     const activeNode = session?.nodes[state.activeSessionNodeIndex];
                     if (activeNode?.type === 'workout') {
                         get().recordCompletedSessionWorkoutNode(activeNode.id);

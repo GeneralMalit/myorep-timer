@@ -103,6 +103,8 @@ export interface SupabaseSavedWorkoutRow {
     rest: string;
     myo_reps: string;
     myo_work_secs: string;
+    notes?: string;
+    completed_sessions_since_progression?: number;
     times_used: number;
     last_used_at: string | null;
     revision: number;

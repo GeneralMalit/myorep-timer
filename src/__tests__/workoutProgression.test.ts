@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { WorkoutSessionNode } from '@/types/savedSessions';
+import { createSavedWorkout } from '@/utils/savedWorkouts';
 import { createSavedSession, createWorkoutSessionNode } from '@/utils/savedSessions';
 import { fromSupabaseSavedSessionRow, toSupabaseSavedSessionWriteRow } from '@/utils/sync';
 import {
@@ -11,6 +12,7 @@ import {
     hasWorkoutProgressionChanged,
     normalizeCompletedSessionsSinceProgression,
     normalizeSessionNodeForPersistence,
+    reconcileLinkedWorkoutState,
 } from '@/utils/workoutProgression';
 
 const baseNode = (overrides: Partial<WorkoutSessionNode> = {}): WorkoutSessionNode => ({
@@ -128,5 +130,91 @@ describe('workoutProgression utilities', () => {
         expect(normalizeSessionNodeForPersistence({
             type: 'workout', id: 'malformed-legacy', name: 'Legacy',
         })).toMatchObject({ completedSessionsSinceProgression: 0 });
+    });
+
+    it('migrates legacy linked counters by maximum and notes from the latest linked block', () => {
+        const nowIso = '2026-01-01T00:00:00.000Z';
+        const config = { ...DEFAULT_WORKOUT_CONFIG, reps: '7' };
+        const source = createSavedWorkout('Shared source', config, nowIso);
+        delete source.notes;
+        delete source.completedSessionsSinceProgression;
+        const firstNode = baseNode({
+            id: 'linked-first',
+            sourceWorkoutId: source.id,
+            notes: 'Earlier note',
+            completedSessionsSinceProgression: 5,
+            updatedAt: '2026-01-01T00:00:00.000Z',
+        });
+        const secondNode = baseNode({
+            id: 'linked-second',
+            sourceWorkoutId: source.id,
+            notes: 'Latest note',
+            completedSessionsSinceProgression: 3,
+            updatedAt: '2026-01-02T00:00:00.000Z',
+        });
+        const unlinkedNode = baseNode({
+            id: 'unlinked',
+            sourceWorkoutId: null,
+            notes: 'Session-only note',
+            completedSessionsSinceProgression: 8,
+        });
+        const firstSession = createSavedSession('First', [firstNode], nowIso);
+        const secondSession = createSavedSession('Second', [secondNode, unlinkedNode], nowIso);
+        const reconciled = reconcileLinkedWorkoutState([source], [firstSession, secondSession]);
+        const migratedSource = reconciled.workouts[0];
+        const linkedNodes = reconciled.sessions.flatMap((session) => session.nodes.filter(
+            (node): node is WorkoutSessionNode => node.type === 'workout' && node.sourceWorkoutId === source.id,
+        ));
+        const migratedUnlinked = reconciled.sessions.find((session) => session.id === secondSession.id)!.nodes.find(
+            (node): node is WorkoutSessionNode => node.type === 'workout' && node.sourceWorkoutId === null,
+        )!;
+
+        expect(migratedSource).toMatchObject({
+            notes: 'Latest note',
+            completedSessionsSinceProgression: 5,
+        });
+        expect(linkedNodes.map((node) => node.id)).toEqual([firstSession.nodes[0].id, secondSession.nodes[0].id]);
+        for (const node of linkedNodes) {
+            expect(node).toMatchObject({
+                config,
+                notes: 'Latest note',
+                completedSessionsSinceProgression: 5,
+            });
+        }
+        expect(migratedUnlinked).toMatchObject({
+            id: secondSession.nodes[1].id,
+            config: unlinkedNode.config,
+            notes: 'Session-only note',
+            completedSessionsSinceProgression: 8,
+        });
+    });
+
+    it('keeps an explicit shared reset authoritative unless importing legacy linked counters', () => {
+        const nowIso = '2026-01-01T00:00:00.000Z';
+        const source = {
+            ...createSavedWorkout('Shared source', DEFAULT_WORKOUT_CONFIG, nowIso),
+            notes: 'Canonical note',
+            completedSessionsSinceProgression: 0,
+        };
+        const session = createSavedSession('Legacy link', [baseNode({
+            id: 'stale-link',
+            sourceWorkoutId: source.id,
+            notes: 'Stale note',
+            completedSessionsSinceProgression: 5,
+        })], nowIso);
+
+        const normal = reconcileLinkedWorkoutState([source], [session]);
+        expect(normal.workouts[0].completedSessionsSinceProgression).toBe(0);
+        expect(normal.sessions[0].nodes[0]).toMatchObject({
+            notes: 'Canonical note',
+            completedSessionsSinceProgression: 0,
+        });
+
+        const importing = reconcileLinkedWorkoutState([source], [session], { includeLinkedCounters: true });
+        expect(importing.workouts[0].completedSessionsSinceProgression).toBe(5);
+        expect(importing.sessions[0].nodes[0]).toMatchObject({
+            notes: 'Canonical note',
+            completedSessionsSinceProgression: 5,
+        });
     });
 });

@@ -2,6 +2,10 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import KineticSessionBuilder from '@/components/kinetic/KineticSessionBuilder';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
+import { useAccountStore } from '@/store/useAccountStore';
+import { useSyncStore } from '@/store/useSyncStore';
+import type { SyncEntityType } from '@/types/sync';
+import { createSyncMetadata } from '@/utils/sync';
 import type { SavedSession, RestSessionNode, WorkoutSessionNode } from '@/types/savedSessions';
 
 const originalMatchMedia = window.matchMedia;
@@ -94,10 +98,100 @@ const resetStore = () => {
     });
 };
 
+const resetSyncFeedback = () => {
+    useSyncStore.setState({
+        syncEnabled: false,
+        firstSyncState: 'idle',
+        currentUserId: null,
+        queuedOperations: [],
+        queueStatus: 'idle',
+        syncError: null,
+        authExpired: false,
+    });
+    useAccountStore.getState().clearAccountState();
+};
+
+const prepareCloudSync = () => {
+    useAccountStore.setState({
+        entitlement: {
+            userId: 'save-feedback-account',
+            plan: 'plus',
+            cloudSyncEnabled: true,
+            updatedAt: '2026-09-01T00:00:00.000Z',
+            source: 'supabase',
+        },
+    });
+    useSyncStore.setState({
+        syncEnabled: true,
+        firstSyncState: 'idle',
+        currentUserId: 'save-feedback-account',
+        queuedOperations: [],
+        queueStatus: 'idle',
+        syncError: null,
+        authExpired: false,
+    });
+};
+
+const acknowledgeSavedEntity = (entityType: SyncEntityType, entityId: string) => {
+    const queueItem = useSyncStore.getState().queuedOperations.find((item) => (
+        item.entityType === entityType && item.entityId === entityId
+    ));
+    expect(queueItem).toBeDefined();
+    if (!queueItem) return;
+
+    const store = useWorkoutStore.getState();
+    const record = entityType === 'session'
+        ? store.savedSessions.find((entry) => entry.id === entityId)
+        : store.savedWorkouts.find((entry) => entry.id === entityId);
+    expect(record).toBeDefined();
+    if (!record?.sync) return;
+
+    const remoteRevision = queueItem.revision;
+    const remoteSyncedAt = new Date(new Date(record.updatedAt).getTime() + 60_000).toISOString();
+    const remoteRecord = {
+        ...record,
+        updatedAt: remoteSyncedAt,
+        sync: {
+            ...record.sync,
+            updatedAt: remoteSyncedAt,
+            remoteId: `remote-${entityId}`,
+            revision: remoteRevision,
+            baseRevision: remoteRevision,
+            dirty: false,
+            pendingDelete: false,
+            deletedAt: null,
+            lastSyncedAt: remoteSyncedAt,
+        },
+    };
+    const acknowledged = entityType === 'session'
+        ? store.acknowledgeSyncedSession(remoteRecord as typeof store.savedSessions[number], {
+            localId: queueItem.localId,
+            revision: queueItem.revision,
+            remoteRevision,
+        })
+        : store.acknowledgeSyncedWorkout(remoteRecord as typeof store.savedWorkouts[number], {
+            localId: queueItem.localId,
+            revision: queueItem.revision,
+            remoteRevision,
+        });
+    expect(acknowledged).toBe(true);
+    expect(useSyncStore.getState().acknowledgeUpsert({
+        operationId: queueItem.operationId,
+        ownerUserId: queueItem.ownerUserId,
+        authGeneration: queueItem.authGeneration,
+        entityType: queueItem.entityType,
+        localId: queueItem.localId,
+        revision: queueItem.revision,
+        expectedRemoteRevision: queueItem.expectedRemoteRevision,
+        syncedAt: remoteSyncedAt,
+    })).toBe(true);
+};
+
 describe('KineticSessionBuilder', () => {
     beforeEach(() => {
         vi.useFakeTimers();
         resetStore();
+        resetSyncFeedback();
         HTMLElement.prototype.scrollIntoView = vi.fn();
         mockCompactViewport(false);
     });
@@ -109,6 +203,118 @@ describe('KineticSessionBuilder', () => {
             writable: true,
             value: originalMatchMedia,
         });
+    });
+
+    it('waits for every linked save revision before confirming a session save', () => {
+        prepareCloudSync();
+        const now = '2026-09-01T00:00:00.000Z';
+        const workoutId = 'shared-workout';
+        const workout = {
+            id: workoutId,
+            name: 'Shared workout',
+            ...workoutConfig,
+            notes: '',
+            completedSessionsSinceProgression: 0,
+            timesUsed: 0,
+            lastUsedAt: null,
+            createdAt: now,
+            updatedAt: now,
+            sync: createSyncMetadata(workoutId, now),
+        };
+        const sessionA = {
+            ...createSession([createWorkoutNode({ sourceWorkoutId: workoutId })]),
+            id: 'session-a',
+            sync: createSyncMetadata('session-a', now),
+        };
+        const sessionB = {
+            ...createSession([createWorkoutNode({ id: 'workout-node-b', sourceWorkoutId: workoutId })]),
+            id: 'session-b',
+            sync: createSyncMetadata('session-b', now),
+        };
+        useWorkoutStore.setState({
+            savedSessions: [sessionA, sessionB],
+            savedWorkouts: [workout],
+            editingSessionId: sessionA.id,
+            editingSessionDraft: sessionA,
+            editingSessionNodeId: sessionA.nodes[0].id,
+        });
+        useSyncStore.getState().enqueueEntityChange({
+            entityType: 'workout',
+            entityId: workout.id,
+            localId: workout.sync.localId,
+            operation: 'upsert',
+            revision: workout.sync.revision,
+            expectedRemoteRevision: workout.sync.baseRevision,
+        });
+        useSyncStore.getState().enqueueEntityChange({
+            entityType: 'session',
+            entityId: sessionB.id,
+            localId: sessionB.sync.localId,
+            operation: 'upsert',
+            revision: sessionB.sync.revision,
+            expectedRemoteRevision: sessionB.sync.baseRevision,
+        });
+
+        render(<KineticSessionBuilder />);
+        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+        const notice = screen.getByTestId('builder-save-feedback');
+        expect(notice).toHaveTextContent(/waiting for cloud confirmation of 3 saved revisions/i);
+        const savedSessionOperation = useSyncStore.getState().queuedOperations.find((item) => (
+            item.entityType === 'session' && item.entityId === sessionA.id
+        ));
+        expect(savedSessionOperation).toBeDefined();
+        expect(savedSessionOperation?.revision).toBeGreaterThan(
+            (savedSessionOperation?.expectedRemoteRevision ?? 0) + 1,
+        );
+        act(() => acknowledgeSavedEntity('session', sessionA.id));
+        expect(notice).toHaveTextContent(/waiting for cloud confirmation of 2 saved revisions/i);
+        expect(notice).not.toHaveTextContent(/synced to the cloud/i);
+
+        act(() => acknowledgeSavedEntity('workout', workout.id));
+        expect(notice).toHaveTextContent(/waiting for cloud confirmation/i);
+        expect(notice).not.toHaveTextContent(/synced to the cloud/i);
+
+        act(() => acknowledgeSavedEntity('session', sessionB.id));
+        expect(notice).toHaveTextContent('Saved locally and synced to the cloud.');
+        act(() => vi.advanceTimersByTime(5000));
+        expect(notice).toHaveTextContent('Saved locally and synced to the cloud.');
+        act(() => useWorkoutStore.setState({
+            editingSessionId: sessionB.id,
+            editingSessionDraft: sessionB,
+            editingSessionNodeId: sessionB.nodes[0].id,
+        }));
+        expect(screen.queryByTestId('builder-save-feedback')).not.toBeInTheDocument();
+    });
+
+    it('keeps Save As status visible while offline and updates after its exact revision is acknowledged', () => {
+        prepareCloudSync();
+        const session = createSession([createRestNode()]);
+        useWorkoutStore.setState({
+            savedSessions: [session],
+            editingSessionId: session.id,
+            editingSessionDraft: session,
+            editingSessionNodeId: session.nodes[0].id,
+        });
+
+        render(<KineticSessionBuilder />);
+        act(() => window.dispatchEvent(new Event('offline')));
+        fireEvent.click(screen.getByRole('button', { name: 'Save session as copy' }));
+        const dialog = screen.getByRole('dialog', { name: 'Save a copy' });
+        fireEvent.change(within(dialog).getByLabelText('Session name'), { target: { value: 'Leg Session Copy' } });
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Save copy' }));
+
+        const savedCopy = useWorkoutStore.getState().savedSessions.find((entry) => entry.name === 'Leg Session Copy');
+        expect(savedCopy).toBeDefined();
+        const notice = screen.getByTestId('builder-save-feedback');
+        expect(notice).toHaveTextContent(/saved locally while offline/i);
+        act(() => vi.advanceTimersByTime(5000));
+        expect(notice).toHaveTextContent(/saved locally while offline/i);
+
+        act(() => window.dispatchEvent(new Event('online')));
+        expect(notice).toHaveTextContent(/waiting for cloud confirmation/i);
+        act(() => acknowledgeSavedEntity('session', savedCopy!.id));
+        expect(notice).toHaveTextContent('Saved locally and synced to the cloud.');
     });
 
     it('keeps the session name in the action row and adds valid default blocks at the timeline end', () => {
@@ -250,37 +456,6 @@ describe('KineticSessionBuilder', () => {
                 myoWorkSecs: '2',
             },
         });
-        expect(screen.getByRole('status')).toHaveTextContent('Workout linked');
     });
 
-    it('renews identical success notifications and never lets the old timer clear the newer one', () => {
-        const session = createSession([createWorkoutNode()]);
-        useWorkoutStore.setState({
-            savedSessions: [session],
-            editingSessionId: session.id,
-            editingSessionDraft: session,
-            editingSessionNodeId: session.nodes[0].id,
-        });
-
-        render(<KineticSessionBuilder />);
-
-        fireEvent.click(screen.getByRole('button', { name: 'Remove Workout 1' }));
-        expect(screen.getByRole('status')).toHaveTextContent('Block removed');
-
-        act(() => {
-            vi.advanceTimersByTime(2999);
-        });
-        fireEvent.click(screen.getByRole('button', { name: 'Add workout' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Remove Workout 1' }));
-
-        act(() => {
-            vi.advanceTimersByTime(1);
-        });
-        expect(screen.getByRole('status')).toHaveTextContent('Block removed');
-
-        act(() => {
-            vi.advanceTimersByTime(2999);
-        });
-        expect(screen.queryByRole('status')).not.toBeInTheDocument();
-    });
 });

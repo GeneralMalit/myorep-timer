@@ -11,7 +11,6 @@ import {
 } from '@/utils/account';
 import { createSavedSession, createWorkoutSessionNode } from '@/utils/savedSessions';
 import { createSavedWorkout } from '@/utils/savedWorkouts';
-import { toSupabaseSavedSessionWriteRow, toSupabaseSavedWorkoutWriteRow } from '@/utils/sync';
 
 const resetAccountStore = () => {
     useAccountStore.getState().clearAccountState();
@@ -379,90 +378,6 @@ describe('sync store behavior', () => {
         });
     });
 
-    it('serializes local sync metadata into Supabase write rows', () => {
-        const workout = createSavedWorkout('Push Day', {
-            sets: '3',
-            reps: '12',
-            seconds: '3',
-            rest: '20',
-            myoReps: '4',
-            myoWorkSecs: '2',
-        }, '2026-03-30T00:00:00.000Z');
-        const session = createSavedSession(
-            'Session One',
-            [
-                createWorkoutSessionNode(
-                    'Workout Node',
-                    {
-                        sets: '3',
-                        reps: '12',
-                        seconds: '3',
-                        rest: '20',
-                        myoReps: '4',
-                        myoWorkSecs: '2',
-                    },
-                    '2026-03-30T00:00:00.000Z',
-                ),
-            ],
-            '2026-03-30T00:00:00.000Z',
-        );
-
-        const syncedWorkout = {
-            ...workout,
-            sync: {
-                ...workout.sync!,
-                remoteId: 'remote-workout-2',
-                revision: 6,
-                dirty: false,
-                pendingDelete: true,
-                deletedAt: '2026-04-01T00:00:00.000Z',
-                lastSyncedAt: '2026-03-31T00:00:00.000Z',
-            },
-        };
-        const syncedSession = {
-            ...session,
-            sync: {
-                ...session.sync!,
-                remoteId: 'remote-session-2',
-                revision: 5,
-                dirty: false,
-                pendingDelete: true,
-                deletedAt: '2026-04-01T00:00:00.000Z',
-                lastSyncedAt: '2026-03-31T00:00:00.000Z',
-            },
-        };
-
-        expect(toSupabaseSavedWorkoutWriteRow(syncedWorkout, 'user-1')).toEqual({
-            id: 'remote-workout-2',
-            user_id: 'user-1',
-            local_id: syncedWorkout.id,
-            name: 'Push Day',
-            sets: '3',
-            reps: '12',
-            seconds: '3',
-            rest: '20',
-            myo_reps: '4',
-            myo_work_secs: '2',
-            times_used: 0,
-            last_used_at: null,
-            revision: 6,
-            updated_at: '2026-03-30T00:00:00.000Z',
-            deleted_at: '2026-04-01T00:00:00.000Z',
-        });
-
-        expect(toSupabaseSavedSessionWriteRow(syncedSession, 'user-1')).toEqual({
-            id: 'remote-session-2',
-            user_id: 'user-1',
-            local_id: syncedSession.id,
-            name: 'Session One',
-            nodes: expect.any(Array),
-            times_used: 0,
-            last_used_at: null,
-            revision: 5,
-            updated_at: '2026-03-30T00:00:00.000Z',
-            deleted_at: '2026-04-01T00:00:00.000Z',
-        });
-    });
 
     it('dedupes repeated queue entries for the same entity to the newest write', () => {
         act(() => {

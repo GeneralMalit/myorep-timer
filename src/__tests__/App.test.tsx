@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import App from '@/App';
 import { useAccountStore } from '@/store/useAccountStore';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
+import { useSyncStore } from '@/store/useSyncStore';
 import { audioEngine } from '@/utils/audioEngine';
 
 const getSupabaseClientMock = vi.hoisted(() => vi.fn());
@@ -1231,6 +1232,13 @@ describe('App', () => {
 
     it('opens a node editor modal with unsaved workout controls', () => {
         grantPlusAccess();
+        useSyncStore.setState({
+            syncEnabled: false,
+            firstSyncState: 'idle',
+            queuedOperations: [],
+            queueStatus: 'idle',
+            syncError: null,
+        });
         useWorkoutStore.setState({
             setupMode: 'session',
             editingSessionNodeId: 'node-1',
@@ -1242,6 +1250,7 @@ describe('App', () => {
                         id: 'node-1',
                         type: 'workout',
                         name: 'Workout Node',
+                        notes: '60kg last set',
                         config: {
                             sets: '3',
                             reps: '10',
@@ -1278,7 +1287,8 @@ describe('App', () => {
         expect(useWorkoutStore.getState().editingSessionDraft?.nodes[0].type === 'workout'
             ? useWorkoutStore.getState().editingSessionDraft?.nodes[0].sourceWorkoutId
             : null).toBe(useWorkoutStore.getState().savedWorkouts[1].id);
-        expect(screen.getByRole('status')).toHaveTextContent(/saved and linked/i);
+        expect(useWorkoutStore.getState().savedWorkouts[1].notes).toBe('60kg last set');
+        expect(screen.getByTestId('builder-save-feedback')).toHaveTextContent(/saved locally.*cloud sync is off/i);
     });
 
     it('shows the missing-link warning for orphaned workout nodes and closes from the backdrop', () => {

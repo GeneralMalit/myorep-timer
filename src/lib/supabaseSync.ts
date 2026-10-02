@@ -6,12 +6,12 @@ import type {
     SupabaseSavedWorkoutRow,
 } from '@/types/sync';
 import { clearSyncMetadata, normalizeSyncMetadata, toSupabaseSavedSessionWriteRow, toSupabaseSavedWorkoutWriteRow } from '@/utils/sync';
-import { normalizeSessionNodeForPersistence } from '@/utils/workoutProgression';
+import { normalizeCompletedSessionsSinceProgression, normalizeSessionNodeForPersistence } from '@/utils/workoutProgression';
 
 export const SYNC_SNAPSHOT_PAGE_SIZE = 250;
 export const SYNC_MAX_LIBRARY_ROWS = 5_000;
 
-const WORKOUT_SELECT = 'id,user_id,local_id,name,sets,reps,seconds,rest,myo_reps,myo_work_secs,times_used,last_used_at,revision,updated_at,deleted_at,created_at';
+const WORKOUT_SELECT = 'id,user_id,local_id,name,sets,reps,seconds,rest,myo_reps,myo_work_secs,notes,completed_sessions_since_progression,times_used,last_used_at,revision,updated_at,deleted_at,created_at';
 const SESSION_SELECT = 'id,user_id,local_id,name,nodes,times_used,last_used_at,revision,updated_at,deleted_at,created_at';
 
 export type SyncMutationConflictReason = 'stale_revision' | 'tombstone_wins' | 'revision_mismatch';
@@ -82,6 +82,8 @@ export const fromSupabaseSavedWorkoutRow = (row: SupabaseSavedWorkoutRow): Saved
     rest: row.rest,
     myoReps: row.myo_reps,
     myoWorkSecs: row.myo_work_secs,
+    notes: row.notes ?? '',
+    completedSessionsSinceProgression: normalizeCompletedSessionsSinceProgression(row.completed_sessions_since_progression),
     timesUsed: row.times_used,
     lastUsedAt: row.last_used_at,
     createdAt: row.created_at ?? row.updated_at,

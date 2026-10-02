@@ -18,7 +18,7 @@ import type {
     SupabaseSavedWorkoutWriteRow,
     SyncMetadata,
 } from '@/types/sync';
-import { normalizeSessionNodesForPersistence } from '@/utils/workoutProgression';
+import { normalizeCompletedSessionsSinceProgression, normalizeSessionNodesForPersistence } from '@/utils/workoutProgression';
 
 const parsePositiveInt = (value: unknown): number | null => {
     if (typeof value !== 'string' && typeof value !== 'number') {
@@ -250,6 +250,8 @@ export const toSupabaseSavedWorkoutWriteRow = (
         rest: workout.rest,
         myo_reps: workout.myoReps,
         myo_work_secs: workout.myoWorkSecs,
+        notes: workout.notes ?? '',
+        completed_sessions_since_progression: normalizeCompletedSessionsSinceProgression(workout.completedSessionsSinceProgression),
         times_used: workout.timesUsed,
         last_used_at: workout.lastUsedAt,
         revision: sync?.revision ?? 1,
@@ -309,6 +311,8 @@ export const fromSupabaseSavedWorkoutRow = (
         rest: row.rest,
         myoReps: row.myo_reps,
         myoWorkSecs: row.myo_work_secs,
+        notes: row.notes ?? '',
+        completedSessionsSinceProgression: normalizeCompletedSessionsSinceProgression(row.completed_sessions_since_progression),
         timesUsed: parsePositiveInt(row.times_used) ?? 0,
         lastUsedAt: row.last_used_at,
         createdAt: nowIso,

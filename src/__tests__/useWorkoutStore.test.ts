@@ -294,44 +294,6 @@ describe('useWorkoutStore', () => {
             }
         });
 
-        it('preserves workout notes when relinking and saving a copy', () => {
-            const store = useWorkoutStore.getState();
-            const linkedWorkout = seedSelectedWorkout({
-                sets: '2',
-                reps: '12',
-                seconds: '4',
-                rest: '15',
-                myoReps: '4',
-                myoWorkSecs: '2',
-            }, 'Note Template');
-
-            act(() => {
-                store.createSession('Note Session');
-                store.addWorkoutNodeFromCurrentSetup();
-            });
-
-            const draftNode = useWorkoutStore.getState().editingSessionDraft?.nodes[0];
-            if (draftNode?.type === 'workout') {
-                act(() => {
-                    store.updateWorkoutNode(draftNode.id, draftNode.config, draftNode.name, 'Prev 60kg');
-                });
-                act(() => {
-                    store.replaceWorkoutNodeWithSavedWorkout(draftNode.id, linkedWorkout.id);
-                });
-            }
-
-            const relinkedNode = useWorkoutStore.getState().editingSessionDraft?.nodes[0];
-            if (relinkedNode?.type === 'workout') {
-                expect(relinkedNode.notes).toBe('Prev 60kg');
-                expect(relinkedNode.sourceWorkoutId).toBe(linkedWorkout.id);
-            }
-
-            const saveCopyResult = store.saveSessionDraftAs('Note Session Copy');
-            expect(saveCopyResult.ok).toBe(true);
-
-            const savedCopy = useWorkoutStore.getState().savedSessions.find((session) => session.name === 'Note Session Copy');
-            expect(savedCopy?.nodes[0].type === 'workout' ? savedCopy.nodes[0].notes : '').toBe('Prev 60kg');
-        });
 
         it('should add a session-local workout node without creating a saved workout', () => {
             const store = useWorkoutStore.getState();

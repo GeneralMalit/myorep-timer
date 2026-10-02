@@ -4,6 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import BuilderSaveFeedback from '@/components/BuilderSaveFeedback';
+import { useBuilderSaveFeedback } from '@/hooks/useBuilderSaveFeedback';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
 import type { SavedWorkoutConfig } from '@/types/savedWorkouts';
 import { normalizeSetsInput } from '@/utils/savedWorkouts';
@@ -35,7 +37,11 @@ const SessionNodeEditor = () => {
     const updateWorkoutNode = useWorkoutStore((state) => state.updateWorkoutNode);
     const updateRestNode = useWorkoutStore((state) => state.updateRestNode);
     const [selectedWorkoutId, setSelectedWorkoutId] = useState('__new__');
-    const [feedback, setFeedback] = useState<{ tone: 'success' | 'error'; message: string } | null>(null);
+    const saveContextKey = editingSessionDraft?.id && editingSessionNodeId
+        ? `${editingSessionDraft.id}:${editingSessionNodeId}`
+        : editingSessionDraft?.id ?? null;
+    const { feedback: saveFeedback, dismiss: dismissSaveFeedback, trackWorkoutSave } = useBuilderSaveFeedback(saveContextKey);
+    const [feedback, setFeedback] = useState<{ message: string } | null>(null);
     const lastNodeIdRef = useRef<string | null>(null);
 
     const node = useMemo(() => {
@@ -179,27 +185,22 @@ const SessionNodeEditor = () => {
         }
 
         const targetWorkoutId = selectedWorkoutId === '__new__' ? null : selectedWorkoutId;
-        const result = saveWorkoutFromConfig(workoutNode.name, workoutNode.config, targetWorkoutId);
+        const result = saveWorkoutFromConfig(workoutNode.name, workoutNode.config, targetWorkoutId, workoutNode.notes ?? '');
 
         if (!result.ok) {
+            dismissSaveFeedback();
             setFeedback({
-                tone: 'error',
                 message: result.error ?? 'Could not save workout.',
             });
             return;
         }
 
+        setFeedback(null);
         if (result.id) {
             replaceWorkoutNodeWithSavedWorkout(workoutNode.id, result.id);
             setSelectedWorkoutId(result.id);
+            trackWorkoutSave(result.id);
         }
-
-        setFeedback({
-            tone: 'success',
-            message: targetWorkoutId
-                ? 'Workout updated and linked.'
-                : 'Workout saved and linked.',
-        });
     };
 
     return (
@@ -244,7 +245,9 @@ const SessionNodeEditor = () => {
                                 <span className="text-sm font-black italic tracking-tight">{node.name}</span>
                             </div>
                             <p className="text-sm text-muted-foreground">
-                                Edit this node directly. Save it to your workout library only if you want to reuse it later.
+                                {linkedWorkout
+                                    ? 'Save the session to update this workout everywhere it is linked, or use Save Workout to commit its settings and notes now.'
+                                    : 'Edit this node directly. Save it to your workout library only if you want to reuse it later.'}
                             </p>
                         </div>
 
@@ -293,7 +296,7 @@ const SessionNodeEditor = () => {
                                                 Notes
                                             </Label>
                                             <span className="text-[10px] text-muted-foreground">
-                                                Previous weight or short reminder
+                                                {linkedWorkout ? 'Shared with every block using this workout.' : 'Stored on this session block until it is linked to a workout.'}
                                             </span>
                                         </div>
                                         <Input
@@ -362,7 +365,7 @@ const SessionNodeEditor = () => {
                                             </div>
                                         </div>
                                         <p className="text-xs text-muted-foreground">
-                                            Replace this node's workout settings, or save the edited node back into your workout library.
+                                            Saving to an existing linked workout updates its settings and notes across every linked block; progression is shared. Inline blocks keep progression local to this session.
                                         </p>
                                     </div>
 
@@ -412,18 +415,17 @@ const SessionNodeEditor = () => {
 
                                     {feedback && (
                                         <div
-                                            role="status"
-                                            aria-live="polite"
-                                            className={cn(
-                                                'rounded-2xl px-3 py-2 text-xs font-semibold',
-                                                feedback.tone === 'success'
-                                                    ? 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
-                                                    : 'border border-destructive/30 bg-destructive/10 text-destructive',
-                                            )}
+                                            role="alert"
+                                            className="rounded-2xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs font-semibold text-destructive"
                                         >
                                             {feedback.message}
                                         </div>
                                     )}
+                                    <BuilderSaveFeedback
+                                        feedback={saveFeedback}
+                                        onDismiss={dismissSaveFeedback}
+                                        className="rounded-2xl shadow-none"
+                                    />
                                 </div>
                             ) : (
                                 <div className="rounded-[20px] border border-border/50 bg-muted/20 p-4 text-sm text-muted-foreground">

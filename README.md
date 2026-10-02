@@ -83,6 +83,12 @@ graph TD
 - **Persistent PiP Window**: Keeps the timer visible over workout logs or video players.
 - **Natural Voice TTS**: High-quality vocal coaching with customizable speed and pitch.
 
+### 4.3. Session Builder Saves and Progression
+- **Linked blocks share a workout**: Save or Save As commits their settings and notes to the workout library and every session that uses that link. Unlinked blocks remain independent within their session.
+- **Progression follows that ownership**: A fully completed session increments each linked workout once, even when it appears in multiple blocks. Settings or notes changes reset its shared reminder count; unlinked changes reset only that block. Skipped or incomplete sessions do not award progression credit.
+- **Save confirmation is local-first and acknowledgement-based**: Both builders keep a visible save status for pending sync, offline use, disabled/paused sync, and errors. “Saved locally and synced to the cloud” appears only after the saved revision and all linked dependencies are acknowledged remotely.
+- **Cloud deployment**: Apply `supabase/migrations/0008_linked_workout_progression.sql` before deploying this client; it adds shared notes/history and updates the sync RPCs.
+
 ---
 
 ## 5. Development Guide

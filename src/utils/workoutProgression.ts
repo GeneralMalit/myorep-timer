@@ -1,6 +1,12 @@
-import type { SavedWorkoutConfig } from '@/types/savedWorkouts';
-import type { SessionNode, WorkoutSessionNode } from '@/types/savedSessions';
-import { sanitizeSavedWorkoutConfig } from '@/utils/savedWorkouts';
+import type { SavedSession, SessionNode, WorkoutSessionNode } from '@/types/savedSessions';
+import type { SavedWorkout, SavedWorkoutConfig } from '@/types/savedWorkouts';
+import {
+    normalizeCompletedSessionsSinceProgression,
+    normalizeSavedWorkout,
+    sanitizeSavedWorkoutConfig,
+} from '@/utils/savedWorkouts';
+
+export { normalizeCompletedSessionsSinceProgression };
 
 /** The default number of completed sessions before a builder reminder appears. */
 export const DEFAULT_PROGRESSION_REMINDER_THRESHOLD = 3 as const;
@@ -34,22 +40,6 @@ const WORKOUT_CONFIG_KEYS: Array<keyof SavedWorkoutConfig> = [
     'myoReps',
     'myoWorkSecs',
 ];
-
-/**
- * Normalize the per-block progression counter at every data boundary.
- *
- * Counters are deliberately numbers rather than parseable strings.  A
- * malformed persisted/imported value must never turn into a fractional,
- * negative, infinite, or unsafe counter.
- */
-export const normalizeCompletedSessionsSinceProgression = (value: unknown): number => (
-    typeof value === 'number'
-        && Number.isFinite(value)
-        && Number.isSafeInteger(value)
-        && value >= 0
-        ? value
-        : 0
-);
 
 /** Return a mutable copy of the generic new-block config. */
 export const createDefaultWorkoutConfig = (): SavedWorkoutConfig => ({
@@ -132,6 +122,162 @@ export const normalizeSessionNodesForPersistence = (value: unknown): unknown[] =
         ? value.map((node) => normalizeSessionNodeForPersistence(node))
         : []
 );
+
+export type LinkedWorkoutNameChange = {
+    previousName: string;
+    nextName: string;
+};
+
+export const workoutConfigsMatch = (left: SavedWorkoutConfig, right: SavedWorkoutConfig): boolean => {
+    const sanitizedLeft = sanitizeSavedWorkoutConfig(left);
+    const sanitizedRight = sanitizeSavedWorkoutConfig(right);
+    return WORKOUT_CONFIG_KEYS.every((key) => sanitizedLeft[key] === sanitizedRight[key]);
+};
+
+/** Project canonical saved-workout fields onto every live linked session node. */
+export const projectLinkedWorkoutState = (
+    workouts: SavedWorkout[],
+    sessions: SavedSession[],
+    nameChanges: ReadonlyMap<string, LinkedWorkoutNameChange> = new Map(),
+): { workouts: SavedWorkout[]; sessions: SavedSession[] } => {
+    const workoutsById = new Map(
+        workouts
+            .filter((workout) => !workout.sync?.pendingDelete)
+            .map((workout) => [workout.id, workout] as const),
+    );
+    const projectedSessions = sessions.map((session) => {
+        if (session.sync?.pendingDelete) {
+            return session;
+        }
+
+        let changed = false;
+        const nodes = session.nodes.map((node) => {
+            if (node.type !== 'workout') {
+                return node;
+            }
+
+            const sourceWorkoutId = normalizeWorkoutSourceId(node.sourceWorkoutId);
+            const workout = sourceWorkoutId ? workoutsById.get(sourceWorkoutId) : undefined;
+            if (!workout) {
+                return node;
+            }
+
+            const sourceConfig = sanitizeSavedWorkoutConfig(workout);
+            const sourceNotes = typeof workout.notes === 'string' ? workout.notes : '';
+            const sourceCount = normalizeCompletedSessionsSinceProgression(
+                workout.completedSessionsSinceProgression,
+            );
+            const nameChange = nameChanges.get(workout.id);
+            const name = nameChange && node.name === nameChange.previousName
+                ? nameChange.nextName
+                : node.name;
+            if (
+                workoutConfigsMatch(node.config, sourceConfig)
+                && normalizeWorkoutNotes(node.notes) === sourceNotes
+                && normalizeCompletedSessionsSinceProgression(node.completedSessionsSinceProgression) === sourceCount
+                && node.name === name
+            ) {
+                return node;
+            }
+
+            changed = true;
+            return {
+                ...node,
+                name,
+                config: sourceConfig,
+                notes: sourceNotes,
+                completedSessionsSinceProgression: sourceCount,
+            };
+        });
+
+        return changed ? { ...session, nodes } : session;
+    });
+
+    return { workouts, sessions: projectedSessions };
+};
+
+/**
+ * Migrate legacy node-local linked counters and notes into their source record,
+ * then project the source's shared configuration and progression into links.
+ * Duplicate linked blocks use max, not sum, because they record the same
+ * completed session history.
+ */
+export const reconcileLinkedWorkoutState = (
+    workouts: SavedWorkout[],
+    sessions: SavedSession[],
+    options?: { includeLinkedCounters?: boolean },
+): { workouts: SavedWorkout[]; sessions: SavedSession[] } => {
+    const normalizedSessions = sessions.map((session) => ({
+        ...session,
+        nodes: session.nodes.map((node) => normalizeSessionNode(node)),
+    }));
+    const sourceWorkoutsById = new Map(
+        workouts
+            .filter((workout) => !workout.sync?.pendingDelete)
+            .map((workout) => [workout.id, workout] as const),
+    );
+    const progressionCounts = new Map<string, number>();
+    const legacyProgressionSources = new Set<string>();
+    const migratedNotes = new Map<string, { notes: string; updatedAt: number }>();
+
+    sourceWorkoutsById.forEach((workout, workoutId) => {
+        const count = normalizeCompletedSessionsSinceProgression(workout.completedSessionsSinceProgression);
+        progressionCounts.set(workoutId, count);
+        if (
+            options?.includeLinkedCounters
+            || typeof workout.completedSessionsSinceProgression !== 'number'
+            || workout.completedSessionsSinceProgression !== count
+        ) {
+            legacyProgressionSources.add(workoutId);
+        }
+    });
+
+    normalizedSessions.forEach((session) => {
+        if (session.sync?.pendingDelete) {
+            return;
+        }
+
+        session.nodes.forEach((node) => {
+            if (node.type !== 'workout' || !node.sourceWorkoutId || !sourceWorkoutsById.has(node.sourceWorkoutId)) {
+                return;
+            }
+
+            if (legacyProgressionSources.has(node.sourceWorkoutId)) {
+                progressionCounts.set(
+                    node.sourceWorkoutId,
+                    Math.max(
+                        progressionCounts.get(node.sourceWorkoutId) ?? 0,
+                        normalizeCompletedSessionsSinceProgression(node.completedSessionsSinceProgression),
+                    ),
+                );
+            }
+            const sourceWorkout = sourceWorkoutsById.get(node.sourceWorkoutId)!;
+            if (typeof sourceWorkout.notes === 'string') {
+                return;
+            }
+
+            const updatedAt = Date.parse(node.updatedAt);
+            const previous = migratedNotes.get(node.sourceWorkoutId);
+            if (!previous || (Number.isFinite(updatedAt) ? updatedAt : 0) >= previous.updatedAt) {
+                migratedNotes.set(node.sourceWorkoutId, {
+                    notes: normalizeWorkoutNotes(node.notes),
+                    updatedAt: Number.isFinite(updatedAt) ? updatedAt : 0,
+                });
+            }
+        });
+    });
+
+    const normalizedWorkouts = workouts.map((workout) => normalizeSavedWorkout({
+        ...workout,
+        notes: typeof workout.notes === 'string'
+            ? workout.notes
+            : migratedNotes.get(workout.id)?.notes ?? '',
+        completedSessionsSinceProgression: progressionCounts.get(workout.id)
+            ?? normalizeCompletedSessionsSinceProgression(workout.completedSessionsSinceProgression),
+    }));
+
+    return projectLinkedWorkoutState(normalizedWorkouts, normalizedSessions);
+};
 
 /**
  * Compare only values that represent a progression edit for one workout

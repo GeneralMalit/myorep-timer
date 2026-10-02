@@ -19,10 +19,9 @@ export interface WorkoutSessionNode extends SessionNodeBase {
     config: SavedWorkoutConfig;
     sourceWorkoutId: string | null;
     notes?: string;
-    /** Completed full sessions since this block's last progression edit. */
-    // Optional in the input type so legacy hand-authored/persisted records can
-    // still be read; every constructor and persistence boundary normalizes it
-    // to a finite nonnegative safe integer.
+    /** Unlinked-block count; linked blocks project their source workout count. */
+    // Optional in legacy/import input; normalized entities always carry a safe
+    // nonnegative integer, but sourceWorkoutId remains the canonical linked count.
     completedSessionsSinceProgression?: number;
 }
 

@@ -686,7 +686,7 @@ describe('useWorkoutStore edge cases', () => {
 
     it('clears session completion bookkeeping between runs and ignores workout nodes without source ids', () => {
         const store = useWorkoutStore.getState();
-        const trackedWorkout = buildWorkout('w-1', 'Tracked Workout');
+        const trackedWorkout = buildWorkout('w-1', 'Tracked Workout', { sets: '1', reps: '1', seconds: '1' });
         const session = {
             id: 'session-repeat',
             name: 'Repeat Session',

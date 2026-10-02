@@ -3,6 +3,10 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import SessionBuilder from '@/components/SessionBuilder';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
 import { audioEngine } from '@/utils/audioEngine';
+import { useAccountStore } from '@/store/useAccountStore';
+import { useSyncStore } from '@/store/useSyncStore';
+import type { SyncEntityType } from '@/types/sync';
+import { createSavedSession, createRestSessionNode, createWorkoutSessionNode } from '@/utils/savedSessions';
 
 const baseWorkout = {
     id: 'w-1',
@@ -81,10 +85,100 @@ const setMobileViewport = (matches: boolean) => {
     });
 };
 
+const resetSyncFeedback = () => {
+    useSyncStore.setState({
+        syncEnabled: false,
+        firstSyncState: 'idle',
+        currentUserId: null,
+        queuedOperations: [],
+        queueStatus: 'idle',
+        syncError: null,
+        authExpired: false,
+    });
+    useAccountStore.getState().clearAccountState();
+};
+
+const prepareCloudSync = () => {
+    useAccountStore.setState({
+        entitlement: {
+            userId: 'save-feedback-account',
+            plan: 'plus',
+            cloudSyncEnabled: true,
+            updatedAt: '2026-09-01T00:00:00.000Z',
+            source: 'supabase',
+        },
+    });
+    useSyncStore.setState({
+        syncEnabled: true,
+        firstSyncState: 'idle',
+        currentUserId: 'save-feedback-account',
+        queuedOperations: [],
+        queueStatus: 'idle',
+        syncError: null,
+        authExpired: false,
+    });
+};
+
+const acknowledgeSavedEntity = (entityType: SyncEntityType, entityId: string) => {
+    const queueItem = useSyncStore.getState().queuedOperations.find((item) => (
+        item.entityType === entityType && item.entityId === entityId
+    ));
+    expect(queueItem).toBeDefined();
+    if (!queueItem) return;
+
+    const store = useWorkoutStore.getState();
+    const record = entityType === 'session'
+        ? store.savedSessions.find((entry) => entry.id === entityId)
+        : store.savedWorkouts.find((entry) => entry.id === entityId);
+    expect(record).toBeDefined();
+    if (!record?.sync) return;
+
+    const remoteRevision = queueItem.revision;
+    const remoteSyncedAt = new Date(new Date(record.updatedAt).getTime() + 60_000).toISOString();
+    const remoteRecord = {
+        ...record,
+        updatedAt: remoteSyncedAt,
+        sync: {
+            ...record.sync,
+            updatedAt: remoteSyncedAt,
+            remoteId: `remote-${entityId}`,
+            revision: remoteRevision,
+            baseRevision: remoteRevision,
+            dirty: false,
+            pendingDelete: false,
+            deletedAt: null,
+            lastSyncedAt: remoteSyncedAt,
+        },
+    };
+    const acknowledged = entityType === 'session'
+        ? store.acknowledgeSyncedSession(remoteRecord as typeof store.savedSessions[number], {
+            localId: queueItem.localId,
+            revision: queueItem.revision,
+            remoteRevision,
+        })
+        : store.acknowledgeSyncedWorkout(remoteRecord as typeof store.savedWorkouts[number], {
+            localId: queueItem.localId,
+            revision: queueItem.revision,
+            remoteRevision,
+        });
+    expect(acknowledged).toBe(true);
+    expect(useSyncStore.getState().acknowledgeUpsert({
+        operationId: queueItem.operationId,
+        ownerUserId: queueItem.ownerUserId,
+        authGeneration: queueItem.authGeneration,
+        entityType: queueItem.entityType,
+        localId: queueItem.localId,
+        revision: queueItem.revision,
+        expectedRemoteRevision: queueItem.expectedRemoteRevision,
+        syncedAt: remoteSyncedAt,
+    })).toBe(true);
+};
+
 describe('SessionBuilder', () => {
     beforeEach(() => {
         setMobileViewport(false);
         resetStore();
+        resetSyncFeedback();
     });
 
     it('covers empty builder actions, draft creation, and invalid save/start branches', () => {
@@ -127,6 +221,176 @@ describe('SessionBuilder', () => {
         fireEvent.click(screen.getByRole('button', { name: /start/i }));
         dialog = screen.getByRole('dialog', { name: /could not start this session/i });
         expect(within(dialog).getByText(/Session is invalid/i)).toBeInTheDocument();
+    });
+
+    it('waits for the saved session revision acknowledgement instead of trusting queue idle', () => {
+        prepareCloudSync();
+        const session = createSavedSession(
+            'Confirm Session',
+            [createRestSessionNode('Recovery', '60', '2026-09-01T00:00:00.000Z')],
+            '2026-09-01T00:00:00.000Z',
+        );
+        useWorkoutStore.setState({
+            savedSessions: [session],
+            editingSessionId: session.id,
+            editingSessionDraft: session,
+            editingSessionNodeId: session.nodes[0].id,
+            setupMode: 'session',
+        });
+
+        render(<SessionBuilder />);
+        fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
+
+        const notice = screen.getByTestId('builder-save-feedback');
+        expect(notice).toHaveTextContent(/saved locally.*waiting for cloud confirmation/i);
+        expect(notice).not.toHaveTextContent(/synced to the cloud/i);
+        expect(useSyncStore.getState().queuedOperations).toHaveLength(1);
+
+        act(() => useSyncStore.setState({ queueStatus: 'idle' }));
+        expect(notice).toHaveTextContent(/waiting for cloud confirmation/i);
+        expect(notice).not.toHaveTextContent(/synced to the cloud/i);
+
+        act(() => {
+            const queuedOperations = useSyncStore.getState().queuedOperations.map((item) => ({
+                ...item,
+                lastError: 'Request timed out',
+                deadLetteredAt: '2026-09-01T00:01:00.000Z',
+            }));
+            useSyncStore.setState({
+                queuedOperations,
+                queueStatus: 'dead-letter',
+                syncError: 'Request timed out',
+            });
+        });
+        expect(notice).toHaveTextContent(/cloud sync failed: Request timed out/i);
+        expect(notice).not.toHaveTextContent(/synced to the cloud/i);
+
+        act(() => acknowledgeSavedEntity('session', session.id));
+        expect(notice).toHaveTextContent('Saved locally and synced to the cloud.');
+
+        fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
+        expect(notice).toHaveTextContent(/saved locally.*waiting for cloud confirmation/i);
+        expect(notice).not.toHaveTextContent(/synced to the cloud/i);
+        act(() => {
+            useSyncStore.setState({ queuedOperations: [], queueStatus: 'idle' });
+            useWorkoutStore.setState((state) => ({
+                savedSessions: state.savedSessions.map((record) => ({
+                    ...record,
+                    sync: {
+                        ...record.sync!,
+                        dirty: false,
+                        baseRevision: record.sync!.revision - 1,
+                    },
+                })),
+            }));
+        });
+        expect(notice).not.toHaveTextContent(/synced to the cloud/i);
+        act(() => useSyncStore.setState({
+            currentUserId: 'another-save-feedback-account',
+            authGeneration: 'another-save-feedback-generation',
+        }));
+        expect(screen.queryByTestId('builder-save-feedback')).not.toBeInTheDocument();
+    });
+
+    it('reports first-sync choice as pending for Save As copies', () => {
+        useAccountStore.setState({
+            entitlement: {
+                userId: 'save-feedback-account',
+                plan: 'plus',
+                cloudSyncEnabled: true,
+                updatedAt: '2026-09-01T00:00:00.000Z',
+                source: 'supabase',
+            },
+        });
+        useSyncStore.setState({
+            syncEnabled: false,
+            firstSyncState: 'pending-choice',
+            currentUserId: 'save-feedback-account',
+            queueStatus: 'idle',
+        });
+        const session = createSavedSession(
+            'Copy Source',
+            [createRestSessionNode('Recovery', '60', '2026-09-01T00:00:00.000Z')],
+            '2026-09-01T00:00:00.000Z',
+        );
+        useWorkoutStore.setState({
+            savedSessions: [session],
+            editingSessionId: session.id,
+            editingSessionDraft: session,
+            editingSessionNodeId: session.nodes[0].id,
+            setupMode: 'session',
+        });
+
+        render(<SessionBuilder />);
+        fireEvent.click(screen.getByRole('button', { name: /save as/i }));
+        const dialog = screen.getByRole('dialog', { name: /save this session as a copy/i });
+        fireEvent.change(within(dialog).getByLabelText(/session name/i), { target: { value: 'Copy Target' } });
+        fireEvent.click(within(dialog).getByRole('button', { name: /save copy/i }));
+
+        expect(useWorkoutStore.getState().savedSessions.some((entry) => entry.name === 'Copy Target')).toBe(true);
+        expect(screen.getByTestId('builder-save-feedback')).toHaveTextContent(/choose a first-sync option/i);
+        expect(screen.getByTestId('builder-save-feedback')).not.toHaveTextContent(/synced to the cloud/i);
+    });
+
+    it('keeps explicit workout saves pending until the workout and linked sessions are acknowledged', () => {
+        prepareCloudSync();
+        const now = '2026-09-01T00:00:00.000Z';
+        const linkedWorkout = {
+            ...baseWorkout,
+            notes: 'Original note',
+            sync: {
+                localId: baseWorkout.id,
+                remoteId: 'remote-workout',
+                revision: 1,
+                baseRevision: 1,
+                updatedAt: baseWorkout.updatedAt,
+                dirty: false,
+                pendingDelete: false,
+                deletedAt: null,
+                lastSyncedAt: baseWorkout.updatedAt,
+            },
+        };
+        const linkedNode = {
+            ...createWorkoutSessionNode('Push Day', linkedWorkout, now, linkedWorkout.id),
+            notes: 'Original note',
+        };
+        const originalSession = createSavedSession('Linked Session', [linkedNode], now);
+        const session = {
+            ...originalSession,
+            sync: {
+                ...originalSession.sync!,
+                remoteId: 'remote-session',
+                baseRevision: 1,
+                dirty: false,
+                lastSyncedAt: originalSession.updatedAt,
+            },
+        };
+        useWorkoutStore.setState({
+            savedWorkouts: [linkedWorkout],
+            savedSessions: [session],
+            editingSessionId: session.id,
+            editingSessionDraft: session,
+            editingSessionNodeId: session.nodes[0].id,
+            setupMode: 'session',
+        });
+
+        render(<SessionBuilder />);
+        fireEvent.change(screen.getByLabelText(/notes/i), { target: { value: 'Updated shared note' } });
+        fireEvent.click(screen.getByRole('button', { name: /save workout/i }));
+
+        expect(useWorkoutStore.getState().savedWorkouts[0].notes).toBe('Updated shared note');
+        const notice = screen.getByTestId('builder-save-feedback');
+        expect(notice).toHaveTextContent(/saved locally.*waiting for cloud confirmation/i);
+        expect(notice).not.toHaveTextContent(/synced to the cloud/i);
+
+        const queuedOperations = [...useSyncStore.getState().queuedOperations];
+        expect(queuedOperations.some((item) => item.entityType === 'workout' && item.entityId === linkedWorkout.id)).toBe(true);
+        act(() => {
+            for (const item of queuedOperations) {
+                acknowledgeSavedEntity(item.entityType, item.entityId);
+            }
+        });
+        expect(notice).toHaveTextContent('Saved locally and synced to the cloud.');
     });
 
     it('uses a centered desktop shell so builder content stays aligned in web view', () => {
@@ -485,45 +749,6 @@ describe('SessionBuilder', () => {
         expect(within(errorDialog).getByText(/session name is required/i)).toBeInTheDocument();
     });
 
-    it('shows linked workout details when a node is already linked', () => {
-        useWorkoutStore.setState({
-            setupMode: 'session',
-            editingSessionNodeId: 'linked-node',
-            editingSessionDraft: {
-                id: 'session-linked',
-                name: 'Linked Session',
-                nodes: [
-                    {
-                        id: 'linked-node',
-                        type: 'workout',
-                        name: 'Workout 1',
-                        config: {
-                            sets: '2',
-                            reps: '10',
-                            seconds: '3',
-                            rest: '20',
-                            myoReps: '4',
-                            myoWorkSecs: '2',
-                        },
-                        sourceWorkoutId: baseWorkout.id,
-                        createdAt: '2026-03-01T00:00:00.000Z',
-                        updatedAt: '2026-03-01T00:00:00.000Z',
-                    },
-                ],
-                timesUsed: 0,
-                lastUsedAt: null,
-                createdAt: '2026-03-01T00:00:00.000Z',
-                updatedAt: '2026-03-01T00:00:00.000Z',
-            },
-        });
-
-        render(<SessionBuilder />);
-
-        const dialog = screen.getByRole('dialog', { name: /workout node editor/i });
-        expect(within(dialog).getByText(/linked workout/i)).toBeInTheDocument();
-        expect(within(dialog).getAllByText(baseWorkout.name).length).toBeGreaterThan(0);
-        expect(within(dialog).getByRole('button', { name: /save workout/i })).toBeInTheDocument();
-    });
 
     it('shows progression reminders only for workout nodes at the configured threshold', () => {
         useWorkoutStore.setState((state) => ({
@@ -631,9 +856,8 @@ describe('SessionBuilder', () => {
         const notesInput = within(dialog).getByLabelText(/notes/i);
         fireEvent.change(notesInput, { target: { value: 'Prev 60kg' } });
 
-        expect(useWorkoutStore.getState().editingSessionDraft?.nodes[0].type === 'workout'
-            ? useWorkoutStore.getState().editingSessionDraft?.nodes[0].notes
-            : '').toBe('Prev 60kg');
+        const editedNode = useWorkoutStore.getState().editingSessionDraft?.nodes[0];
+        expect(editedNode?.type === 'workout' ? editedNode.notes : '').toBe('Prev 60kg');
         expect(screen.getByRole('button', { name: /edit workout 1/i }).closest('[draggable="true"]'))
             .toHaveTextContent(/prev 60kg/i);
     });
@@ -787,7 +1011,6 @@ describe('SessionBuilder', () => {
 
         expect(useWorkoutStore.getState().savedWorkouts).toHaveLength(1);
         expect(useWorkoutStore.getState().savedWorkouts[0].name).toBe('Push Day Updated');
-        expect(within(workoutDialog).getByRole('status')).toHaveTextContent(/updated and linked/i);
 
         fireEvent.change(workoutTargetSelect, { target: { value: '__new__' } });
         fireEvent.change(workoutNameInput, { target: { value: 'Push Day Copy' } });
@@ -795,7 +1018,6 @@ describe('SessionBuilder', () => {
 
         expect(useWorkoutStore.getState().savedWorkouts).toHaveLength(2);
         expect(useWorkoutStore.getState().savedWorkouts[1].name).toBe('Push Day Copy');
-        expect(within(workoutDialog).getByRole('status')).toHaveTextContent(/saved and linked/i);
 
         fireEvent.click(workoutDialog);
         expect(screen.getByRole('dialog', { name: /workout node editor/i })).toBeInTheDocument();
@@ -884,7 +1106,6 @@ describe('SessionBuilder', () => {
         if (legacyNode?.type === 'workout') {
             expect(legacyNode.sourceWorkoutId).toBeTruthy();
         }
-        expect(screen.getByRole('status')).toHaveTextContent(/saved and linked/i);
     });
 
     it('supports a pannable mobile canvas and keeps the builder scroll-friendly', () => {
