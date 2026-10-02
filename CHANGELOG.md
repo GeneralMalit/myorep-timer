@@ -1,3 +1,10 @@
+## [3.11.2](https://github.com/GeneralMalit/myorep-timer/compare/v3.11.1...v3.11.2) (2026-10-02)
+
+
+### Bug Fixes
+
+* sync linked workout progression and confirm cloud saves ([a87aecd](https://github.com/GeneralMalit/myorep-timer/commit/a87aecd3173cabf1b9301611077ef96e6560b204))
+
 ## [3.11.1](https://github.com/GeneralMalit/myorep-timer/compare/v3.11.0...v3.11.1) (2026-09-25)
 
 
