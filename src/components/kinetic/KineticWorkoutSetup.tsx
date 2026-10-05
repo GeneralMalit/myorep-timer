@@ -1,25 +1,23 @@
 import { useMemo } from 'react';
-import { Activity, ChevronRight, Clock3, Mic2, RotateCcw, Square, Volume2, Zap } from 'lucide-react';
+import { Activity, ChevronRight, Clock3, RotateCcw, Square, Volume2, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
 import { useShallow } from 'zustand/react/shallow';
 import { normalizeSetsInput } from '@/utils/savedWorkouts';
 import { audioEngine } from '@/utils/audioEngine';
 import { estimateWorkoutDurationSeconds, formatEstimatedSessionDuration } from '@/utils/savedSessions';
+import { getReadableForeground } from '@/utils/colors';
 
 type WorkoutConfigField = 'sets' | 'reps' | 'seconds' | 'rest' | 'myoReps' | 'myoWorkSecs';
 
 interface KineticWorkoutSetupProps {
     onStart: () => void;
-    onSelectSession: () => void;
-    canUseSessionBuilder: boolean;
 }
 
-const KineticWorkoutSetup = ({ onStart, onSelectSession, canUseSessionBuilder }: KineticWorkoutSetupProps) => {
+const KineticWorkoutSetup = ({ onStart }: KineticWorkoutSetupProps) => {
     const {
         settings,
         sets,
@@ -28,7 +26,6 @@ const KineticWorkoutSetup = ({ onStart, onSelectSession, canUseSessionBuilder }:
         rest,
         myoReps,
         myoWorkSecs,
-        setSettings,
         setWorkoutConfig,
     } = useWorkoutStore(useShallow((state) => ({
         settings: state.settings,
@@ -38,7 +35,6 @@ const KineticWorkoutSetup = ({ onStart, onSelectSession, canUseSessionBuilder }:
         rest: state.rest,
         myoReps: state.myoReps,
         myoWorkSecs: state.myoWorkSecs,
-        setSettings: state.setSettings,
         setWorkoutConfig: state.setWorkoutConfig,
     })));
 
@@ -58,15 +54,14 @@ const KineticWorkoutSetup = ({ onStart, onSelectSession, canUseSessionBuilder }:
         value: string;
         icon: typeof Activity;
         unit: string;
-        tone: string;
         disabled?: boolean;
     }> = [
-        { key: 'sets', label: 'Total cycles', value: sets, icon: RotateCcw, unit: '', tone: '#f2f0ed' },
-        { key: 'reps', label: 'Activation reps', value: reps, icon: Activity, unit: '', tone: settings.kineticActiveColor ?? '#ffffff' },
-        { key: 'seconds', label: 'Activation pace', value: seconds, icon: Zap, unit: 'sec', tone: settings.kineticActiveColor ?? '#ffffff' },
-        { key: 'rest', label: 'Rest interval', value: rest, icon: Square, unit: 'sec', tone: settings.kineticRestColor ?? '#ffffff', disabled: isSingleCycle },
-        { key: 'myoReps', label: 'Myo reps', value: myoReps, icon: Activity, unit: '', tone: settings.kineticConcentricColor ?? '#ffffff', disabled: isSingleCycle },
-        { key: 'myoWorkSecs', label: 'Myo pace', value: myoWorkSecs, icon: Zap, unit: 'sec', tone: settings.kineticConcentricColor ?? '#ffffff', disabled: isSingleCycle },
+        { key: 'sets', label: 'Total cycles', value: sets, icon: RotateCcw, unit: '' },
+        { key: 'reps', label: 'Activation reps', value: reps, icon: Activity, unit: '' },
+        { key: 'seconds', label: 'Activation pace', value: seconds, icon: Zap, unit: 'sec' },
+        { key: 'rest', label: 'Rest interval', value: rest, icon: Square, unit: 'sec', disabled: isSingleCycle },
+        { key: 'myoReps', label: 'Myo reps', value: myoReps, icon: Activity, unit: '', disabled: isSingleCycle },
+        { key: 'myoWorkSecs', label: 'Myo pace', value: myoWorkSecs, icon: Zap, unit: 'sec', disabled: isSingleCycle },
     ];
 
     const adjustControl = (key: WorkoutConfigField, currentValue: string, delta: number) => {
@@ -76,65 +71,46 @@ const KineticWorkoutSetup = ({ onStart, onSelectSession, canUseSessionBuilder }:
     };
 
     return (
-        <section data-testid="kinetic-workout-setup" className="mx-auto flex w-full max-w-[1120px] flex-1 flex-col px-4 py-6 sm:px-7 lg:px-10 lg:py-10">
-            <header className="flex flex-col gap-4 border-b border-white/10 pb-6 sm:flex-row sm:items-end sm:justify-between">
+        <section data-testid="kinetic-workout-setup" className="@container mx-auto flex w-full max-w-[1120px] flex-1 flex-col px-4 py-6 sm:px-7 lg:px-10 lg:py-8">
+            <header className="flex flex-wrap items-end justify-between gap-4 border-b border-[var(--kinetic-border)] pb-6">
                 <div>
-                    <h1 className="font-['Sora'] text-3xl font-bold tracking-[-0.045em] text-white sm:text-4xl">Build a workout</h1>
-                    <p className="mt-2 max-w-xl text-sm leading-6 text-zinc-400">Set the work, then let the clock take over.</p>
+                    <div className="console-label mb-2">Training console / Workout</div>
+                    <h1 className="console-heading text-3xl sm:text-4xl">Build a workout</h1>
+                    <p className="mt-2 max-w-xl text-sm leading-6 text-[var(--kinetic-muted)]">Set your activation effort and the Myo-rep cycles that follow.</p>
                 </div>
-                <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={onSelectSession}
-                    className="h-11 min-h-11 self-start rounded-lg border border-white/15 px-3 text-sm text-zinc-300 hover:bg-white/8 hover:text-white sm:h-10 sm:min-h-10 sm:self-auto"
-                >
-                    {canUseSessionBuilder ? 'Build a session' : 'Sessions require Plus'}
-                </Button>
             </header>
 
-            <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 border border-white/10 bg-[#15171a] px-4 py-3 text-sm">
-                <div className="flex items-center gap-2" style={{ color: settings.kineticActiveColor ?? '#ffffff' }}><Activity size={15} /><span>Activation</span></div>
-                <span className="text-zinc-600">→</span>
-                <div className="flex items-center gap-2" style={{ color: settings.kineticRestColor ?? '#ffffff' }}><Clock3 size={15} /><span>Rest</span></div>
-                <span className="text-zinc-600">→</span>
-                <div className="flex items-center gap-2" style={{ color: settings.kineticConcentricColor ?? '#ffffff' }}><Zap size={15} /><span>Myo clusters</span></div>
-                <div className="ml-auto flex items-center gap-2 text-zinc-400"><Clock3 size={15} /><span>{estimatedDuration} est.</span></div>
-                <div className="flex items-center gap-2 border-l border-white/10 pl-4 text-zinc-300">
-                    <Mic2 size={15} />
-                    <Label htmlFor="kinetic-voice-guidance" className="cursor-pointer text-sm">Voice guidance</Label>
-                    <Switch
-                        id="kinetic-voice-guidance"
-                        checked={settings.ttsEnabled}
-                        onCheckedChange={(ttsEnabled) => setSettings({ ttsEnabled })}
-                        className="data-[state=unchecked]:bg-[#272c27] data-[state=checked]:[&>span]:bg-[#111412]"
-                        style={{ backgroundColor: settings.ttsEnabled ? (settings.kineticThemeColor ?? '#FF5B36') : '#272c27' }}
-                    />
-                </div>
+            <div className="mt-6 flex flex-wrap items-center gap-x-4 gap-y-3 rounded-lg border border-[var(--kinetic-border)] bg-[var(--kinetic-panel)] px-4 py-3 text-xs text-[var(--kinetic-muted)]">
+                <div className="flex items-center gap-2"><Clock3 size={15} /><span>{settings.prepTime}s preparation</span></div>
+                <span aria-hidden="true" className="text-[var(--kinetic-subtle)]">/</span>
+                <div className="flex items-center gap-2"><Activity size={15} /><span>Activation</span></div>
+                {!isSingleCycle && <><span aria-hidden="true" className="text-[var(--kinetic-subtle)]">→</span><span>Rest + Myo cycles</span></>}
+                <div className="ml-auto flex items-center gap-2 font-semibold text-[var(--kinetic-text)]"><Clock3 size={15} /><span>{estimatedDuration} estimated</span></div>
             </div>
 
-            <div className="mt-4 grid grid-cols-1 gap-3 min-[360px]:grid-cols-2 sm:mt-7 lg:grid-cols-3">
+            <div className="mt-4 grid grid-cols-1 gap-3 @[344px]:grid-cols-2 @[680px]:grid-cols-3">
                 {controls.map((control) => {
                     const Icon = control.icon;
                     return (
-                        <div key={control.key} className={cn('min-h-0 rounded-xl border border-white/10 bg-[#151719] p-3 sm:min-h-48 sm:p-5', control.disabled && 'opacity-45')}>
-                            <Label htmlFor={`kinetic-${control.key}`} className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-zinc-400">
-                                <Icon size={14} style={{ color: control.tone }} />
+                        <div key={control.key} className={cn('console-panel p-3 sm:p-5', control.disabled && 'opacity-50')}>
+                            <Label htmlFor={`kinetic-${control.key}`} className="console-label flex items-center gap-2">
+                                <Icon size={14} aria-hidden="true" />
                                 {control.label}{control.unit ? ` (${control.unit})` : ''}
                             </Label>
-                            <div className="mt-3 grid grid-cols-1 gap-2 sm:relative sm:mt-10 sm:block sm:h-16">
+                            <div className="mt-4 grid grid-cols-[44px_minmax(0,1fr)_44px] items-center gap-1">
                                 <Input
                                     id={`kinetic-${control.key}`}
                                     type="number"
                                     min={1}
                                     value={control.value}
+                                    placeholder="—"
                                     disabled={control.disabled}
                                     onChange={(event) => {
                                         const value = control.key === 'sets' ? normalizeSetsInput(event.target.value) : event.target.value;
                                         setWorkoutConfig({ [control.key]: value });
                                     }}
-                                    className="h-11 w-full min-w-0 border-0 bg-transparent p-0 text-center text-2xl font-black tabular-nums tracking-[-0.06em] text-white shadow-none outline-none focus-visible:ring-0 sm:absolute sm:inset-x-10 sm:h-16 sm:w-auto sm:text-5xl"
+                                    className="console-stepper-input h-14 w-full min-w-0 rounded-lg border-0 bg-[var(--kinetic-panel-inset)] px-1 text-center font-['Sora'] text-3xl font-semibold tabular-nums tracking-tight text-[var(--kinetic-text)] placeholder:text-[var(--kinetic-subtle)] shadow-none focus-visible:ring-2 focus-visible:ring-[var(--kinetic-focus)]"
                                 />
-                                <div className="flex items-center justify-center gap-4 sm:contents">
                                     <Button
                                         type="button"
                                         variant="ghost"
@@ -142,7 +118,7 @@ const KineticWorkoutSetup = ({ onStart, onSelectSession, canUseSessionBuilder }:
                                         aria-label={`Decrease ${control.label}`}
                                         disabled={control.disabled}
                                         onClick={() => adjustControl(control.key, control.value, -1)}
-                                        className="h-11 w-11 shrink-0 rounded-full bg-white/10 text-zinc-300 hover:bg-white/15 hover:text-white sm:absolute sm:left-0 sm:top-1/2 sm:h-7 sm:w-7 sm:-translate-y-1/2"
+                                        className="console-icon row-start-1 col-start-1"
                                     >
                                         −
                                     </Button>
@@ -153,49 +129,34 @@ const KineticWorkoutSetup = ({ onStart, onSelectSession, canUseSessionBuilder }:
                                         aria-label={`Increase ${control.label}`}
                                         disabled={control.disabled}
                                         onClick={() => adjustControl(control.key, control.value, 1)}
-                                        className="h-11 w-11 shrink-0 rounded-full bg-white/10 text-zinc-300 hover:bg-white/15 hover:text-white sm:absolute sm:right-0 sm:top-1/2 sm:h-7 sm:w-7 sm:-translate-y-1/2"
+                                        className="console-icon"
                                     >
                                         +
                                     </Button>
-                                </div>
                             </div>
                         </div>
                     );
                 })}
             </div>
 
-            <div className="mt-4 flex flex-col gap-4 border-t border-white/10 pt-5 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-sm text-zinc-500">One cycle pairs your activation effort with timed myo clusters.</p>
+            <div className="mt-6 flex flex-col gap-4 border-t border-[var(--kinetic-border)] pt-5 sm:flex-row sm:items-center sm:justify-between">
+                <p className="max-w-xl text-sm leading-relaxed text-[var(--kinetic-muted)]">{isSingleCycle ? 'One activation set. Rest and Myo settings are not used.' : 'Activation runs once. Remaining cycles alternate rest and short Myo sets.'}</p>
                 <Button
                     type="button"
                     onClick={() => {
                         audioEngine.init();
                         onStart();
                     }}
-                    className="h-12 rounded-lg px-5 text-sm font-bold hover:brightness-110"
+                    className="console-button console-button--primary min-h-12 px-6"
                     style={{ backgroundColor: settings.kineticThemeColor ?? '#ffffff', color: getReadableForeground(settings.kineticThemeColor ?? '#ffffff') }}
                 >
                     Start workout <ChevronRight size={17} />
                 </Button>
             </div>
-            <div className="mt-5 flex items-center gap-2 text-xs text-zinc-500"><Volume2 size={14} /> Change audio and display preferences in Settings.</div>
+            <div className="mt-5 flex items-center gap-2 text-xs text-[var(--kinetic-muted)]"><Volume2 size={14} /> Audio, pacing and display controls live in Settings.</div>
         </section>
     );
 };
 
-const getReadableForeground = (color: string): '#111412' | '#ffffff' => {
-    const normalized = color.replace('#', '');
-    const expanded = normalized.length === 3
-        ? normalized.split('').map((part) => `${part}${part}`).join('')
-        : normalized;
-
-    if (!/^[\da-f]{6}$/i.test(expanded)) return '#ffffff';
-
-    const luminance = ((parseInt(expanded.slice(0, 2), 16) * 299)
-        + (parseInt(expanded.slice(2, 4), 16) * 587)
-        + (parseInt(expanded.slice(4, 6), 16) * 114)) / 1000;
-
-    return luminance >= 150 ? '#111412' : '#ffffff';
-};
 
 export default KineticWorkoutSetup;

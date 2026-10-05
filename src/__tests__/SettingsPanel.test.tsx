@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import SettingsPanel from '@/components/SettingsPanel';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
 
@@ -46,19 +46,18 @@ describe('SettingsPanel', () => {
         }));
     });
 
-    it('opens with a lightweight shell first and then mounts the settings sections', async () => {
-        const onClose = vi.fn();
 
-        render(<SettingsPanel isOpen onClose={onClose} />);
+    it('lets users toggle Voice Guidance from Settings', () => {
+        render(<SettingsPanel isOpen onClose={vi.fn()} />);
 
-        expect(screen.getByText(/system configuration/i)).toBeInTheDocument();
-        await waitFor(() => {
-            expect(screen.getByText(/visual identity/i)).toBeInTheDocument();
-            expect(screen.getByText(/sound architecture/i)).toBeInTheDocument();
-        });
+        const voiceGuidanceSwitch = screen.getByRole('switch', { name: /voice guidance/i });
+        expect(voiceGuidanceSwitch).toBeChecked();
 
-        fireEvent.click(screen.getByRole('button', { name: /close settings/i }));
-        expect(onClose).toHaveBeenCalledTimes(1);
+        fireEvent.click(voiceGuidanceSwitch);
+        expect(useWorkoutStore.getState().settings.ttsEnabled).toBe(false);
+
+        fireEvent.click(voiceGuidanceSwitch);
+        expect(useWorkoutStore.getState().settings.ttsEnabled).toBe(true);
     });
 
     it('traps mobile settings focus and restores it when the dialog closes', () => {
@@ -73,7 +72,6 @@ describe('SettingsPanel', () => {
         const dialog = screen.getByRole('dialog', { name: /system configuration/i });
         const closeButton = screen.getByRole('button', { name: /close settings/i });
         expect(dialog).toHaveAttribute('aria-modal', 'true');
-        expect(closeButton).toHaveClass('h-11', 'w-11');
         expect(closeButton).toHaveFocus();
 
         fireEvent.keyDown(window, { key: 'Tab', shiftKey: true });
@@ -101,14 +99,11 @@ describe('SettingsPanel', () => {
         expect(kinetic).not.toBeChecked();
 
         fireEvent.click(kinetic);
-        expect(kinetic).toBeChecked();
         expect(useWorkoutStore.getState().designVariant).toBe('kinetic');
-        expect(screen.getByTestId('settings-drawer-panel')).toHaveClass('bg-[#111412]');
 
-        fireEvent.click(classic);
-        expect(classic).toBeChecked();
+        fireEvent.change(screen.getByRole('combobox', { name: /interface design/i }), { target: { value: 'classic' } });
+        expect(screen.getByRole('radio', { name: /classic/i })).toBeChecked();
         expect(useWorkoutStore.getState().designVariant).toBe('classic');
-        expect(screen.getByTestId('settings-drawer-panel')).not.toHaveClass('bg-[#111412]');
     });
 
     it('shows the Kinetic Console visual identity controls and persists each color independently', async () => {

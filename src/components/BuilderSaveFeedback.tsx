@@ -1,5 +1,6 @@
 import type { BuilderSaveFeedback as BuilderSaveFeedbackState } from '@/hooks/useBuilderSaveFeedback';
 import { cn } from '@/lib/utils';
+import { useWorkoutStore } from '@/store/useWorkoutStore';
 
 const toneClassName: Record<BuilderSaveFeedbackState['tone'], string> = {
     pending: 'border-amber-500/30 bg-amber-500/10 text-amber-100',
@@ -18,6 +19,7 @@ const BuilderSaveFeedback = ({
     onDismiss: () => void;
     className?: string;
 }) => {
+    const isKinetic = useWorkoutStore((state) => state.designVariant === 'kinetic');
     if (!feedback) {
         return null;
     }
@@ -27,14 +29,14 @@ const BuilderSaveFeedback = ({
             data-testid="builder-save-feedback"
             role="status"
             aria-live="polite"
-            className={cn('flex items-center gap-3 rounded-lg border px-3 py-2 text-xs font-semibold shadow-lg', toneClassName[feedback.tone], className)}
+            className={cn('flex items-center gap-3 rounded-lg border px-3 text-xs font-semibold', isKinetic ? 'py-1' : 'py-2 shadow-lg', toneClassName[feedback.tone], isKinetic && feedback.tone === 'error' && 'text-red-200', className)}
         >
-            <span>{feedback.message}</span>
+            <span className="min-w-0 flex-1">{feedback.message}</span>
             <button
                 type="button"
                 onClick={onDismiss}
                 aria-label="Dismiss save status"
-                className="ml-auto shrink-0 rounded px-1.5 py-1 opacity-80 hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current"
+                className={isKinetic ? 'console-button console-button--quiet' : 'ml-auto shrink-0 rounded px-1.5 py-1 opacity-80 hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current'}
             >
                 Dismiss
             </button>

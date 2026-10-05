@@ -28,6 +28,12 @@
 
 ## Unreleased
 
+### Features
+
+* move voice guidance controls to Settings
+* redesign Kinetic Console with a native timer dial, responsive workout inputs, charcoal surfaces, and matching library, builder, Settings, help, account, and dialog presentation
+* consolidate session creation and loading in the library, with import and export available from either library tab
+
 ### Bug Fixes
 
 * constrain desktop app height so session content can scroll
@@ -35,6 +41,10 @@
 * save linked workout settings and notes to the shared workout and every linked session instance; share progression history while keeping unlinked blocks independent
 * restore cloud-sync controls and account-scoped libraries in Kinetic Console by using the shared sync controller
 * preserve device sync settings and queued changes while restoring an account on refresh; complete sync-store hydration and show account-loading UI instead of Guest or sign-in controls
+* keep desktop builder timelines and inspectors independently scrollable and prevent dialogs from being clipped behind the navigation rail
+* retain session progress while paused and show completed blocks after finishing, instead of switching to the standalone workout summary
+* size workout controls and timer typography by available content width; preserve readable foregrounds and keyboard focus against custom fullscreen colors
+* trap keyboard focus in the topmost modal, restore focus after drawer dismissal, and exclude hidden upload controls from the tab order
 
 # [3.11.0](https://github.com/GeneralMalit/myorep-timer/compare/v3.10.1...v3.11.0) (2026-09-23)
 

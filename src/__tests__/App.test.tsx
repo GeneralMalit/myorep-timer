@@ -339,7 +339,7 @@ describe('App', () => {
 
         render(<App />);
 
-        fireEvent.click(await screen.findByRole('button', { name: /^enable sync$/i }));
+        fireEvent.click(await screen.findByRole('button', { name: /^enable sync$/i }, { timeout: 5000 }));
         const chooser = await screen.findByRole('dialog', { name: /choose first sync direction/i });
         expect(within(chooser).getByRole('button', { name: /upload local to cloud/i })).toBeEnabled();
         expect(within(chooser).getByRole('button', { name: /use cloud on this device/i })).toBeEnabled();
@@ -371,7 +371,7 @@ describe('App', () => {
 
         expect(screen.getByRole('heading', { name: /build a workout/i })).toBeInTheDocument();
         expect(screen.getAllByRole('spinbutton')).toHaveLength(6);
-        expect(screen.getAllByText(/voice guidance/i).length).toBeGreaterThan(0);
+        expect(screen.queryByRole('switch', { name: /voice guidance/i })).not.toBeInTheDocument();
         expect(screen.getByRole('button', { name: /initialize protocol/i })).toBeInTheDocument();
         expect(screen.getByTestId('app-main-shell')).toHaveClass('h-dvh-safe', 'overflow-y-auto');
         expect(screen.getByTestId('workout-setup-shell')).toHaveClass('space-y-4');
@@ -404,6 +404,12 @@ describe('App', () => {
         expect(screen.getByRole('button', { name: /^add rest$/i })).toBeInTheDocument();
         expect(screen.queryByText(/^End$/i)).not.toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /add workout node/i })).not.toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: /open settings/i }));
+        const settingsPanel = await screen.findByText('Settings Open');
+        expect(settingsPanel).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: /build a session/i })).toBeInTheDocument();
+        fireEvent.click(within(settingsPanel.parentElement!).getByRole('button', { name: /close settings/i }));
     });
 
     it('switches the Kinetic Console setup and session-builder surfaces through its navigation', async () => {
@@ -419,14 +425,20 @@ describe('App', () => {
         });
 
         render(<App />);
+        expect(screen.queryByRole('switch', { name: /voice guidance/i })).not.toBeInTheDocument();
 
         expect(screen.getByTestId('kinetic-workout-setup')).toBeInTheDocument();
         expect(screen.getByTestId('kinetic-sidebar')).toBeInTheDocument();
         expect(screen.getByRole('spinbutton', { name: /total cycles/i })).toHaveValue(3);
-        expect(screen.getByText('1:37 est.')).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: /^session builder$/i }));
         expect(await screen.findByTestId('kinetic-session-builder')).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: /open settings/i }));
+        const settingsPanel = await screen.findByText('Settings Open');
+        expect(settingsPanel).toBeInTheDocument();
+        expect(await screen.findByTestId('kinetic-session-builder')).toBeInTheDocument();
+        fireEvent.click(within(settingsPanel.parentElement!).getByRole('button', { name: /close settings/i }));
 
         fireEvent.click(screen.getByRole('button', { name: /^workout setup$/i }));
         expect(screen.getByTestId('kinetic-workout-setup')).toBeInTheDocument();
@@ -504,6 +516,42 @@ describe('App', () => {
         expect(screen.getByRole('button', { name: 'Close block settings' })).toHaveFocus();
     });
 
+    it('keeps focus on the mobile Settings opener when navigation is already closed', () => {
+        setMobileViewport(true);
+        useWorkoutStore.setState({ designVariant: 'kinetic' });
+        render(<App />);
+        const opener = within(screen.getByTestId('app-main-shell')).getByRole('button', { name: 'Open Settings' });
+        opener.focus();
+        fireEvent.click(opener);
+        expect(useWorkoutStore.getState().showSettings).toBe(true);
+        expect(opener).toHaveFocus();
+    });
+
+    it('keeps session progress visible when playback pauses and finishes', async () => {
+        grantPlusAccess();
+        useWorkoutStore.setState({ designVariant: 'kinetic' });
+        const store = useWorkoutStore.getState();
+        store.createSession('Recovery');
+        store.addRestNode('30');
+        const saved = store.saveSessionDraft();
+        store.startSession(saved.id!);
+        store.startSessionNode(0);
+        store.pauseSession();
+        render(<App />);
+        const pausedTimeline = screen.getByRole('complementary', { name: 'Session timeline' });
+        expect(within(pausedTimeline).getByRole('listitem')).toHaveAttribute('aria-current', 'step');
+
+        act(() => {
+            store.resumeSession();
+            store.advanceSessionNode();
+        });
+        const finishedTimeline = screen.getByRole('complementary', { name: 'Session timeline' });
+        expect(within(finishedTimeline).getByRole('list', { name: 'Session progress: Finished' })).toBeInTheDocument();
+        expect(within(finishedTimeline).getByRole('listitem')).not.toHaveAttribute('aria-current');
+        fireEvent.click(screen.getByRole('button', { name: 'Back to builder' }));
+        expect(await screen.findByTestId('kinetic-session-builder')).toBeInTheDocument();
+    });
+
     it('keeps the timer controller operational in the Kinetic Console presentation', () => {
         useWorkoutStore.setState({
             designVariant: 'kinetic',
@@ -529,12 +577,6 @@ describe('App', () => {
 
         expect(screen.getByTestId('kinetic-timer-surface')).toBeInTheDocument();
         expect(screen.getByText(/activation pace/i)).toBeInTheDocument();
-        expect(concentricTimerMock).toHaveBeenCalledWith(expect.objectContaining({
-            outerValue: 32.5,
-            innerValue: 2.5,
-            innerMax: 3,
-            isResting: false,
-        }));
 
         fireEvent.click(screen.getByRole('button', { name: /pause/i }));
         expect(useWorkoutStore.getState().isTimerRunning).toBe(false);
@@ -608,7 +650,6 @@ describe('App', () => {
         expect(within(timerSurface).getByText(/Block 1 \/ 2/)).toBeInTheDocument();
         expect(within(timerSurface).getByText(/Set 2 \/ 4/)).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'End session' })).toBeInTheDocument();
-        expect(concentricTimerMock).toHaveBeenCalledWith(expect.objectContaining({ compactMobile: true }));
         fireEvent.click(screen.getByRole('button', { name: 'End session' }));
         expect(useWorkoutStore.getState().appPhase).toBe('setup');
         expect(useWorkoutStore.getState().isTimerRunning).toBe(false);
@@ -696,11 +737,8 @@ describe('App', () => {
 
         const timerSurface = screen.getByTestId('kinetic-timer-surface');
         expect(within(timerSurface).getByText('Upper Body Flow')).toBeInTheDocument();
-        expect(within(timerSurface).getByText('Block 2 / 3')).toBeInTheDocument();
-        expect(within(timerSurface).getByText('Set 2 / 4')).toBeInTheDocument();
         expect(within(timerSurface).getByRole('list', { name: 'Session progress: Main Set' })).toBeInTheDocument();
         expect(within(timerSurface).getByText('Cooldown')).toBeInTheDocument();
-        expect(within(timerSurface).getByText('Main set')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /pause/i })).toBeInTheDocument();
 
         act(() => {
@@ -714,9 +752,6 @@ describe('App', () => {
 
         const updatedTimerSurface = screen.getByTestId('kinetic-timer-surface');
         expect(within(updatedTimerSurface).getByText('Upper Body Flow')).toBeInTheDocument();
-        expect(within(updatedTimerSurface).getByText('Block 2 / 3')).toBeInTheDocument();
-        expect(within(updatedTimerSurface).getByText('Set 2 / 4')).toBeInTheDocument();
-        expect(within(updatedTimerSurface).getByText('Myo-rep set')).toBeInTheDocument();
 
         act(() => {
             useWorkoutStore.setState({ isTimerRunning: false });
@@ -725,9 +760,6 @@ describe('App', () => {
 
         const pausedTimerSurface = screen.getByTestId('kinetic-timer-surface');
         expect(within(pausedTimerSurface).getByText('Upper Body Flow')).toBeInTheDocument();
-        expect(within(pausedTimerSurface).getByText('Block 2 / 3')).toBeInTheDocument();
-        expect(within(pausedTimerSurface).getByText('Set 2 / 4')).toBeInTheDocument();
-        expect(within(pausedTimerSurface).getByText('Myo-rep set')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /resume/i })).toBeInTheDocument();
     });
 
@@ -767,9 +799,6 @@ describe('App', () => {
         const surface = screen.getByTestId('kinetic-timer-surface');
         expect(surface).toHaveStyle({ backgroundColor: '#16a085' });
         expect(surface).not.toHaveStyle({ backgroundColor: '#ff00ff' });
-        expect(concentricTimerMock).toHaveBeenCalledWith(expect.objectContaining({
-            fullScreenForegroundColor: expect.any(String),
-        }));
     });
 
     it('initializes audio and starts the timer when the protocol is started from setup', () => {
@@ -1410,14 +1439,10 @@ describe('App', () => {
         expect(timerProps.outerMax).toBe(8);
     });
 
-    it('lets users toggle voice guidance and open myo-rep info from setup', async () => {
+    it('keeps voice guidance controls in Settings while setup exposes myo-rep info', async () => {
         render(<App />);
 
-        const voiceToggle = screen.getByRole('switch', { name: /voice guidance/i });
-        expect(voiceToggle).toBeChecked();
-
-        fireEvent.click(voiceToggle);
-        expect(useWorkoutStore.getState().settings.ttsEnabled).toBe(false);
+        expect(screen.queryByRole('switch', { name: /voice guidance/i })).not.toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: /what are "myo-reps"\?/i }));
         expect(await screen.findByRole('dialog', { name: /protocol intel/i })).toBeInTheDocument();

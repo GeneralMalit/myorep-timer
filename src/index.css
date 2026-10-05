@@ -221,32 +221,45 @@
   --primary: 151 100% 45%;
 }
 
-/* The Kinetic Console is intentionally isolated from the user's existing theme
-   choices. It is a comparable design variant, not another accent-color theme. */
+/* Kinetic is a complete interface variant; Classic theme colors do not leak in. */
 .design-kinetic,
 .design-kinetic.theme-ocean,
 .design-kinetic.theme-fire,
 .design-kinetic.theme-forest {
-  --background: 210 8% 6%;
-  --foreground: 0 0% 96%;
-  --card: 210 7% 9%;
-  --card-foreground: 0 0% 96%;
-  --popover: 210 7% 9%;
-  --popover-foreground: 0 0% 96%;
+  --kinetic-bg: #0e1013;
+  --kinetic-panel: #15181d;
+  --kinetic-panel-raised: #1c2027;
+  --kinetic-panel-inset: #101318;
+  --kinetic-border: #2a3039;
+  --kinetic-text: #f1f3f5;
+  --kinetic-muted: #a0a9b7;
+  --kinetic-subtle: #717e90;
+  --kinetic-theme-color: #ffffff;
+  --kinetic-on-accent: #0e1013;
+  --kinetic-focus: color-mix(in srgb, var(--kinetic-theme-color, #ffffff), white 55%);
+  --background: 216 15% 6%;
+  --foreground: 210 17% 95%;
+  --card: 218 16% 10%;
+  --card-foreground: 210 17% 95%;
+  --popover: 218 16% 10%;
+  --popover-foreground: 210 17% 95%;
   --primary: 0 0% 100%;
-  --primary-foreground: 210 8% 6%;
-  --secondary: 210 6% 14%;
-  --secondary-foreground: 0 0% 96%;
-  --muted: 210 6% 14%;
-  --muted-foreground: 220 8% 62%;
-  --accent: 210 6% 16%;
-  --accent-foreground: 0 0% 96%;
-  --border: 210 7% 17%;
-  --input: 210 7% 17%;
+  --primary-foreground: 216 15% 6%;
+  --secondary: 218 16% 13%;
+  --secondary-foreground: 210 17% 95%;
+  --muted: 218 16% 13%;
+  --muted-foreground: 217 14% 67%;
+  --accent: 218 16% 16%;
+  --accent-foreground: 210 17% 95%;
+  --border: 216 15% 19%;
+  --input: 216 15% 19%;
   --ring: 0 0% 100%;
   --color-primary: var(--kinetic-theme-color, #ffffff);
-  --color-ring: var(--kinetic-theme-color, #ffffff);
+  --color-primary-foreground: var(--kinetic-on-accent, #0e1013);
+  --color-ring: var(--kinetic-focus);
   --radius: 0.625rem;
+  color: var(--kinetic-text);
+  background: var(--kinetic-bg);
   font-family: 'Manrope', ui-sans-serif, system-ui, sans-serif;
 }
 
@@ -254,5 +267,168 @@
 .design-kinetic.theme-fire,
 .design-kinetic.theme-forest {
   --color-primary: var(--kinetic-theme-color, #ffffff) !important;
-  --color-ring: var(--kinetic-theme-color, #ffffff) !important;
+  --color-ring: var(--kinetic-focus) !important;
+}
+
+.console-heading {
+  font-family: 'Sora', ui-sans-serif, system-ui, sans-serif;
+  font-weight: 600;
+  font-style: normal;
+  letter-spacing: -0.035em;
+  color: var(--kinetic-text);
+}
+
+.console-panel,
+.console-section {
+  min-width: 0;
+  border: 1px solid var(--kinetic-border);
+  border-radius: 12px;
+  background: var(--kinetic-panel);
+  box-shadow: none;
+}
+
+.console-section { padding: 1rem; }
+
+.console-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-style: normal;
+  letter-spacing: 0.01em;
+  color: var(--kinetic-muted);
+  text-transform: none;
+}
+
+.console-input,
+.console-select {
+  min-height: 44px;
+  min-width: 0;
+  width: 100%;
+  border: 1px solid var(--kinetic-border);
+  border-radius: 8px;
+  padding: 0.625rem 0.75rem;
+  background: var(--kinetic-panel-inset);
+  color: var(--kinetic-text);
+  font: inherit;
+  font-size: 0.875rem;
+  box-shadow: none;
+}
+
+.console-input::placeholder { color: var(--kinetic-subtle); }
+
+.console-stepper-input { appearance: textfield; }
+.console-stepper-input::-webkit-inner-spin-button,
+.console-stepper-input::-webkit-outer-spin-button { appearance: none; margin: 0; }
+
+.console-button,
+.console-icon {
+  display: inline-flex;
+  min-height: 44px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border: 1px solid var(--kinetic-border);
+  border-radius: 8px;
+  padding: 0.625rem 0.875rem;
+  background: var(--kinetic-panel-raised);
+  color: var(--kinetic-text);
+  font-size: 0.8125rem;
+  font-style: normal;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: normal;
+  white-space: normal;
+  transition: background-color 150ms, border-color 150ms;
+}
+
+.console-icon { width: 44px; padding: 0.625rem; }
+.console-button:hover, .console-icon:hover { background: color-mix(in srgb, var(--kinetic-panel-raised), white 6%); }
+.console-button--primary { background: var(--kinetic-theme-color); color: var(--kinetic-on-accent); border-color: var(--kinetic-focus); }
+.console-button--primary:hover { background: var(--kinetic-theme-color); filter: brightness(1.1); }
+.console-button--quiet { background: transparent; }
+.console-button--danger { background: #3b2026; border-color: #6f3541; color: #ffbdc7; }
+.console-button--danger:hover { background: #4a252e; }
+.console-button:disabled, .console-icon:disabled, .console-input:disabled { cursor: not-allowed; opacity: 0.45; }
+.console-button:focus-visible, .console-icon:focus-visible, .console-input:focus-visible, .console-select:focus-visible {
+  outline: 2px solid var(--kinetic-focus);
+  outline-offset: 3px;
+  box-shadow: none;
+}
+
+.console-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  border: 1px solid var(--kinetic-border);
+  border-radius: 5px;
+  padding: 0.25rem 0.5rem;
+  color: var(--kinetic-muted);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  font-style: normal;
+  letter-spacing: 0.03em;
+  text-transform: none;
+}
+
+.console-dialog {
+  max-height: calc(var(--viewport-dynamic) - var(--safe-top) - var(--safe-bottom) - 2rem);
+  min-width: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--kinetic-border);
+  border-radius: 12px;
+  padding: 1.5rem;
+  background: var(--kinetic-panel);
+  color: var(--kinetic-text);
+  box-shadow: 0 24px 64px #0008;
+}
+
+.console-switch {
+  position: relative;
+  width: 56px;
+  height: 44px;
+  flex-shrink: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  box-shadow: none;
+}
+.console-switch::before {
+  position: absolute;
+  inset: 9px 4px;
+  border: 1px solid var(--kinetic-border);
+  border-radius: 999px;
+  background: var(--kinetic-panel-raised);
+  content: "";
+}
+.console-switch[data-state="checked"] { background: transparent; }
+.console-switch[data-state="unchecked"] { background: transparent; }
+.console-switch[data-state="checked"]::before { background: var(--kinetic-theme-color); }
+.console-switch > span {
+  position: absolute;
+  top: 12px;
+  left: 8px;
+  width: 20px;
+  height: 20px;
+  translate: none;
+  transform: translateX(0);
+  background: var(--kinetic-muted);
+  box-shadow: none;
+}
+.console-switch[data-state="checked"] > span { transform: translateX(20px); background: var(--kinetic-on-accent); }
+.console-switch:focus-visible { outline: 2px solid var(--kinetic-focus); outline-offset: 2px; box-shadow: none; }
+
+.design-kinetic * {
+  scrollbar-color: var(--kinetic-border) var(--kinetic-bg);
+}
+.design-kinetic *::-webkit-scrollbar { width: 10px; height: 10px; }
+.design-kinetic *::-webkit-scrollbar-track { background: var(--kinetic-bg); border: 2px solid transparent; }
+.design-kinetic *::-webkit-scrollbar-thumb { background: var(--kinetic-border); border: 2px solid var(--kinetic-bg); box-shadow: none; }
+.design-kinetic *::-webkit-scrollbar-thumb:hover { background: var(--kinetic-subtle); }
+
+@media (prefers-reduced-motion: reduce) {
+  .design-kinetic *, .design-kinetic *::before, .design-kinetic *::after {
+    animation: none !important;
+    transition-duration: 0s !important;
+  }
 }

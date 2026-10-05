@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import {
     AlertCircle,
     CheckCircle2,
@@ -19,6 +20,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { isValidUsername, normalizeUsername } from '@/lib/accountIdentity';
 import { cn } from '@/lib/utils';
+import { useWorkoutStore } from '@/store/useWorkoutStore';
+import { useDialogFocus } from '@/hooks/useDialogFocus';
 import type {
     AccountActionResult,
     AccountAuthFormMode,
@@ -269,6 +272,7 @@ const AccountCard = ({
     onManageSubscription,
     onCheckPlusAccess,
 }: AccountCardProps) => {
+    const isKinetic = useWorkoutStore((state) => state.designVariant === 'kinetic');
     const [username, setUsername] = useState(account.profile?.username ?? '');
     const [email, setEmail] = useState(account.profile?.email ?? '');
     const [password, setPassword] = useState('');
@@ -278,6 +282,7 @@ const AccountCard = ({
     const [notice, setNotice] = useState<{ tone: 'success' | 'error' | 'info'; text: string } | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [dialogState, setDialogState] = useState<SyncDialogState>(null);
+    const dialogRef = useDialogFocus(Boolean(dialogState), () => setDialogState(null));
     const isAccountResolving = account.bootstrapStatus === 'idle' || account.bootstrapStatus === 'bootstrapping';
     const isCollapsible = (account.mode === 'signed-in-free' || account.mode === 'signed-in-plus')
         && !account.requiresPasswordReset
@@ -735,8 +740,9 @@ const AccountCard = ({
     };
 
     return (
-        <Card className="border-border/60 bg-card/80 shadow-sm">
-            <CardContent className="space-y-3 p-3 sm:space-y-4 sm:p-4">
+        <Card className={isKinetic ? 'min-w-0 border-0 bg-transparent shadow-none' : 'border-border/60 bg-card/80 shadow-sm'}>
+            <CardContent className={isKinetic ? 'space-y-4 p-0' : 'space-y-3 p-3 sm:space-y-4 sm:p-4'}>
+                {!isKinetic && (
                 <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 space-y-1">
                         <div className="text-[10px] font-black uppercase tracking-[0.32em] text-muted-foreground/60">Account</div>
@@ -763,9 +769,10 @@ const AccountCard = ({
                         )}
                     </div>
                 </div>
+                )}
 
                 {shouldCollapse ? null : isAccountResolving ? (
-                    <div role="status" className="space-y-2 rounded-xl border border-border/60 bg-background/60 p-3">
+                    <div role="status" className={isKinetic ? 'py-3 text-sm text-[var(--kinetic-muted)]' : 'space-y-2 rounded-xl border border-border/60 bg-background/60 p-3'}>
                         <div className="flex items-start gap-2 text-[12px] leading-relaxed text-muted-foreground sm:text-[11px]">
                             <Loader2 className="mt-0.5 shrink-0 animate-spin" size={14} aria-hidden="true" />
                             <p>{supportingCopy}</p>
@@ -781,12 +788,14 @@ const AccountCard = ({
                     <>
 
                 {(account.mode === 'signed-in-plus' || account.mode === 'signed-in-free') && !account.requiresPasswordReset ? (
-                    <div className="space-y-3 rounded-[22px] border border-border/60 bg-background/60 p-3 shadow-[0_10px_30px_rgba(0,0,0,0.12)]">
+                    <div className={isKinetic ? 'space-y-3' : 'space-y-3 rounded-[22px] border border-border/60 bg-background/60 p-3 shadow-[0_10px_30px_rgba(0,0,0,0.12)]'}>
                         <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0 space-y-0.5">
+                                {!isKinetic && (
                                 <div className="truncate text-base font-black tracking-tight text-foreground">
                                     @{account.profile?.username ?? 'connected_account'}
                                 </div>
+                                )}
                                 <div className="truncate text-[11px] font-medium text-muted-foreground">
                                     {badge}
                                     {account.profile?.email ? ` | ${account.profile.email}` : ''}
@@ -796,7 +805,7 @@ const AccountCard = ({
                                 <Button
                                     type="button"
                                     variant="ghost"
-                                    className="h-8 shrink-0 rounded-lg px-3 text-[10px] font-black uppercase tracking-[0.18em]"
+                                    className={isKinetic ? 'console-button console-button--quiet shrink-0' : 'h-8 shrink-0 rounded-lg px-3 text-[10px] font-black uppercase tracking-[0.18em]'}
                                     onClick={() => {
                                         setUsername(account.profile?.username ?? '');
                                         setIsEditingUsername(true);
@@ -808,7 +817,7 @@ const AccountCard = ({
                                 </Button>
                             )}
                         </div>
-                        <p className="text-[12px] leading-relaxed text-muted-foreground sm:text-[11px]">{supportingCopy}</p>
+                        {!isKinetic && <p className="text-[12px] leading-relaxed text-muted-foreground sm:text-[11px]">{supportingCopy}</p>}
 
                         {onUpdateUsername && isEditingUsername && (
                             <div className="space-y-2">
@@ -818,13 +827,13 @@ const AccountCard = ({
                                     onChange={(event) => setUsername(normalizeUsername(event.target.value))}
                                     placeholder="your_username"
                                     autoComplete="username"
-                                    className="h-11 rounded-xl border-border/60 bg-background"
+                                    className={isKinetic ? 'console-input' : 'h-11 rounded-xl border-border/60 bg-background'}
                                     disabled={isSubmitting}
                                 />
                                 <div className="flex gap-2">
                                     <Button
                                         type="button"
-                                        className="h-10 flex-1 rounded-xl font-bold"
+                                        className={isKinetic ? 'console-button console-button--primary flex-1' : 'h-10 flex-1 rounded-xl font-bold'}
                                         onClick={handleUsernameUpdate}
                                         disabled={isSubmitting}
                                     >
@@ -833,7 +842,7 @@ const AccountCard = ({
                                     <Button
                                         type="button"
                                         variant="secondary"
-                                        className="h-10 rounded-xl font-bold"
+                                        className={isKinetic ? 'console-button' : 'h-10 rounded-xl font-bold'}
                                         onClick={() => {
                                             setUsername(account.profile?.username ?? '');
                                             setIsEditingUsername(false);
@@ -846,15 +855,15 @@ const AccountCard = ({
                             </div>
                         )}
 
-                        <div className="flex items-center gap-2">
+                        {(!isKinetic || !syncSurface) && <div className="flex items-center gap-2">
                             <span className="text-[10px] font-semibold text-muted-foreground">
                                 {account.mode === 'signed-in-plus' ? 'Cloud sync available' : 'Cloud sync locked'}
                             </span>
-                        </div>
+                        </div>}
                         {account.mode === 'signed-in-free' && onUpgradeToPlus && (
                             <Button
                                 type="button"
-                                className="h-11 w-full justify-center rounded-xl font-bold"
+                                className={isKinetic ? 'console-button console-button--primary w-full' : 'h-11 w-full justify-center rounded-xl font-bold'}
                                 onClick={handleUpgradeToPlus}
                                 disabled={isSubmitting}
                             >
@@ -866,7 +875,7 @@ const AccountCard = ({
                             <Button
                                 type="button"
                                 variant="secondary"
-                                className="h-11 w-full justify-center rounded-xl font-bold"
+                                className={isKinetic ? 'console-button w-full' : 'h-11 w-full justify-center rounded-xl font-bold'}
                                 onClick={handleCheckPlusAccess}
                                 disabled={isSubmitting || account.bootstrapStatus === 'bootstrapping'}
                             >
@@ -880,7 +889,7 @@ const AccountCard = ({
                             <Button
                                 type="button"
                                 variant="secondary"
-                                className="h-11 w-full justify-center rounded-xl font-bold"
+                                className={isKinetic ? 'console-button w-full' : 'h-11 w-full justify-center rounded-xl font-bold'}
                                 onClick={handleManageSubscription}
                                 disabled={isSubmitting}
                             >
@@ -891,7 +900,7 @@ const AccountCard = ({
                         <Button
                             type="button"
                             variant="secondary"
-                            className="h-11 w-full justify-center rounded-xl font-bold"
+                            className={isKinetic ? 'console-button console-button--quiet w-full' : 'h-11 w-full justify-center rounded-xl font-bold'}
                             onClick={handleSignOut}
                             disabled={!canSignOut}
                         >
@@ -900,14 +909,14 @@ const AccountCard = ({
                         </Button>
                     </div>
                         ) : (
-                    <div className="space-y-2.5 rounded-xl border border-border/60 bg-background/60 p-3">
-                        <p className="text-[12px] leading-relaxed text-muted-foreground sm:text-[11px]">{supportingCopy}</p>
+                    <div className={isKinetic ? 'space-y-4' : 'space-y-2.5 rounded-xl border border-border/60 bg-background/60 p-3'}>
+                        <p className={isKinetic ? 'text-xs leading-relaxed text-[var(--kinetic-muted)]' : 'text-[12px] leading-relaxed text-muted-foreground sm:text-[11px]'}>{supportingCopy}</p>
                         {!account.requiresPasswordReset && (
                             <div className="grid grid-cols-2 gap-2">
                                 <Button
                                     type="button"
                                     variant={authMode === 'sign-in' ? 'default' : 'secondary'}
-                                    className="h-10 rounded-xl text-[10px] font-black uppercase tracking-[0.2em]"
+                                    className={isKinetic ? cn('console-button', authMode === 'sign-in' && 'console-button--primary') : 'h-10 rounded-xl text-[10px] font-black uppercase tracking-[0.2em]'}
                                     onClick={() => setAuthMode('sign-in')}
                                     disabled={!canUsePasswordAuth || isSubmitting}
                                 >
@@ -916,7 +925,7 @@ const AccountCard = ({
                                 <Button
                                     type="button"
                                     variant={authMode === 'sign-up' ? 'default' : 'secondary'}
-                                    className="h-10 rounded-xl text-[10px] font-black uppercase tracking-[0.2em]"
+                                    className={isKinetic ? cn('console-button', authMode === 'sign-up' && 'console-button--primary') : 'h-10 rounded-xl text-[10px] font-black uppercase tracking-[0.2em]'}
                                     onClick={() => setAuthMode('sign-up')}
                                     disabled={!canUsePasswordAuth || isSubmitting}
                                 >
@@ -928,7 +937,7 @@ const AccountCard = ({
                         <div className="space-y-2">
                             {authMode === 'sign-up' && (
                                 <div className="space-y-2">
-                                    <Label htmlFor="account-username" className="text-[10px] font-black uppercase tracking-[0.28em] text-muted-foreground/70">
+                                    <Label htmlFor="account-username" className={isKinetic ? 'console-label' : 'text-[10px] font-black uppercase tracking-[0.28em] text-muted-foreground/70'}>
                                         Username
                                     </Label>
                                     <Input
@@ -938,13 +947,13 @@ const AccountCard = ({
                                         value={username}
                                         onChange={(event) => setUsername(normalizeUsername(event.target.value))}
                                         placeholder="your_username"
-                                        className="h-11 rounded-xl border-border/60 bg-background"
+                                        className={isKinetic ? 'console-input' : 'h-11 rounded-xl border-border/60 bg-background'}
                                         disabled={!canUsePasswordAuth || isSubmitting}
                                     />
                                 </div>
                             )}
 
-                            <Label htmlFor="account-email" className="text-[10px] font-black uppercase tracking-[0.28em] text-muted-foreground/70">
+                            <Label htmlFor="account-email" className={isKinetic ? 'console-label' : 'text-[10px] font-black uppercase tracking-[0.28em] text-muted-foreground/70'}>
                                 Email
                             </Label>
                             <Input
@@ -955,14 +964,14 @@ const AccountCard = ({
                                 value={email}
                                 onChange={(event) => setEmail(event.target.value)}
                                 placeholder="name@example.com"
-                                className="h-11 rounded-xl border-border/60 bg-background"
+                                className={isKinetic ? 'console-input' : 'h-11 rounded-xl border-border/60 bg-background'}
                                 disabled={!canUsePasswordAuth || isSubmitting}
                             />
                         </div>
 
                         {(authMode === 'sign-in' || authMode === 'sign-up' || account.requiresPasswordReset) && (
                             <div className="space-y-2">
-                                <Label htmlFor="account-password" className="text-[10px] font-black uppercase tracking-[0.28em] text-muted-foreground/70">
+                                <Label htmlFor="account-password" className={isKinetic ? 'console-label' : 'text-[10px] font-black uppercase tracking-[0.28em] text-muted-foreground/70'}>
                                     {account.requiresPasswordReset ? 'New password' : 'Password'}
                                 </Label>
                                 <Input
@@ -972,7 +981,7 @@ const AccountCard = ({
                                     value={password}
                                     onChange={(event) => setPassword(event.target.value)}
                                     placeholder={account.requiresPasswordReset ? 'Enter a new password' : (authMode === 'sign-up' ? 'Create a password' : 'Enter your password')}
-                                    className="h-11 rounded-xl border-border/60 bg-background"
+                                    className={isKinetic ? 'console-input' : 'h-11 rounded-xl border-border/60 bg-background'}
                                     disabled={!canUsePasswordAuth || isSubmitting}
                                 />
                             </div>
@@ -980,7 +989,7 @@ const AccountCard = ({
 
                         {(authMode === 'sign-up' || account.requiresPasswordReset) && (
                             <div className="space-y-2">
-                                <Label htmlFor="account-password-confirm" className="text-[10px] font-black uppercase tracking-[0.28em] text-muted-foreground/70">
+                                <Label htmlFor="account-password-confirm" className={isKinetic ? 'console-label' : 'text-[10px] font-black uppercase tracking-[0.28em] text-muted-foreground/70'}>
                                     Confirm password
                                 </Label>
                                 <Input
@@ -990,13 +999,13 @@ const AccountCard = ({
                                     value={confirmPassword}
                                     onChange={(event) => setConfirmPassword(event.target.value)}
                                     placeholder="Re-enter your password"
-                                    className="h-11 rounded-xl border-border/60 bg-background"
+                                    className={isKinetic ? 'console-input' : 'h-11 rounded-xl border-border/60 bg-background'}
                                     disabled={!canUsePasswordAuth || isSubmitting}
                                 />
                             </div>
                         )}
 
-                        <div className="text-[12px] leading-relaxed text-muted-foreground sm:text-[11px]">
+                        <div className={isKinetic ? 'text-xs leading-relaxed text-[var(--kinetic-muted)]' : 'text-[12px] leading-relaxed text-muted-foreground sm:text-[11px]'}>
                             {account.requiresPasswordReset
                                 ? 'Set a new password to finish recovering this account, then continue with the same account state.'
                                 : authMode === 'sign-up'
@@ -1009,7 +1018,7 @@ const AccountCard = ({
                         {account.requiresPasswordReset ? (
                             <Button
                                 type="button"
-                                className="h-11 w-full justify-center rounded-xl font-bold"
+                                className={isKinetic ? 'console-button console-button--primary w-full' : 'h-11 w-full justify-center rounded-xl font-bold'}
                                 onClick={handlePasswordUpdate}
                                 disabled={!canUsePasswordAuth || isSubmitting}
                             >
@@ -1019,7 +1028,7 @@ const AccountCard = ({
                         ) : authMode === 'sign-up' ? (
                             <Button
                                 type="button"
-                                className="h-11 w-full justify-center rounded-xl font-bold"
+                                className={isKinetic ? 'console-button console-button--primary w-full' : 'h-11 w-full justify-center rounded-xl font-bold'}
                                 onClick={handlePasswordSignUp}
                                 disabled={!canUsePasswordAuth || isSubmitting}
                             >
@@ -1029,7 +1038,7 @@ const AccountCard = ({
                         ) : authMode === 'forgot-password' ? (
                             <Button
                                 type="button"
-                                className="h-11 w-full justify-center rounded-xl font-bold"
+                                className={isKinetic ? 'console-button console-button--primary w-full' : 'h-11 w-full justify-center rounded-xl font-bold'}
                                 onClick={handlePasswordReset}
                                 disabled={!canUsePasswordAuth || isSubmitting}
                             >
@@ -1039,7 +1048,7 @@ const AccountCard = ({
                         ) : (
                             <Button
                                 type="button"
-                                className="h-11 w-full justify-center rounded-xl font-bold"
+                                className={isKinetic ? 'console-button console-button--primary w-full' : 'h-11 w-full justify-center rounded-xl font-bold'}
                                 onClick={handlePasswordSignIn}
                                 disabled={!canUsePasswordAuth || isSubmitting}
                             >
@@ -1052,7 +1061,7 @@ const AccountCard = ({
                             <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] font-semibold text-muted-foreground">
                                 <button
                                     type="button"
-                                    className="text-left underline underline-offset-4"
+                                    className={isKinetic ? 'min-h-11 text-left text-xs text-[var(--kinetic-muted)] underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-[var(--kinetic-focus)]' : 'text-left underline underline-offset-4'}
                                     onClick={() => setAuthMode(authMode === 'forgot-password' ? 'sign-in' : 'forgot-password')}
                                     disabled={!canUsePasswordAuth || isSubmitting}
                                 >
@@ -1061,7 +1070,7 @@ const AccountCard = ({
                                 {authMode !== 'forgot-password' && onResendSignUpConfirmation && (
                                     <button
                                         type="button"
-                                        className="text-left underline underline-offset-4"
+                                        className={isKinetic ? 'min-h-11 text-left text-xs text-[var(--kinetic-muted)] underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-[var(--kinetic-focus)]' : 'text-left underline underline-offset-4'}
                                         onClick={() => void handleResendConfirmation()}
                                         disabled={!canUsePasswordAuth || isSubmitting}
                                     >
@@ -1074,14 +1083,14 @@ const AccountCard = ({
                 )}
 
                 {syncSurface && (
-                    <div className="space-y-2.5 rounded-xl border border-border/60 bg-background/60 p-3">
+                    <div className={isKinetic ? 'space-y-3 border-t border-[var(--kinetic-border)] pt-4' : 'space-y-2.5 rounded-xl border border-border/60 bg-background/60 p-3'}>
                         <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0 space-y-1">
-                                <div className="text-[10px] font-black uppercase tracking-[0.28em] text-muted-foreground/60">Sync</div>
-                                <div className="text-sm font-bold text-foreground">{syncBadgeLabels[syncSurface.status]}</div>
+                                <div className={isKinetic ? 'console-label' : 'text-[10px] font-black uppercase tracking-[0.28em] text-muted-foreground/60'}>Sync</div>
+                                {!isKinetic && <div className="text-sm font-bold text-foreground">{syncBadgeLabels[syncSurface.status]}</div>}
                             </div>
                             <div className={cn(
-                                'inline-flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.22em]',
+                                isKinetic ? 'console-tag shrink-0' : 'inline-flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.22em]',
                                 syncBadgeClasses[syncSurface.status],
                             )}>
                                 {getSyncStatusIcon(syncSurface.status)}
@@ -1089,10 +1098,10 @@ const AccountCard = ({
                             </div>
                         </div>
 
-                        <p className="text-[12px] leading-relaxed text-muted-foreground sm:text-[11px]">{syncSurface.detail}</p>
+                        <p className={isKinetic ? 'text-xs leading-relaxed text-[var(--kinetic-muted)]' : 'text-[12px] leading-relaxed text-muted-foreground sm:text-[11px]'}>{syncSurface.detail}</p>
 
                         {syncSurface.timestamp && (
-                            <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground/60">
+                            <div className={isKinetic ? 'text-xs text-[var(--kinetic-muted)]' : 'text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground/60'}>
                                 Last synced {syncSurface.timestamp}
                             </div>
                         )}
@@ -1104,12 +1113,9 @@ const AccountCard = ({
                                         type="button"
                                         variant={syncSurface.action.variant}
                                         size={syncSurface.action.size}
-                                        className={cn(
-                                            syncSurface.action.size === 'sm'
-                                                ? 'h-9 w-auto justify-center rounded-full px-3'
-                                                : 'h-11 w-full justify-center rounded-xl font-bold',
-                                            syncSurface.action.className,
-                                        )}
+                                        className={isKinetic
+                                            ? cn('console-button w-full', (syncSurface.status === 'enable-sync' || syncSurface.status === 'first-sync-required') && 'console-button--primary')
+                                            : cn(syncSurface.action.size === 'sm' ? 'h-9 w-auto justify-center rounded-full px-3' : 'h-11 w-full justify-center rounded-xl font-bold', syncSurface.action.className)}
                                         onClick={handlePrimarySyncAction}
                                         disabled={syncSurface.action.disabled || isSubmitting}
                                     >
@@ -1121,7 +1127,7 @@ const AccountCard = ({
                                     <Button
                                         type="button"
                                         variant="ghost"
-                                        className="h-10 w-full justify-center rounded-xl font-bold"
+                                        className={isKinetic ? 'console-button console-button--quiet w-full' : 'h-10 w-full justify-center rounded-xl font-bold'}
                                         onClick={() => {
                                             setDialogState({
                                                 kind: 'disable-sync',
@@ -1142,9 +1148,9 @@ const AccountCard = ({
                 {notice && (
                     <div
                         className={cn(
-                            'rounded-xl border px-3 py-2 text-[12px] leading-relaxed sm:text-[11px]',
-                            notice.tone === 'success' && 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
-                            notice.tone === 'error' && 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300',
+                            isKinetic ? 'rounded-lg border px-3 py-3 text-xs leading-relaxed' : 'rounded-xl border px-3 py-2 text-[12px] leading-relaxed sm:text-[11px]',
+                            notice.tone === 'success' && cn('border-emerald-500/30 bg-emerald-500/10', isKinetic ? 'text-emerald-200' : 'text-emerald-700 dark:text-emerald-300'),
+                            notice.tone === 'error' && cn('border-red-500/30 bg-red-500/10', isKinetic ? 'text-red-200' : 'text-red-700 dark:text-red-300'),
                             notice.tone === 'info' && 'border-border/60 bg-muted/40 text-muted-foreground',
                         )}
                     >
@@ -1159,24 +1165,26 @@ const AccountCard = ({
                     </div>
                 )}
 
-                {dialogState && (
+                {dialogState && createPortal(
                     <div
+                        ref={dialogRef}
+                        tabIndex={-1}
                         role="dialog"
                         aria-modal="true"
                         aria-label={dialogState.title}
-                        className="fixed inset-0 z-[130] flex items-end justify-center bg-black/75 px-[max(1rem,var(--safe-left))] pt-[max(1rem,var(--safe-top))] pb-[max(1rem,var(--safe-bottom))] backdrop-blur-sm sm:items-center sm:px-4 sm:py-6"
+                        className={cn('fixed inset-0 z-[130] flex items-end justify-center bg-black/75 px-[max(1rem,var(--safe-left))] pt-[max(1rem,var(--safe-top))] pb-[max(1rem,var(--safe-bottom))] sm:items-center sm:px-4 sm:py-6', !isKinetic && 'backdrop-blur-sm')}
                         onPointerDown={(event) => {
                             if (event.target === event.currentTarget) {
                                 setDialogState(null);
                             }
                         }}
                     >
-                        <div className="max-h-[calc(var(--viewport-dynamic)-var(--safe-top)-var(--safe-bottom)-1rem)] w-full max-w-md overflow-y-auto rounded-[28px] border border-border/60 bg-background/95 p-5 shadow-[0_24px_90px_rgba(0,0,0,0.45)] scroll-contain-y sm:p-6">
+                        <div className={isKinetic ? 'console-dialog w-full max-w-md' : 'max-h-[calc(var(--viewport-dynamic)-var(--safe-top)-var(--safe-bottom)-1rem)] w-full max-w-md overflow-y-auto rounded-[28px] border border-border/60 bg-background/95 p-5 shadow-[0_24px_90px_rgba(0,0,0,0.45)] scroll-contain-y sm:p-6'}>
                             <div className="space-y-2">
-                                <div className="text-[11px] font-black uppercase tracking-[0.32em] text-primary">
+                                <div className={isKinetic ? 'console-label' : 'text-[11px] font-black uppercase tracking-[0.32em] text-primary'}>
                                     {dialogState.kind === 'first-sync-choice' ? 'First Sync' : 'Confirm Action'}
                                 </div>
-                                <h2 className="text-2xl font-black italic tracking-tight text-foreground">
+                                <h2 className={isKinetic ? 'console-heading text-xl' : 'text-2xl font-black italic tracking-tight text-foreground'}>
                                     {dialogState.title}
                                 </h2>
                                 <p className="text-sm leading-relaxed text-muted-foreground">
@@ -1188,7 +1196,7 @@ const AccountCard = ({
                                 <div className="mt-6 grid gap-2">
                                     <Button
                                         type="button"
-                                        className="min-h-11 justify-start whitespace-normal rounded-2xl px-4 py-3 text-left text-[11px] font-black leading-snug"
+                                        className={isKinetic ? 'console-button console-button--primary justify-start text-left' : 'min-h-11 justify-start whitespace-normal rounded-2xl px-4 py-3 text-left text-[11px] font-black leading-snug'}
                                         onClick={() => void handleSyncChoice('upload-local')}
                                         disabled={isSubmitting}
                                     >
@@ -1197,7 +1205,7 @@ const AccountCard = ({
                                     <Button
                                         type="button"
                                         variant="secondary"
-                                        className="min-h-11 justify-start whitespace-normal rounded-2xl px-4 py-3 text-left text-[11px] font-black leading-snug"
+                                        className={isKinetic ? 'console-button justify-start text-left' : 'min-h-11 justify-start whitespace-normal rounded-2xl px-4 py-3 text-left text-[11px] font-black leading-snug'}
                                         onClick={() => void handleSyncChoice('replace-local')}
                                         disabled={isSubmitting}
                                     >
@@ -1206,7 +1214,7 @@ const AccountCard = ({
                                     <Button
                                         type="button"
                                         variant="ghost"
-                                        className="h-11 rounded-2xl font-black"
+                                        className={isKinetic ? 'console-button console-button--quiet' : 'h-11 rounded-2xl font-black'}
                                         onClick={() => setDialogState(null)}
                                         disabled={isSubmitting}
                                     >
@@ -1218,7 +1226,7 @@ const AccountCard = ({
                                     <Button
                                         type="button"
                                         variant="secondary"
-                                        className="min-h-11 rounded-2xl font-black"
+                                        className={isKinetic ? 'console-button' : 'min-h-11 rounded-2xl font-black'}
                                         onClick={() => setDialogState(null)}
                                         disabled={isSubmitting}
                                     >
@@ -1227,7 +1235,7 @@ const AccountCard = ({
                                     <Button
                                         type="button"
                                         variant="destructive"
-                                        className="min-h-11 rounded-2xl font-black"
+                                        className={isKinetic ? 'console-button console-button--danger' : 'min-h-11 rounded-2xl font-black'}
                                         onClick={() => void handleDisableSync()}
                                         disabled={isSubmitting}
                                     >
@@ -1236,7 +1244,8 @@ const AccountCard = ({
                                 </div>
                             )}
                         </div>
-                    </div>
+                    </div>,
+                    document.querySelector('[data-design-variant]') ?? document.body,
                 )}
                     </>
                 )}

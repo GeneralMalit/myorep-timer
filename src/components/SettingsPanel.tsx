@@ -1,6 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
+import type { CSSProperties, FC } from 'react';
 import { createPortal } from 'react-dom';
-import { useWorkoutStore, WorkoutSettings } from '@/store/useWorkoutStore';
+import { useWorkoutStore } from '@/store/useWorkoutStore';
+import type { WorkoutSettings } from '@/store/useWorkoutStore';
 import {
     X,
     Palette,
@@ -21,6 +23,8 @@ import { cn } from '@/lib/utils';
 import { settingsPanelDesktopLayout } from '@/layout/settingsPanel.desktop';
 import { settingsPanelMobileLayout } from '@/layout/settingsPanel.mobile';
 import { DEFAULT_PROGRESSION_REMINDER_THRESHOLD } from '@/utils/workoutProgression';
+import { getReadableForeground } from '@/utils/colors';
+import { useDialogFocus } from '@/hooks/useDialogFocus';
 
 interface SettingsPanelProps {
     isOpen: boolean;
@@ -106,10 +110,11 @@ const useMobileViewport = () => {
     return isMobileViewport;
 };
 
-const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
+const SettingsPanel: FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
     const settings = useWorkoutStore((state) => state.settings);
     const setSettings = useWorkoutStore((state) => state.setSettings);
     const designVariant = useWorkoutStore((state) => state.designVariant);
+    const theme = useWorkoutStore((state) => state.theme);
     const setDesignVariant = useWorkoutStore((state) => state.setDesignVariant);
     const seconds = useWorkoutStore((state) => state.seconds);
     const myoWorkSecs = useWorkoutStore((state) => state.myoWorkSecs);
@@ -120,23 +125,19 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
     const visualIdentityItems = isKinetic ? KINETIC_VISUAL_COLORS : CLASSIC_VISUAL_COLORS;
     const isMobileViewport = useMobileViewport();
     const layout = getResponsiveLayout(isMobileViewport, settingsPanelMobileLayout, settingsPanelDesktopLayout);
-    const [shouldRenderContent, setShouldRenderContent] = useState(isOpen);
-    const overlayRef = useRef<HTMLDivElement | null>(null);
-    const panelRef = useRef<HTMLDivElement | null>(null);
-    const closeButtonRef = useRef<HTMLButtonElement | null>(null);
-    const onCloseRef = useRef(onClose);
-    onCloseRef.current = onClose;
+    const panelRef = useDialogFocus(isOpen, onClose);
+    const sectionClassName = isKinetic ? 'console-section space-y-4' : layout.section;
+    const sectionTitleClassName = isKinetic ? 'console-label flex items-center gap-2' : layout.sectionTitle;
+    const fieldLabelClassName = isKinetic ? 'console-label' : layout.fieldLabel;
+    const fieldHelpClassName = isKinetic ? 'text-xs leading-relaxed text-[var(--kinetic-muted)]' : layout.fieldHelp;
+    const fieldInputClassName = isKinetic ? 'console-input' : layout.fieldInput;
+    const toggleRowClassName = isKinetic ? 'flex min-h-16 items-center justify-between gap-4 border-t border-[var(--kinetic-border)] py-3 first:border-t-0' : layout.toggleRow;
     const rawProgressionReminderThreshold = settings.progressionReminderThreshold;
     const progressionReminderThreshold = normalizeProgressionReminderThreshold(rawProgressionReminderThreshold);
     const [progressionReminderThresholdDraft, setProgressionReminderThresholdDraft] = useState(
         String(progressionReminderThreshold),
     );
-    const kineticSwitchClassName = isKinetic
-        ? cn(
-            'border-[#424940] bg-[#272c27] data-[state=checked]:border-[#A8FF5A] data-[state=checked]:bg-[#A8FF5A] data-[state=checked]:[&>span]:bg-[#111412] data-[state=unchecked]:bg-[#272c27] focus-visible:ring-[#FF5B36] focus-visible:ring-offset-[#111412]',
-            isMobileViewport && 'h-11 w-14 [&>span]:h-7 [&>span]:w-7 data-[state=checked]:[&>span]:translate-x-6 data-[state=unchecked]:[&>span]:translate-x-0',
-        )
-        : undefined;
+    const kineticSwitchClassName = isKinetic ? 'console-switch' : undefined;
 
     const getVisualIdentityColor = (item: VisualIdentityItem) => {
         if (isKinetic) {
@@ -181,73 +182,17 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
         audioEngine.speak('Ready 3 2 1 Go');
     };
 
-    useEffect(() => {
-        if (!isOpen) {
-            setShouldRenderContent(false);
-            return undefined;
-        }
-
-        const frame = window.requestAnimationFrame(() => {
-            setShouldRenderContent(true);
-        });
-
-        return () => window.cancelAnimationFrame(frame);
-    }, [isOpen]);
-
-    useEffect(() => {
-        if (!isOpen) return;
-
-        const previouslyFocused = document.activeElement instanceof HTMLElement
-            ? document.activeElement
-            : null;
-        closeButtonRef.current?.focus();
-
-        const handleKeyDown = (event: KeyboardEvent) => {
-            if (event.key === 'Escape') {
-                event.preventDefault();
-                onCloseRef.current();
-                return;
-            }
-            if (event.key !== 'Tab') return;
-
-            const panelElement = panelRef.current;
-            const focusable = panelElement?.querySelectorAll<HTMLElement>(
-                'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-            );
-            if (!panelElement || !focusable?.length) {
-                event.preventDefault();
-                panelElement?.focus();
-                return;
-            }
-
-            const first = focusable[0];
-            const last = focusable[focusable.length - 1];
-            if (event.shiftKey && (document.activeElement === first || !panelElement.contains(document.activeElement))) {
-                event.preventDefault();
-                last.focus();
-            } else if (!event.shiftKey && (document.activeElement === last || !panelElement.contains(document.activeElement))) {
-                event.preventDefault();
-                first.focus();
-            }
-        };
-
-        window.addEventListener('keydown', handleKeyDown);
-        return () => {
-            window.removeEventListener('keydown', handleKeyDown);
-            if (previouslyFocused?.isConnected) previouslyFocused.focus();
-        };
-    }, [isOpen]);
 
     const panel = (
         <div
-            ref={overlayRef}
             data-testid="settings-drawer-overlay"
             aria-hidden={!isOpen}
             className={cn(
                 layout.overlay,
                 isOpen ? layout.overlayOpen : layout.overlayClosed,
-                isKinetic && 'bg-black/75 backdrop-blur-none',
+                isKinetic ? 'design-kinetic bg-black/75 backdrop-blur-none' : theme,
             )}
+            style={isKinetic ? { '--kinetic-theme-color': kineticThemeColor, '--kinetic-on-accent': getReadableForeground(kineticThemeColor), backgroundColor: 'rgb(0 0 0 / 0.7)' } as CSSProperties : undefined}
             onPointerDown={(event) => {
                 if (isOpen && event.target === event.currentTarget) {
                     onClose();
@@ -260,31 +205,24 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                 role={isOpen ? 'dialog' : undefined}
                 aria-modal={isOpen ? true : undefined}
                 aria-labelledby="settings-panel-title"
+                tabIndex={-1}
                 className={cn(
-                    layout.panel,
+                    isKinetic ? 'flex h-full w-full max-w-[30rem] flex-col overflow-hidden rounded-none border-l border-[var(--kinetic-border)] bg-[var(--kinetic-bg)] shadow-none' : layout.panel,
                     isOpen ? layout.panelOpen : layout.panelClosed,
-                    isKinetic && 'w-full max-w-[30rem] rounded-none border-[#343833] bg-[#111412] text-[#F2F0ED] shadow-[-8px_0_20px_rgba(0,0,0,0.25)]',
                 )}
             >
                 <CardHeader className={cn(
-                    layout.header,
-                    isKinetic && 'gap-3 border-[#343833] bg-[#171a17] px-5 pb-4',
-                    isKinetic && (isMobileViewport ? 'pt-[calc(var(--safe-top)+1rem)]' : 'pt-5'),
+                    isKinetic ? 'flex shrink-0 flex-row items-center justify-between gap-3 border-b border-[var(--kinetic-border)] bg-[var(--kinetic-panel)] px-5 pb-4 pt-[calc(var(--safe-top)+1rem)]' : layout.header,
                 )}>
-                    <CardTitle id="settings-panel-title" className={cn(layout.title, isKinetic && 'text-base font-semibold not-italic tracking-tight text-[#F2F0ED]')}>
-                        <Monitor className={cn('text-primary', isKinetic && 'text-[#FF5B36]')} size={20} />
+                    <CardTitle id="settings-panel-title" className={isKinetic ? 'console-heading flex items-center gap-2 text-lg' : layout.title}>
+                        <Monitor size={20} />
                         System Configuration
                     </CardTitle>
                     <Button
-                        ref={closeButtonRef}
                         variant="ghost"
                         size="icon"
                         onClick={onClose}
-                        className={cn(
-                            layout.closeButton,
-                            isKinetic && 'rounded-[8px] text-[#C6CAC3] hover:bg-[#252925] hover:text-[#F2F0ED]',
-                            isKinetic && !isMobileViewport && 'h-9 w-9',
-                        )}
+                        className={isKinetic ? 'console-icon' : layout.closeButton}
                         aria-label="Close Settings"
                     >
                         <X size={20} />
@@ -292,123 +230,63 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                 </CardHeader>
 
                 <CardContent className={cn(
-                    layout.content,
-                    isKinetic && 'space-y-4 px-5 pt-4',
-                    isKinetic && (isMobileViewport ? 'pb-[calc(var(--safe-bottom)+2rem)]' : 'pb-8'),
+                    isKinetic ? 'min-h-0 flex-1 space-y-4 overflow-y-auto px-4 pt-4 pb-[calc(var(--safe-bottom)+1.5rem)] sm:px-5' : layout.content,
                 )}>
-                    {!shouldRenderContent ? (
-                        <div className="space-y-4">
-                            <div className={cn('h-32 rounded-[24px] border border-border/60 bg-card/50 p-4', isKinetic && 'rounded-[10px] border-[#343833] bg-[#171a17]')}>
-                                <div className={cn('h-3 w-24 animate-pulse rounded-full bg-muted/70', isKinetic && 'bg-[#313731]')} />
-                                <div className={cn('mt-4 h-20 rounded-2xl bg-muted/30', isKinetic && 'rounded-[8px] bg-[#232723]')} />
-                            </div>
-                            <div className={cn('h-24 rounded-[24px] border border-border/60 bg-card/50 p-4', isKinetic && 'rounded-[10px] border-[#343833] bg-[#171a17]')}>
-                                <div className={cn('h-3 w-20 animate-pulse rounded-full bg-muted/70', isKinetic && 'bg-[#313731]')} />
-                                <div className={cn('mt-4 h-12 rounded-2xl bg-muted/30', isKinetic && 'rounded-[8px] bg-[#232723]')} />
-                            </div>
-                            <div className={cn('h-24 rounded-[24px] border border-border/60 bg-card/50 p-4', isKinetic && 'rounded-[10px] border-[#343833] bg-[#171a17]')}>
-                                <div className={cn('h-3 w-28 animate-pulse rounded-full bg-muted/70', isKinetic && 'bg-[#313731]')} />
-                                <div className={cn('mt-4 h-12 rounded-2xl bg-muted/30', isKinetic && 'rounded-[8px] bg-[#232723]')} />
-                            </div>
-                        </div>
-                    ) : (
+                    {isOpen && (
                         <>
-                            <section className={cn(layout.section, isKinetic && 'space-y-3 rounded-[10px] border-[#343833] bg-[#171a17] p-4')} aria-labelledby="settings-design-mode-title">
-                                <div className={cn(layout.sectionTitle, isKinetic && 'normal-case text-[11px] font-semibold tracking-[0.08em] text-[#9EA69B]')}>
+                            <section className={sectionClassName} aria-labelledby="settings-design-mode-title">
+                                <div className={sectionTitleClassName}>
                                     <Monitor size={16} />
                                     <span id="settings-design-mode-title">Interface Design</span>
                                 </div>
 
-                                <fieldset className="space-y-2" aria-describedby="settings-design-mode-description">
-                                    <legend className="sr-only">Choose interface design</legend>
-                                    <label
-                                        htmlFor="settings-design-mode-classic"
-                                        className={cn(
-                                            'flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors',
-                                            selectedDesignVariant === 'classic'
-                                                ? 'border-primary bg-primary/10'
-                                                : 'border-border/50 bg-accent/20 hover:border-primary/50',
-                                            isKinetic && (selectedDesignVariant === 'classic'
-                                                ? 'border-[#4DABF7] bg-[#4DABF7]/10 hover:border-[#4DABF7]'
-                                                : 'border-[#343833] bg-[#111412] hover:border-[#4DABF7]/70'),
-                                        )}
-                                    >
-                                        <input
-                                            id="settings-design-mode-classic"
-                                            type="radio"
-                                            name="design-mode"
-                                            value="classic"
-                                            checked={selectedDesignVariant === 'classic'}
-                                            onChange={() => setDesignVariant('classic')}
-                                            className={cn('mt-1 h-4 w-4 accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2', isKinetic && 'accent-[#4DABF7] focus-visible:ring-[#4DABF7] focus-visible:ring-offset-[#171a17]')}
-                                        />
-                                        <span className={cn('space-y-0.5', isKinetic && 'text-[#F2F0ED]')}>
-                                            <span className={cn('block text-sm font-bold', isKinetic && 'font-semibold')}>Classic</span>
-                                            <span className={cn('block text-xs text-muted-foreground', isKinetic && 'text-[#9EA69B]')}>Keep the current timer layout and controls.</span>
-                                        </span>
-                                    </label>
-
-                                    <label
-                                        htmlFor="settings-design-mode-kinetic"
-                                        className={cn(
-                                            'flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors',
-                                            selectedDesignVariant === 'kinetic'
-                                                ? 'border-primary bg-primary/10'
-                                                : 'border-border/50 bg-accent/20 hover:border-primary/50',
-                                            isKinetic && (selectedDesignVariant === 'kinetic'
-                                                ? 'border-[#FF5B36] bg-[#FF5B36]/10 hover:border-[#FF5B36]'
-                                                : 'border-[#343833] bg-[#111412] hover:border-[#FF5B36]/70'),
-                                        )}
-                                    >
-                                        <input
-                                            id="settings-design-mode-kinetic"
-                                            type="radio"
-                                            name="design-mode"
-                                            value="kinetic"
-                                            checked={selectedDesignVariant === 'kinetic'}
-                                            onChange={() => setDesignVariant('kinetic')}
-                                            className={cn('mt-1 h-4 w-4 accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2', isKinetic && 'accent-[#FF5B36] focus-visible:ring-[#FF5B36] focus-visible:ring-offset-[#171a17]')}
-                                        />
-                                        <span className={cn('space-y-0.5', isKinetic && 'text-[#F2F0ED]')}>
-                                            <span className={cn('block text-sm font-bold', isKinetic && 'font-semibold')}>Kinetic Console</span>
-                                            <span className={cn('block text-xs text-muted-foreground', isKinetic && 'text-[#9EA69B]')}>Use the redesigned workout experience.</span>
-                                        </span>
-                                    </label>
-                                </fieldset>
-                                <p id="settings-design-mode-description" className={cn('text-xs text-muted-foreground', isKinetic && 'text-[#8A9285]')}>
-                                    Your choice is saved on this device and can be changed at any time.
-                                </p>
+                                {isKinetic ? (
+                                    <div className="space-y-2">
+                                        <Label htmlFor="settings-interface" className="sr-only">Interface design</Label>
+                                        <select id="settings-interface" className="console-select" value={selectedDesignVariant} onChange={(event) => setDesignVariant(event.target.value === 'kinetic' ? 'kinetic' : 'classic')}>
+                                            <option value="kinetic">Kinetic Console</option>
+                                            <option value="classic">Classic</option>
+                                        </select>
+                                        <p className="text-xs text-[var(--kinetic-muted)]">Saved on this device. Changing the interface keeps your workouts and settings.</p>
+                                    </div>
+                                ) : (
+                                    <fieldset className="space-y-2">
+                                        <legend className="sr-only">Choose interface design</legend>
+                                        {([{ value: 'classic', label: 'Classic' }, { value: 'kinetic', label: 'Kinetic Console' }] as const).map((option) => (
+                                            <label key={option.value} className="flex min-h-11 cursor-pointer items-center gap-3 rounded-lg border border-border/50 bg-accent/20 p-3">
+                                                <input type="radio" name="design-mode" value={option.value} checked={selectedDesignVariant === option.value} onChange={() => setDesignVariant(option.value)} className="h-4 w-4 accent-primary" />
+                                                <span className="text-sm font-semibold">{option.label}</span>
+                                            </label>
+                                        ))}
+                                    </fieldset>
+                                )}
                             </section>
 
                             <section
-                                className={cn(layout.section, isKinetic && 'space-y-3 rounded-[10px] border-[#343833] bg-[#171a17] p-4')}
-                                style={isKinetic ? { '--kinetic-theme-color': kineticThemeColor } as React.CSSProperties : undefined}
+                                className={sectionClassName}
                             >
-                                <div className={cn(layout.sectionTitle, isKinetic && 'normal-case text-[11px] font-semibold tracking-[0.08em] text-[var(--kinetic-theme-color)]')}>
+                                <div className={sectionTitleClassName}>
                                     <Palette size={16} />
                                     <span>Visual Identity</span>
                                 </div>
-                                <div className={layout.visualGrid}>
+                                <div className={isKinetic ? 'grid grid-cols-2 gap-3' : layout.visualGrid}>
                                     {visualIdentityItems.map((item) => {
                                         const colorValue = getVisualIdentityColor(item);
                                         const inputId = `settings-${item.key}`;
 
                                         return (
-                                            <div key={item.key} className={cn(layout.visualCard, isKinetic && 'space-y-2 rounded-[8px] border-[#343833] bg-[#111412] p-3')}>
-                                                <Label htmlFor={inputId} className={cn(layout.fieldLabel, isKinetic && 'normal-case px-0 text-[11px] font-medium tracking-normal text-[#C6CAC3]')}>
+                                            <div key={item.key} className={isKinetic ? 'min-w-0 space-y-2' : layout.visualCard}>
+                                                <Label htmlFor={inputId} className={fieldLabelClassName}>
                                                     {item.label}
                                                 </Label>
                                                 <div className="flex items-center gap-3">
-                                                    <div
-                                                        className={cn(layout.colorSwatch, isKinetic && 'h-8 w-8 rounded-[7px] border-[var(--kinetic-theme-color)] shadow-none')}
-                                                        style={{ backgroundColor: colorValue }}
-                                                    />
+                                                    {!isKinetic && <div className={layout.colorSwatch} style={{ backgroundColor: colorValue }} />}
                                                     <Input
                                                         id={inputId}
                                                         type="color"
                                                         value={colorValue}
                                                         onChange={(e) => handleChange(item.key as any, e.target.value)}
-                                                        className={cn(layout.colorInput, isKinetic && cn('rounded-[6px] bg-transparent focus-visible:ring-[var(--kinetic-theme-color)] focus-visible:ring-offset-[#111412]', isMobileViewport ? 'h-11' : 'h-8'))}
+                                                        className={isKinetic ? 'console-input cursor-pointer p-1' : layout.colorInput}
                                                     />
                                                 </div>
                                             </div>
@@ -417,15 +295,16 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                                 </div>
                             </section>
 
-                            <section className={cn(layout.section, isKinetic && 'space-y-3 rounded-[10px] border-[#343833] bg-[#171a17] p-4')}>
-                                <div className={cn(layout.sectionTitle, isKinetic && 'normal-case text-[11px] font-semibold tracking-[0.08em] text-[#9EA69B]')}>
+                            <section className={sectionClassName}>
+                                <div className={sectionTitleClassName}>
                                     <Zap size={16} />
                                     <span>Logistics</span>
                                 </div>
                                 <div className={layout.logisticsGrid}>
                                     <div className={layout.field}>
-                                        <Label className={cn(layout.fieldLabel, isKinetic && 'normal-case px-0 text-[11px] font-medium tracking-normal text-[#C6CAC3]')}>Concentric window (s)</Label>
+                                        <Label htmlFor="settings-concentric" className={fieldLabelClassName}>Concentric window (s)</Label>
                                         <Input
+                                            id="settings-concentric"
                                             type="number"
                                             value={settings.concentricSecond}
                                             onChange={(e) => {
@@ -433,31 +312,34 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                                                 const requested = Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
                                                 handleChange('concentricSecond', concentricMax ? Math.min(requested, concentricMax) : requested);
                                             }}
-                                            className={cn(layout.fieldInput, isKinetic && cn('rounded-[8px] border-[#424940] bg-[#111412] font-medium text-[#F2F0ED] focus-visible:ring-[#FF5B36] focus-visible:ring-offset-[#171a17]', isMobileViewport ? 'h-11' : 'h-10'))}
+                                            className={fieldInputClassName}
                                             min={1}
                                             max={concentricMax}
                                         />
-                                        <p className={cn(layout.fieldHelp, isKinetic && 'normal-case px-0 text-[11px] tracking-normal text-[#8A9285]')}>
+                                        <p className={fieldHelpClassName}>
                                             Max = fastest rep pace ({concentricMax ?? 1}s)
                                         </p>
                                     </div>
                                     <div className={layout.field}>
-                                        <Label className={cn(layout.fieldLabel, isKinetic && 'normal-case px-0 text-[11px] font-medium tracking-normal text-[#C6CAC3]')}>Prep Buffer (s)</Label>
+                                        <Label htmlFor="settings-prep" className={fieldLabelClassName}>Prep Buffer (s)</Label>
                                         <Input
+                                            id="settings-prep"
+                                            min={0}
                                             type="number"
                                             value={settings.prepTime}
                                             onChange={(e) => handleChange('prepTime', parseInt(e.target.value) || 0)}
-                                            className={cn(layout.fieldInput, isKinetic && cn('rounded-[8px] border-[#424940] bg-[#111412] font-medium text-[#F2F0ED] focus-visible:ring-[#FF5B36] focus-visible:ring-offset-[#171a17]', isMobileViewport ? 'h-11' : 'h-10'))}
+                                            className={fieldInputClassName}
                                         />
                                     </div>
                                 </div>
 
-                                <div className={cn(layout.toggleRow, isKinetic && 'rounded-[8px] border-[#343833] bg-[#111412] p-3')}>
+                                <div className={toggleRowClassName}>
                                     <div className="space-y-0.5">
-                                        <Label className={cn(layout.toggleTitle, isKinetic && 'font-medium tracking-normal text-[#F2F0ED]')}>Fluid Animation</Label>
-                                        <p className={cn(layout.toggleCopy, isKinetic && 'normal-case text-[11px] font-normal tracking-normal text-[#8A9285]')}>Enable high-frequency UI updates</p>
+                                        <Label htmlFor="settings-smooth" className={fieldLabelClassName}>Fluid Animation</Label>
+                                        <p className={fieldHelpClassName}>Enable high-frequency UI updates</p>
                                     </div>
                                     <Switch
+                                        id="settings-smooth"
                                         checked={settings.smoothAnimation}
                                         onCheckedChange={(checked) => handleChange('smoothAnimation', checked)}
                                         className={kineticSwitchClassName}
@@ -465,15 +347,15 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                                 </div>
                             </section>
 
-                            <section className={cn(layout.section, isKinetic && 'space-y-3 rounded-[10px] border-[#343833] bg-[#171a17] p-4')}>
-                                <div className={cn(layout.sectionTitle, isKinetic && 'normal-case text-[11px] font-semibold tracking-[0.08em] text-[#9EA69B]')}>
+                            <section className={sectionClassName}>
+                                <div className={sectionTitleClassName}>
                                     <Info size={16} />
                                     <span>Progression</span>
                                 </div>
                                 <div className={layout.field}>
                                     <Label
                                         htmlFor="settings-progression-reminder-threshold"
-                                        className={cn(layout.fieldLabel, isKinetic && 'normal-case px-0 text-[11px] font-medium tracking-normal text-[#C6CAC3]')}
+                                        className={fieldLabelClassName}
                                     >
                                         Progression reminder after
                                     </Label>
@@ -488,21 +370,21 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                                             onChange={(event) => handleProgressionReminderThresholdChange(event.target.value)}
                                             onBlur={commitProgressionReminderThreshold}
                                             aria-describedby="settings-progression-reminder-threshold-help"
-                                            className={cn(layout.fieldInput, 'max-w-28', isKinetic && cn('rounded-[8px] border-[#424940] bg-[#111412] font-medium text-[#F2F0ED] focus-visible:ring-[#FF5B36] focus-visible:ring-offset-[#171a17]', isMobileViewport ? 'h-11' : 'h-10'))}
+                                            className={cn(fieldInputClassName, 'max-w-28')}
                                         />
-                                        <span className={cn('text-sm text-muted-foreground', isKinetic && 'text-[#9EA69B]')}>completed sessions</span>
+                                        <span className="text-sm text-muted-foreground">completed sessions</span>
                                     </div>
                                     <p
                                         id="settings-progression-reminder-threshold-help"
-                                        className={cn(layout.fieldHelp, isKinetic && 'normal-case px-0 text-[11px] tracking-normal text-[#8A9285]')}
+                                        className={fieldHelpClassName}
                                     >
                                         Reminds you to review a workout after this many completed sessions. Editing its workout settings or notes resets its count.
                                     </p>
                                 </div>
                             </section>
 
-                            <section className={cn(layout.section, isKinetic && 'space-y-3 rounded-[10px] border-[#343833] bg-[#171a17] p-4')}>
-                                <div className={cn(layout.sectionTitle, isKinetic && 'normal-case text-[11px] font-semibold tracking-[0.08em] text-[#9EA69B]')}>
+                            <section className={sectionClassName}>
+                                <div className={sectionTitleClassName}>
                                     <Info size={16} />
                                     <span>Core Display</span>
                                 </div>
@@ -512,12 +394,13 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                                         { label: 'Full Screen Mode', key: 'fullScreenMode', desc: 'Active theme colors as background' },
                                         { label: 'Vertical Mode', key: 'upDownMode', desc: 'Large text ECCENTRIC/CONCENTRIC' },
                                     ].map((item) => (
-                                        <div key={item.key} className={cn(layout.toggleRow, isKinetic && 'rounded-[8px] border-[#343833] bg-[#111412] p-3')}>
+                                        <div key={item.key} className={toggleRowClassName}>
                                             <div className="space-y-0.5">
-                                                <Label className={cn(layout.toggleTitle, isKinetic && 'font-medium tracking-normal text-[#F2F0ED]')}>{item.label}</Label>
-                                                <p className={cn(layout.toggleCopy, isKinetic && 'normal-case text-[11px] font-normal tracking-normal text-[#8A9285]')}>{item.desc}</p>
+                                                <Label htmlFor={`settings-${item.key}`} className={fieldLabelClassName}>{item.label}</Label>
+                                                <p className={fieldHelpClassName}>{item.desc}</p>
                                             </div>
                                             <Switch
+                                                id={`settings-${item.key}`}
                                                 checked={(settings as any)[item.key]}
                                                 onCheckedChange={(checked) => handleChange(item.key as any, checked)}
                                                 className={kineticSwitchClassName}
@@ -527,31 +410,33 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                                 </div>
                             </section>
 
-                            <section className={cn(layout.section, isKinetic && 'space-y-3 rounded-[10px] border-[#343833] bg-[#171a17] p-4')}>
-                                <div className={cn(layout.sectionTitle, isKinetic && 'normal-case text-[11px] font-semibold tracking-[0.08em] text-[#9EA69B]')}>
+                            <section className={sectionClassName}>
+                                <div className={sectionTitleClassName}>
                                     <Volume2 size={16} />
-                                    <span>Sound Architecture</span>
+                                    <span>Audio &amp; Voice</span>
                                 </div>
 
                                 <div className="space-y-3">
-                                    <div className={cn(layout.toggleRow, isKinetic && 'rounded-[8px] border-[#343833] bg-[#111412] p-3')}>
+                                    <div className={toggleRowClassName}>
                                         <div className="space-y-0.5">
-                                            <Label className={cn(layout.toggleTitle, isKinetic && 'font-medium tracking-normal text-[#F2F0ED]')}>Metronome Ticks</Label>
-                                            <p className={cn(layout.toggleCopy, isKinetic && 'normal-case text-[11px] font-normal tracking-normal text-[#8A9285]')}>Audible rhythm during reps</p>
+                                            <Label htmlFor="settings-metronome" className={fieldLabelClassName}>Metronome Ticks</Label>
+                                            <p className={fieldHelpClassName}>Audible rhythm during reps</p>
                                         </div>
                                         <Switch
+                                            id="settings-metronome"
                                             checked={settings.metronomeEnabled}
                                             onCheckedChange={(checked) => handleChange('metronomeEnabled', checked)}
                                             className={kineticSwitchClassName}
                                         />
                                     </div>
 
-                                    <div className={cn(layout.toggleRow, isKinetic && 'rounded-[8px] border-[#343833] bg-[#111412] p-3')}>
+                                    <div className={toggleRowClassName}>
                                         <div className="space-y-0.5">
-                                            <Label className={cn(layout.toggleTitle, isKinetic && 'font-medium tracking-normal text-[#F2F0ED]')}>Voice Feedback (TTS)</Label>
-                                            <p className={cn(layout.toggleCopy, isKinetic && 'normal-case text-[11px] font-normal tracking-normal text-[#8A9285]')}>Speak rep count and timings</p>
+                                            <Label htmlFor="settings-voice-guidance" className={fieldLabelClassName}>Voice Guidance</Label>
+                                            <p className={fieldHelpClassName}>Speak rep counts and timing cues</p>
                                         </div>
                                         <Switch
+                                            id="settings-voice-guidance"
                                             checked={settings.ttsEnabled}
                                             onCheckedChange={(checked) => handleChange('ttsEnabled', checked)}
                                             className={kineticSwitchClassName}
@@ -562,11 +447,12 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                                         <div className={layout.soundActions}>
                                             {settings.metronomeEnabled && (
                                                 <div className={layout.field}>
-                                                    <Label className={cn(layout.fieldLabel, isKinetic && 'normal-case px-0 text-[11px] font-medium tracking-normal text-[#C6CAC3]')}>Tick Sample</Label>
+                                                    <Label htmlFor="settings-tick-sample" className={fieldLabelClassName}>Tick Sample</Label>
                                                     <select
+                                                        id="settings-tick-sample"
                                                         value={settings.metronomeSound}
                                                         onChange={(e) => handleChange('metronomeSound', e.target.value)}
-                                                        className={cn(layout.selectField, isKinetic && cn('rounded-[8px] border-[#424940] bg-[#111412] font-medium text-[#F2F0ED] focus:border-[#FF5B36] focus:outline-none', isMobileViewport ? 'h-11' : 'h-10'))}
+                                                        className={isKinetic ? 'console-select' : layout.selectField}
                                                     >
                                                         <option value="woodblock">Woodblock</option>
                                                         <option value="mechanical">Mechanical</option>
@@ -577,7 +463,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                                             )}
                                             {settings.ttsEnabled && (
                                                 <div className="flex flex-col justify-end">
-                                                    <Button onClick={testTTS} variant="outline" className={cn(layout.testButton, isKinetic && cn('rounded-[8px] border-[#424940] bg-[#111412] font-semibold not-italic tracking-normal text-[#C6CAC3] hover:border-[#4DABF7] hover:bg-[#1A211E] hover:text-[#F2F0ED]', isMobileViewport ? 'min-h-11' : 'min-h-10'))}>
+                                                    <Button onClick={testTTS} variant="outline" className={isKinetic ? 'console-button' : layout.testButton}>
                                                         <Play size={14} /> TEST VOICES
                                                     </Button>
                                                 </div>

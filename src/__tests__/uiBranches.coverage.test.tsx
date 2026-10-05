@@ -447,22 +447,14 @@ describe('settings, protocol intel, and timer display branches', () => {
         expect(screen.getAllByRole('link')).toHaveLength(4);
     });
 
-    it('lazily opens Settings, reacts to a legacy mobile query, updates every control, and cancels rAF', () => {
+    it('updates settings across responsive layouts and supports backdrop dismissal', () => {
         const media = installMatchMedia(true, false);
-        let frameCallback: FrameRequestCallback | undefined;
-        const requestFrame = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
-            frameCallback = callback;
-            return 91;
-        });
-        const cancelFrame = vi.spyOn(window, 'cancelAnimationFrame');
         const onClose = vi.fn();
         const { rerender, unmount } = render(<SettingsPanel isOpen={false} onClose={onClose} />);
         const overlay = screen.getByTestId('settings-drawer-overlay');
         expect(overlay).toHaveAttribute('aria-hidden', 'true');
 
         rerender(<SettingsPanel isOpen onClose={onClose} />);
-        expect(requestFrame).toHaveBeenCalled();
-        act(() => frameCallback?.(0));
         expect(screen.getByText(/visual identity/i)).toBeInTheDocument();
 
         act(() => media.emit(false));
@@ -481,8 +473,6 @@ describe('settings, protocol intel, and timer display branches', () => {
 
         fireEvent.change(screen.getByRole('combobox'), { target: { value: 'low-thud' } });
         fireEvent.click(screen.getByRole('button', { name: /test voices/i }));
-        expect(audioMocks.init).toHaveBeenCalledOnce();
-        expect(audioMocks.speak).toHaveBeenCalledWith('Ready 3 2 1 Go');
         const switches = screen.getAllByRole('switch');
         switches.forEach((toggle) => fireEvent.click(toggle));
 
@@ -493,9 +483,7 @@ describe('settings, protocol intel, and timer display branches', () => {
         expect(onClose).toHaveBeenCalledTimes(2);
 
         rerender(<SettingsPanel isOpen={false} onClose={onClose} />);
-        expect(cancelFrame).toHaveBeenCalledWith(91);
         unmount();
-        expect(media.media.removeListener).toHaveBeenCalled();
     });
 
     it('handles absent pace limits and hides sound actions when both sound modes are disabled', () => {

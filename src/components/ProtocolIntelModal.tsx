@@ -1,7 +1,10 @@
-import React, { useEffect } from 'react';
+import type { FC } from 'react';
 import { X, BrainCircuit, Clock3, Dumbbell, ExternalLink, ShieldAlert, Target } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { useWorkoutStore } from '@/store/useWorkoutStore';
+import { useDialogFocus } from '@/hooks/useDialogFocus';
+import { cn } from '@/lib/utils';
 
 interface ProtocolIntelModalProps {
     isOpen: boolean;
@@ -27,27 +30,18 @@ const sourceLinks = [
     },
 ];
 
-const ProtocolIntelModal: React.FC<ProtocolIntelModalProps> = ({ isOpen, onClose }) => {
-    useEffect(() => {
-        if (!isOpen) {
-            return;
-        }
-
-        const handleKeyDown = (event: KeyboardEvent) => {
-            if (event.key === 'Escape') {
-                onClose();
-            }
-        };
-
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [isOpen, onClose]);
+const ProtocolIntelModal: FC<ProtocolIntelModalProps> = ({ isOpen, onClose }) => {
+    const isKinetic = useWorkoutStore((state) => state.designVariant === 'kinetic');
+    const modalRef = useDialogFocus(isOpen, onClose);
+    const sectionClassName = isKinetic ? 'rounded-none border-0 border-t border-[var(--kinetic-border)] bg-transparent shadow-none' : 'border-border/60 bg-accent/20';
 
     if (!isOpen) return null;
 
     return (
         <div
-            className="fixed inset-0 z-[120] bg-background/85 backdrop-blur-md"
+            ref={modalRef}
+            tabIndex={-1}
+            className={isKinetic ? 'fixed inset-0 z-[120] bg-black/75' : 'fixed inset-0 z-[120] bg-background/85 backdrop-blur-md'}
             role="dialog"
             aria-modal="true"
             aria-label="Protocol Intel"
@@ -57,14 +51,14 @@ const ProtocolIntelModal: React.FC<ProtocolIntelModalProps> = ({ isOpen, onClose
                 }
             }}
         >
-            <div className="mx-auto flex h-full w-full max-w-6xl items-center pl-[max(0.5rem,env(safe-area-inset-left,0px))] pr-[max(0.5rem,env(safe-area-inset-right,0px))] pt-[calc(var(--safe-top)+0.5rem)] pb-[calc(var(--safe-bottom)+0.5rem)] sm:pl-[max(1.5rem,env(safe-area-inset-left,0px))] sm:pr-[max(1.5rem,env(safe-area-inset-right,0px))] sm:pt-[max(1.5rem,env(safe-area-inset-top,0px))] sm:pb-[max(1.5rem,env(safe-area-inset-bottom,0px))]">
-                <Card className="relative max-h-[calc(var(--viewport-dynamic)-var(--safe-top)-var(--safe-bottom)-1rem)] w-full overflow-hidden border-border/70 shadow-2xl sm:max-h-[92vh]">
+            <div className="pointer-events-none mx-auto flex h-full w-full max-w-6xl items-center pl-[max(0.5rem,env(safe-area-inset-left,0px))] pr-[max(0.5rem,env(safe-area-inset-right,0px))] pt-[calc(var(--safe-top)+0.5rem)] pb-[calc(var(--safe-bottom)+0.5rem)] sm:px-6 sm:py-6">
+                <Card className={cn('pointer-events-auto relative max-h-[calc(var(--viewport-dynamic)-var(--safe-top)-var(--safe-bottom)-1rem)] w-full overflow-hidden sm:max-h-[92vh]', isKinetic ? 'console-panel' : 'border-border/70 shadow-2xl')}>
                     <div className="absolute right-4 top-4">
                         <Button
                             variant="ghost"
                             size="icon"
                             onClick={onClose}
-                            className="h-11 w-11 rounded-full sm:h-10 sm:w-10"
+                            className={isKinetic ? 'console-icon' : 'h-11 w-11 rounded-full sm:h-10 sm:w-10'}
                             aria-label="Close protocol intel"
                             title="Close protocol intel"
                         >
@@ -74,11 +68,11 @@ const ProtocolIntelModal: React.FC<ProtocolIntelModalProps> = ({ isOpen, onClose
 
                     <CardContent className="flex max-h-[calc(var(--viewport-dynamic)-var(--safe-top)-var(--safe-bottom)-1rem)] flex-col overflow-y-auto px-5 pb-6 pt-6 sm:max-h-[92vh] sm:px-8 sm:pb-8 sm:pt-8">
                         <div className="space-y-3 border-b border-border/60 pb-6 pr-12">
-                            <div className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.28em] text-primary">
+                            <div className={isKinetic ? 'console-label flex items-center gap-2' : 'flex items-center gap-2 text-xs font-black uppercase tracking-[0.28em] text-primary'}>
                                 <BrainCircuit size={16} />
                                 Protocol Intel
                             </div>
-                            <h2 className="text-3xl font-black italic tracking-tighter text-foreground sm:text-5xl">
+                            <h2 className={isKinetic ? 'console-heading text-2xl sm:text-3xl' : 'text-3xl font-black italic tracking-tighter text-foreground sm:text-5xl'}>
                                 What Myo-Reps Actually Are
                             </h2>
                             <p className="max-w-3xl text-sm leading-relaxed text-muted-foreground sm:text-base">
@@ -89,9 +83,9 @@ const ProtocolIntelModal: React.FC<ProtocolIntelModalProps> = ({ isOpen, onClose
                         </div>
 
                         <div className="mt-6 grid gap-4 lg:grid-cols-2">
-                            <Card className="border-border/60 bg-accent/20">
-                                <CardContent className="p-5">
-                                    <div className="mb-3 flex items-center gap-2 text-sm font-black uppercase tracking-widest text-primary">
+                            <Card className={sectionClassName}>
+                                <CardContent className={isKinetic ? 'px-0 py-5' : 'p-5'}>
+                                    <div className={isKinetic ? 'console-heading mb-3 flex items-center gap-2 text-base' : 'mb-3 flex items-center gap-2 text-sm font-black uppercase tracking-widest text-primary'}>
                                         <Target size={16} />
                                         Core idea
                                     </div>
@@ -104,9 +98,9 @@ const ProtocolIntelModal: React.FC<ProtocolIntelModalProps> = ({ isOpen, onClose
                                 </CardContent>
                             </Card>
 
-                            <Card className="border-border/60 bg-accent/20">
-                                <CardContent className="p-5">
-                                    <div className="mb-3 flex items-center gap-2 text-sm font-black uppercase tracking-widest text-primary">
+                            <Card className={sectionClassName}>
+                                <CardContent className={isKinetic ? 'px-0 py-5' : 'p-5'}>
+                                    <div className={isKinetic ? 'console-heading mb-3 flex items-center gap-2 text-base' : 'mb-3 flex items-center gap-2 text-sm font-black uppercase tracking-widest text-primary'}>
                                         <Clock3 size={16} />
                                         Why it works
                                     </div>
@@ -119,9 +113,9 @@ const ProtocolIntelModal: React.FC<ProtocolIntelModalProps> = ({ isOpen, onClose
                                 </CardContent>
                             </Card>
 
-                            <Card className="border-border/60 bg-accent/20">
-                                <CardContent className="p-5">
-                                    <div className="mb-3 flex items-center gap-2 text-sm font-black uppercase tracking-widest text-primary">
+                            <Card className={sectionClassName}>
+                                <CardContent className={isKinetic ? 'px-0 py-5' : 'p-5'}>
+                                    <div className={isKinetic ? 'console-heading mb-3 flex items-center gap-2 text-base' : 'mb-3 flex items-center gap-2 text-sm font-black uppercase tracking-widest text-primary'}>
                                         <Dumbbell size={16} />
                                         Best use cases
                                     </div>
@@ -134,9 +128,9 @@ const ProtocolIntelModal: React.FC<ProtocolIntelModalProps> = ({ isOpen, onClose
                                 </CardContent>
                             </Card>
 
-                            <Card className="border-border/60 bg-accent/20">
-                                <CardContent className="p-5">
-                                    <div className="mb-3 flex items-center gap-2 text-sm font-black uppercase tracking-widest text-primary">
+                            <Card className={sectionClassName}>
+                                <CardContent className={isKinetic ? 'px-0 py-5' : 'p-5'}>
+                                    <div className={isKinetic ? 'console-heading mb-3 flex items-center gap-2 text-base' : 'mb-3 flex items-center gap-2 text-sm font-black uppercase tracking-widest text-primary'}>
                                         <ShieldAlert size={16} />
                                         Practical guardrails
                                     </div>
@@ -151,9 +145,9 @@ const ProtocolIntelModal: React.FC<ProtocolIntelModalProps> = ({ isOpen, onClose
                         </div>
 
                         <div className="mt-6 grid gap-4 border-t border-border/60 pt-6 lg:grid-cols-[1.2fr_0.8fr]">
-                            <Card className="border-border/60">
-                                <CardContent className="p-5">
-                                    <div className="mb-3 text-sm font-black uppercase tracking-widest text-primary">
+                            <Card className={sectionClassName}>
+                                <CardContent className={isKinetic ? 'px-0 py-5' : 'p-5'}>
+                                    <div className={isKinetic ? 'console-heading mb-3 text-base' : 'mb-3 text-sm font-black uppercase tracking-widest text-primary'}>
                                         What this app is doing
                                     </div>
                                     <p className="text-sm leading-relaxed text-muted-foreground">
@@ -164,9 +158,9 @@ const ProtocolIntelModal: React.FC<ProtocolIntelModalProps> = ({ isOpen, onClose
                                 </CardContent>
                             </Card>
 
-                            <Card className="border-border/60 bg-muted/30">
-                                <CardContent className="p-5">
-                                    <div className="mb-3 text-sm font-black uppercase tracking-widest text-primary">
+                            <Card className={sectionClassName}>
+                                <CardContent className={isKinetic ? 'px-0 py-5' : 'p-5'}>
+                                    <div className={isKinetic ? 'console-heading mb-3 text-base' : 'mb-3 text-sm font-black uppercase tracking-widest text-primary'}>
                                         Sources
                                     </div>
                                     <div className="space-y-3">
@@ -176,7 +170,7 @@ const ProtocolIntelModal: React.FC<ProtocolIntelModalProps> = ({ isOpen, onClose
                                                 href={source.href}
                                                 target="_blank"
                                                 rel="noreferrer"
-                                                className="flex items-center justify-between gap-3 rounded-lg border border-border/50 bg-background/70 px-3 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-accent/50"
+                                                className={isKinetic ? 'console-button console-button--quiet min-h-11 justify-between text-left' : 'flex items-center justify-between gap-3 rounded-lg border border-border/50 bg-background/70 px-3 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-accent/50'}
                                             >
                                                 <span>{source.label}</span>
                                                 <ExternalLink size={14} className="shrink-0 text-muted-foreground" />

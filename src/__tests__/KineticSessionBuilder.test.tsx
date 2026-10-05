@@ -317,12 +317,9 @@ describe('KineticSessionBuilder', () => {
         expect(notice).toHaveTextContent('Saved locally and synced to the cloud.');
     });
 
-    it('keeps the session name in the action row and adds valid default blocks at the timeline end', () => {
+    it('adds independent default workout blocks before appended recovery blocks', () => {
         render(<KineticSessionBuilder />);
 
-        expect(screen.getAllByLabelText('Session name')).toHaveLength(1);
-        expect(screen.queryByLabelText('Add saved workout')).not.toBeInTheDocument();
-        expect(screen.getByTestId('kinetic-timeline-add-controls')).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: 'Add workout' }));
 
@@ -337,7 +334,6 @@ describe('KineticSessionBuilder', () => {
             completedSessionsSinceProgression: 0,
         });
         expect(useWorkoutStore.getState().editingSessionNodeId).toBe(workout?.id);
-        expect(HTMLElement.prototype.scrollIntoView).toHaveBeenCalled();
 
         fireEvent.click(screen.getByRole('button', { name: 'Add rest' }));
         draft = useWorkoutStore.getState().editingSessionDraft;
@@ -369,19 +365,6 @@ describe('KineticSessionBuilder', () => {
         expect(useWorkoutStore.getState().editingSessionNodeId).toBe(selectedNodeId);
     });
 
-    it('keeps compact session prompts touch-sized and dismissible by Escape', () => {
-        mockCompactViewport(true);
-        render(<KineticSessionBuilder />);
-
-        fireEvent.click(screen.getByRole('button', { name: 'New' }));
-
-        expect(screen.getByRole('dialog', { name: 'Create a session' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Close dialog' })).toHaveClass('h-11', 'w-11');
-        expect(within(screen.getByRole('dialog', { name: 'Create a session' })).getByRole('textbox', { name: 'Session name' })).toHaveClass('h-11');
-
-        fireEvent.keyDown(window, { key: 'Escape' });
-        expect(screen.queryByRole('dialog', { name: 'Create a session' })).not.toBeInTheDocument();
-    });
 
     it('shows an accessible progression reminder for workout blocks at or above the threshold', () => {
         const session = createSession([

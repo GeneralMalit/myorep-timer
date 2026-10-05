@@ -89,6 +89,13 @@ graph TD
 - **Save confirmation is local-first and acknowledgement-based**: Both builders keep a visible save status for pending sync, offline use, disabled/paused sync, and errors. “Saved locally and synced to the cloud” appears only after the saved revision and all linked dependencies are acknowledged remotely.
 - **Cloud deployment**: Apply `supabase/migrations/0008_linked_workout_progression.sql` before deploying this client; it adds shared notes/history and updates the sync RPCs.
 
+### 4.4. Kinetic Console
+- **Native presentation**: Charcoal surfaces, compact controls, and a dedicated phase/set dial. Classic remains a separate interface choice in Settings; both interfaces use the same workout state machine and worker-driven timing.
+- **Library-owned session controls**: Use New and the session rows in the navigation library to create or open sessions. The builder owns editing, Save, Save as Copy, and Start. Import and Export are available from either library tab.
+- **Responsive editing**: Workout inputs adapt to the available content width. Desktop builder timelines and inspectors scroll independently; phones use a block-settings sheet. Dialogs overlay the navigation rather than being clipped by the builder.
+- **Settings and accessibility**: Voice guidance, metronome, pacing, and display controls live in Settings. Interactive controls have touch-sized targets; tabs support keyboard navigation, and modal focus stays in the topmost dialog and returns to its opener.
+- **Timer context**: Paused sessions retain their timeline, finished sessions show completed blocks, and the finish action returns to the builder. Fullscreen foregrounds and focus indicators adapt to the selected phase color; vertical mode emphasizes the phase label.
+
 ---
 
 ## 5. Development Guide
