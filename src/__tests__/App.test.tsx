@@ -326,6 +326,29 @@ describe('App', () => {
         });
     });
 
+    it.each(['classic', 'kinetic'] as const)('lets Plus users start first sync from the %s sidebar', async (designVariant) => {
+        grantPlusAccess();
+        useSyncStore.setState(useSyncStore.getInitialState());
+        useWorkoutStore.setState({ designVariant, savedWorkouts: [baseWorkout] });
+        const query = {
+            select: () => query,
+            eq: () => query,
+            is: async () => ({ count: 1, error: null }),
+        };
+        getSupabaseClientMock.mockReturnValue({ from: () => query });
+
+        render(<App />);
+
+        fireEvent.click(await screen.findByRole('button', { name: /^enable sync$/i }));
+        const chooser = await screen.findByRole('dialog', { name: /choose first sync direction/i });
+        expect(within(chooser).getByRole('button', { name: /upload local to cloud/i })).toBeEnabled();
+        expect(within(chooser).getByRole('button', { name: /use cloud on this device/i })).toBeEnabled();
+        expect(useWorkoutStore.getState().savedWorkouts).toEqual([baseWorkout]);
+        expect(useSyncStore.getState().firstSyncState).toBe('pending-choice');
+        fireEvent.click(within(chooser).getByRole('button', { name: /cancel/i }));
+        useSyncStore.setState(useSyncStore.getInitialState());
+    });
+
     it('renders setup mode with sets min constraint and semantic version footer', () => {
         render(<App />);
 

@@ -8,7 +8,7 @@ import Sidebar from '@/components/Sidebar';
 import type { SidebarProps } from '@/components/Sidebar';
 import ConcentricTimer from '@/components/ConcentricTimer';
 import KineticWorkoutSetup from '@/components/kinetic/KineticWorkoutSetup';
-import KineticSidebar from '@/components/kinetic/KineticSidebar';
+import KineticSidebar, { type KineticSidebarProps } from '@/components/kinetic/KineticSidebar';
 import KineticSessionTimeline from '@/components/kinetic/KineticSessionTimeline';
 import SetupModeToggle from '@/components/SetupModeToggle';
 import { getResponsiveLayout } from '@/layout';
@@ -40,7 +40,7 @@ const isLocalPlusPreview = import.meta.env.DEV
 const LazySyncedSidebar = lazy(async () => {
     const { useSyncController } = await import('@/hooks/useSyncController');
 
-    const SyncedSidebar = (props: SidebarProps) => {
+    const SyncedSidebar = ({ designVariant, ...props }: KineticSidebarProps & { designVariant: 'classic' | 'kinetic' }) => {
         const account = props.account as AccountSnapshot;
         const {
             visibleWorkouts,
@@ -53,8 +53,9 @@ const LazySyncedSidebar = lazy(async () => {
             savedSessions: props.savedSessions,
         });
 
+        const SidebarComponent = designVariant === 'kinetic' ? KineticSidebar : Sidebar;
         return (
-            <Sidebar
+            <SidebarComponent
                 {...props}
                 savedWorkouts={visibleWorkouts}
                 savedSessions={visibleSessions}
@@ -1556,6 +1557,25 @@ export default function App() {
         onCheckPlusAccess: handleCheckPlusAccess,
         isAccountCheckPending,
     };
+    const SidebarComponent = designVariant === 'kinetic' ? KineticSidebar : Sidebar;
+    const activeSidebarProps: KineticSidebarProps = designVariant === 'kinetic'
+        ? {
+            ...sidebarProps,
+            setShowSettings: (show) => {
+                setShowSettings(show);
+                if (show) closeMobileDrawer();
+            },
+            onOpenProtocolIntel: () => {
+                setShowProtocolIntel(true);
+                closeMobileDrawer();
+            },
+            setupMode,
+            onNavigate: handleKineticNavigate,
+            onCloseMobileDrawer: closeMobileDrawer,
+            width: kineticSidebarWidth,
+            onWidthChange: setKineticSidebarWidth,
+        }
+        : sidebarProps;
 
     return (
         <div
@@ -1578,33 +1598,17 @@ export default function App() {
             {isMobileViewport && isSidebarOpen && (
                 <button type="button" className="fixed inset-0 z-40 bg-black/60 md:hidden" onClick={closeMobileDrawer} aria-label="Close Navigation Overlay" />
             )}
-            {designVariant === 'kinetic' ? (
-                <KineticSidebar
-                    {...sidebarProps}
-                    setShowSettings={(show) => {
-                        setShowSettings(show);
-                        if (show) closeMobileDrawer();
-                    }}
-                    onOpenProtocolIntel={() => {
-                        setShowProtocolIntel(true);
-                        closeMobileDrawer();
-                    }}
-                    setupMode={setupMode}
-                    onNavigate={handleKineticNavigate}
-                    onCloseMobileDrawer={closeMobileDrawer}
-                    width={kineticSidebarWidth}
-                    onWidthChange={setKineticSidebarWidth}
-                />
-            ) : canUseCloudSync ? (
-                <Suspense fallback={<Sidebar {...sidebarProps} />}>
+            {canUseCloudSync ? (
+                <Suspense fallback={<SidebarComponent {...activeSidebarProps} />}>
                     <LazySyncedSidebar
-                        {...sidebarProps}
+                        {...activeSidebarProps}
+                        designVariant={designVariant}
                         savedWorkouts={savedWorkouts}
                         savedSessions={savedSessions}
                     />
                 </Suspense>
             ) : (
-                <Sidebar {...sidebarProps} />
+                <SidebarComponent {...activeSidebarProps} />
             )}
             {showSettings && (
                 <Suspense fallback={null}>
