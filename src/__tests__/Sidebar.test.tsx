@@ -264,13 +264,52 @@ describe('Sidebar', () => {
             onResendSignUpConfirmation: vi.fn(),
         });
 
-        const sidebar = screen.getByRole('complementary', { name: /sidebar/i });
+        const sidebar = screen.getByRole('dialog', { name: /sidebar/i });
         expect(sidebar.className).toContain('w-[min(22rem,calc(100vw-1rem))]');
+        expect(sidebar.className).toContain('pl-[var(--safe-left)]');
+        expect(sidebar.className).toContain('pr-[var(--safe-right)]');
         expect(screen.getByText(/sign in for cloud sync/i)).toBeInTheDocument();
         expect(screen.getByText(/^information$/i)).toBeInTheDocument();
         expect(screen.queryByText(/library \/ mobile drawer/i)).not.toBeInTheDocument();
         expect(screen.getByRole('button', { name: /sign in with password/i })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /resend confirmation link/i })).toBeInTheDocument();
+    });
+
+    it('hides the closed mobile drawer and restores focus to its opener', async () => {
+        const { container, rerender } = render(
+            <>
+                <button type="button">Navigation opener</button>
+                <Sidebar {...baseProps} isMobileViewport isCollapsed />
+            </>,
+        );
+
+        const sidebar = container.querySelector('aside');
+        expect(sidebar).toHaveAttribute('inert');
+        expect(sidebar).toHaveAttribute('aria-hidden', 'true');
+        expect(screen.queryByRole('button', { name: /open navigation/i })).not.toBeInTheDocument();
+
+        const opener = screen.getByRole('button', { name: 'Navigation opener' });
+        opener.focus();
+        rerender(
+            <>
+                <button type="button">Navigation opener</button>
+                <Sidebar {...baseProps} isMobileViewport isCollapsed={false} />
+            </>,
+        );
+        const dialog = screen.getByRole('dialog', { name: /sidebar/i });
+        await waitFor(() => {
+            expect(document.activeElement).toBe(within(dialog).getByRole('button', { name: /close navigation/i }));
+        });
+
+        rerender(
+            <>
+                <button type="button">Navigation opener</button>
+                <Sidebar {...baseProps} isMobileViewport isCollapsed />
+            </>,
+        );
+        await waitFor(() => expect(document.activeElement).toBe(opener));
+        expect(sidebar).toHaveAttribute('inert');
+        expect(sidebar).toHaveAttribute('aria-hidden', 'true');
     });
 
     it('supports password sign-in as the default guest flow', async () => {
@@ -473,7 +512,7 @@ describe('Sidebar', () => {
             />,
         );
 
-        const sidebar = screen.getByRole('complementary', { name: /sidebar/i });
+        const sidebar = screen.getByRole('dialog', { name: /sidebar/i });
         expect(sidebar.className).toContain('w-[min(22rem,calc(100vw-1rem))]');
         expect(screen.getByText(/cloud sync locked/i)).toBeInTheDocument();
         expect(screen.getAllByRole('button', { name: /upgrade to plus/i }).length).toBeGreaterThan(0);
@@ -637,10 +676,7 @@ describe('Sidebar', () => {
         expect(screen.getByText(/synced now\./i)).toBeInTheDocument();
     });
 
-    it.each([
-        ['enable-sync', /enable sync/i, 'Cloud sync is available on Plus, but it stays off until you enable it on this device.'],
-        ['first-sync-required', /run first sync/i, 'Pick whether this device uploads its local library or replaces it with cloud data.'],
-    ])('opens a first-sync chooser when %s is the active sync state', async (status, trigger, detail) => {
+    it('opens a first-sync chooser when first-sync is required', async () => {
         const onEnableSync = vi.fn().mockImplementation((choice?: FirstSyncChoice) => (
             choice
                 ? {
@@ -659,8 +695,8 @@ describe('Sidebar', () => {
                 {...baseProps}
                 account={signedInPlusAccount}
                 syncSnapshot={{
-                    status: status as 'enable-sync' | 'first-sync-required',
-                    detail,
+                    status: 'first-sync-required',
+                    detail: 'Pick whether this device uploads its local library or replaces it with cloud data.',
                     isOnline: true,
                 }}
                 syncActions={{ onEnableSync }}
@@ -668,7 +704,7 @@ describe('Sidebar', () => {
             />,
         );
 
-        fireEvent.click(screen.getByRole('button', { name: trigger }));
+        fireEvent.click(screen.getByRole('button', { name: /run first sync/i }));
         await waitFor(() => {
             expect(screen.getByRole('dialog', { name: /choose first sync direction/i })).toBeInTheDocument();
         });

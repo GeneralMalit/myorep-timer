@@ -69,7 +69,7 @@ describe('SettingsPanel', () => {
         const onClose = vi.fn();
         const { rerender } = render(<SettingsPanel isOpen onClose={onClose} />);
 
-        const dialog = screen.getByRole('dialog', { name: /system configuration/i });
+        const dialog = screen.getByRole('dialog', { name: /console settings/i });
         const closeButton = screen.getByRole('button', { name: /close settings/i });
         expect(dialog).toHaveAttribute('aria-modal', 'true');
         expect(closeButton).toHaveFocus();
@@ -97,13 +97,16 @@ describe('SettingsPanel', () => {
 
         expect(classic).toBeChecked();
         expect(kinetic).not.toBeChecked();
+        expect(screen.getByRole('dialog', { name: /system configuration/i })).toBeInTheDocument();
 
         fireEvent.click(kinetic);
         expect(useWorkoutStore.getState().designVariant).toBe('kinetic');
+        expect(screen.getByRole('dialog', { name: /console settings/i })).toBeInTheDocument();
 
         fireEvent.change(screen.getByRole('combobox', { name: /interface design/i }), { target: { value: 'classic' } });
         expect(screen.getByRole('radio', { name: /classic/i })).toBeChecked();
         expect(useWorkoutStore.getState().designVariant).toBe('classic');
+        expect(screen.getByRole('dialog', { name: /system configuration/i })).toBeInTheDocument();
     });
 
     it('shows the Kinetic Console visual identity controls and persists each color independently', async () => {

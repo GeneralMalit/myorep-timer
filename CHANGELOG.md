@@ -40,6 +40,14 @@
 * move voice guidance controls to Settings
 * redesign Kinetic Console with a native timer dial, responsive workout inputs, charcoal surfaces, and matching library, builder, Settings, help, account, and dialog presentation
 * consolidate session creation and loading in the library, with import and export available from either library tab
+* guard session creation and loading with save/discard confirmation so unsaved builder drafts are not silently replaced
+* recover interrupted first syncs to a retryable choice on hydration while preserving the local recovery backup
+* allow signed-in free accounts with an existing billing mapping to reach subscription management
+* pause metronome scheduling while the document is hidden and resume it when the timer becomes visible again
+* add block-removal undo, strict session-import validation, and focus/label fixes for both session builders
+* hide the closed classic mobile drawer from keyboard and assistive tech, manage drawer focus, and respect horizontal safe-area insets
+* use light-on-dark sync badge colors and console settings copy in Kinetic Console, and remove the compact timeline scroll trap
+* add repository typechecking, extend lint to TypeScript, gate releases on lint/typecheck/coverage/mobile builds, and remove dead sync status UI
 
 ### Bug Fixes
 

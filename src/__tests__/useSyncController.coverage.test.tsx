@@ -405,13 +405,12 @@ describe('useSyncController coverage contracts', () => {
         fetchRemoteLibrarySnapshotMock.mockResolvedValue({ workouts: [cloudWorkout], sessions: [] });
 
         const { result } = renderController(buildAccount('account-a'), [localWorkout]);
-        let promptResult: AccountActionResult | void = undefined;
         await act(async () => {
-            promptResult = await result.current.syncActions?.onEnableSync?.();
+            const promptResult = await result.current.syncActions?.onEnableSync?.();
+            expect(promptResult).toMatchObject({ ok: false, requiresChoice: true });
         });
 
-        expect(promptResult).toMatchObject({ ok: false, requiresChoice: true });
-        expect(result.current.syncSnapshot?.status).toBe('enable-sync');
+        expect(result.current.syncSnapshot?.status).toBe('first-sync-required');
         expect(useSyncStore.getState().firstSyncState).toBe('pending-choice');
         expect(useSyncStore.getState().recoveryBackup).not.toBeNull();
 
@@ -664,6 +663,7 @@ describe('useSyncController coverage contracts', () => {
         });
 
         act(() => useSyncStore.setState({
+            syncEnabled: false,
             firstSyncState: 'pending-choice',
             recoveryBackup: null,
         }));
@@ -671,6 +671,7 @@ describe('useSyncController coverage contracts', () => {
             status: 'first-sync-required',
             detail: expect.stringContaining('Run the first sync'),
         });
+        expect(result.current.syncActions?.onEnableSync).toBeDefined();
 
         act(() => useSyncStore.setState({
             recoveryBackup: {
@@ -683,6 +684,7 @@ describe('useSyncController coverage contracts', () => {
         expect(result.current.syncSnapshot?.detail).toContain('Pick whether');
 
         act(() => useSyncStore.setState({
+            syncEnabled: true,
             firstSyncState: 'idle',
             recoveryBackup: null,
             queuedOperations: [queueItem()],
@@ -1127,8 +1129,8 @@ describe('useSyncStore coverage contracts', () => {
         });
 
         expect(migrated).toMatchObject({
-            syncEnabled: true,
-            firstSyncState: 'processing',
+            syncEnabled: false,
+            firstSyncState: 'pending-choice',
             currentUserId: 'account-a',
             onboardingRemoteHasData: true,
             recoveryBackup: null,

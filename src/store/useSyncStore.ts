@@ -105,6 +105,12 @@ const withRecoveryBackupExpiry = (backup: SyncRecoveryBackup): SyncRecoveryBacku
     };
 };
 
+const normalizeFirstSyncState = (state: unknown): FirstSyncState => (
+    state === 'processing' || state === 'pending-choice'
+        ? 'pending-choice'
+        : 'idle'
+);
+
 const matchesOperation = (item: SyncQueueItem, token: SyncOperationToken): boolean => (
     item.operationId === token.operationId
     && item.ownerUserId === token.ownerUserId
@@ -329,10 +335,7 @@ export const migratePersistedSyncState = (persistedState: unknown): PersistedSyn
 
     return {
         ...createInitialPersistedState(authGeneration),
-        syncEnabled: record.syncEnabled === true,
-        firstSyncState: record.firstSyncState === 'pending-choice' || record.firstSyncState === 'processing'
-            ? record.firstSyncState
-            : 'idle',
+        firstSyncState: normalizeFirstSyncState(record.firstSyncState),
         currentUserId,
         onboardingRemoteHasData: record.onboardingRemoteHasData === true,
         recoveryBackup: record.recoveryBackup && !isRecoveryBackupExpired(record.recoveryBackup)
@@ -353,6 +356,7 @@ export const useSyncStore = create<SyncState>()(
             ...initialRuntimeState,
             markHydrated: () => set((state) => ({
                 hydrateComplete: true,
+                firstSyncState: normalizeFirstSyncState(state.firstSyncState),
                 recoveryBackup: isRecoveryBackupExpired(state.recoveryBackup) ? null : state.recoveryBackup,
                 queueStatus: resolveSettledQueueStatus(state.queuedOperations, state.syncEnabled),
                 pendingCounts: buildPendingCounts(state.queuedOperations),

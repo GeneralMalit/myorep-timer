@@ -258,6 +258,7 @@ class ManualWorker {
 describe('App', () => {
     beforeEach(() => {
         setMobileViewport(false);
+        Object.defineProperty(document, 'hidden', { configurable: true, value: false });
         resetStore();
         resetAccountStore();
         vi.restoreAllMocks();
@@ -947,6 +948,25 @@ describe('App', () => {
         });
     });
 
+    it('allows signed-in free users to open the billing portal', async () => {
+        grantPlusAccess();
+        useAccountStore.setState({
+            mode: 'signed-in-free',
+            entitlement: {
+                userId: 'user-1',
+                plan: 'free',
+                cloudSyncEnabled: false,
+                updatedAt: '2026-03-01T00:00:00.000Z',
+                source: 'supabase',
+            },
+        });
+
+        render(<App />);
+        fireEvent.click(screen.getByRole('button', { name: /manage subscription/i }));
+
+        await waitFor(() => expect(openBillingPortalMock).toHaveBeenCalledTimes(1));
+    });
+
     it('refreshes account state when returning from successful billing checkout', async () => {
         const replaceStateSpy = vi.spyOn(window.history, 'replaceState');
         window.history.replaceState({}, '', 'http://localhost:3000/?billing=success');
@@ -1242,6 +1262,117 @@ describe('App', () => {
         fireEvent.click(within(screen.getByRole('dialog', { name: /delete session/i })).getByRole('button', { name: /cancel/i }));
 
         expect(useWorkoutStore.getState().savedSessions).toHaveLength(1);
+    });
+
+    it('saves an unsaved session draft before creating another session', () => {
+        grantPlusAccess();
+        useWorkoutStore.setState({
+            setupMode: 'session',
+            savedSessions: [{
+                id: 'session-1',
+                name: 'Saved Session',
+                nodes: [{
+                    id: 'node-1',
+                    type: 'rest',
+                    name: 'Recovery',
+                    seconds: '20',
+                    createdAt: '2026-03-01T00:00:00.000Z',
+                    updatedAt: '2026-03-01T00:00:00.000Z',
+                }],
+                timesUsed: 0,
+                lastUsedAt: null,
+                createdAt: '2026-03-01T00:00:00.000Z',
+                updatedAt: '2026-03-01T00:00:00.000Z',
+            }],
+            editingSessionId: 'session-1',
+            editingSessionDraft: {
+                id: 'session-1',
+                name: 'Saved Session',
+                nodes: [{
+                    id: 'node-1',
+                    type: 'rest',
+                    name: 'Edited Session',
+                    seconds: '20',
+                    createdAt: '2026-03-01T00:00:00.000Z',
+                    updatedAt: '2026-03-01T00:00:00.000Z',
+                }],
+            },
+        });
+
+        render(<App />);
+        fireEvent.click(screen.getAllByRole('button', { name: /^new$/i })[0]);
+        const decision = screen.getByRole('dialog', { name: /unsaved session changes/i });
+        fireEvent.click(within(decision).getByRole('button', { name: /save & continue/i }));
+
+        expect(useWorkoutStore.getState().savedSessions[0].nodes[0]).toMatchObject({ type: 'rest', name: 'Edited Session' });
+        const createDialog = screen.getByRole('dialog', { name: /create session/i });
+        fireEvent.change(within(createDialog).getByLabelText(/session name/i), { target: { value: 'Next Session' } });
+        fireEvent.click(within(createDialog).getByRole('button', { name: 'Create Session' }));
+        expect(useWorkoutStore.getState().editingSessionDraft).toMatchObject({ name: 'Next Session', nodes: [] });
+        expect(useWorkoutStore.getState().savedSessions.map((session) => session.name)).toEqual(['Saved Session']);
+
+    });
+
+    it('discards an unsaved session draft when continuing to load another session', () => {
+        grantPlusAccess();
+        useWorkoutStore.setState({
+            setupMode: 'session',
+            savedSessions: [
+                {
+                    id: 'current-session',
+                    name: 'Current Session',
+                    nodes: [{
+                        id: 'current-node',
+                        type: 'rest',
+                        name: 'Recovery',
+                        seconds: '30',
+                        createdAt: '2026-03-01T00:00:00.000Z',
+                        updatedAt: '2026-03-01T00:00:00.000Z',
+                    }],
+                    timesUsed: 0,
+                    lastUsedAt: null,
+                    createdAt: '2026-03-01T00:00:00.000Z',
+                    updatedAt: '2026-03-01T00:00:00.000Z',
+                },
+                {
+                    id: 'target-session',
+                    name: 'Target Session',
+                    nodes: [{
+                        id: 'target-node',
+                        type: 'rest',
+                        name: 'Recovery',
+                        seconds: '30',
+                        createdAt: '2026-03-01T00:00:00.000Z',
+                        updatedAt: '2026-03-01T00:00:00.000Z',
+                    }],
+                    timesUsed: 0,
+                    lastUsedAt: null,
+                    createdAt: '2026-03-01T00:00:00.000Z',
+                    updatedAt: '2026-03-01T00:00:00.000Z',
+                },
+            ],
+            editingSessionId: 'current-session',
+            editingSessionDraft: {
+                id: 'current-session',
+                name: 'Current Session',
+                nodes: [{
+                    id: 'current-node',
+                    type: 'rest',
+                    name: 'Unsaved Current Session',
+                    seconds: '30',
+                    createdAt: '2026-03-01T00:00:00.000Z',
+                    updatedAt: '2026-03-01T00:00:00.000Z',
+                }],
+            },
+        });
+
+        render(<App />);
+        fireEvent.click(screen.getAllByTitle('Load Session')[1]);
+        const decision = screen.getByRole('dialog', { name: /unsaved session changes/i });
+        fireEvent.click(within(decision).getByRole('button', { name: /discard & continue/i }));
+
+        expect(useWorkoutStore.getState().selectedSavedSessionId).toBe('target-session');
+        expect(useWorkoutStore.getState().editingSessionDraft?.name).toBe('Target Session');
     });
 
     it('covers the successful rename and delete session branches', () => {
@@ -2045,6 +2176,39 @@ describe('App', () => {
         expect(audioEngine.scheduleTickSequence).toHaveBeenCalledTimes(1);
     });
 
+    it('cancels and resumes metronome scheduling when the document visibility changes', () => {
+        useWorkoutStore.setState({
+            appPhase: 'timer',
+            timerStatus: 'Main Set',
+            isTimerRunning: true,
+            currentSet: 1,
+            currentRep: 1,
+            isMainRep: true,
+            isWorking: true,
+            sets: '1',
+            reps: '10',
+            seconds: '2',
+            timeLeft: 1.9,
+            settings: {
+                ...useWorkoutStore.getState().settings,
+                ttsEnabled: false,
+                metronomeEnabled: true,
+            },
+        });
+
+        render(<App />);
+        expect(audioEngine.scheduleTickSequence).toHaveBeenCalledTimes(1);
+
+        Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+        fireEvent(document, new Event('visibilitychange'));
+        expect(audioEngine.scheduleTickSequence).toHaveBeenCalledTimes(1);
+        expect(audioEngine.cancelScheduledTicks).toHaveBeenCalled();
+
+        Object.defineProperty(document, 'hidden', { configurable: true, value: false });
+        fireEvent(document, new Event('visibilitychange'));
+        expect(audioEngine.scheduleTickSequence).toHaveBeenCalledTimes(2);
+    });
+
     it('cancels scheduled metronome ticks once the timer is paused', () => {
         useWorkoutStore.setState({
             appPhase: 'timer',
@@ -2378,7 +2542,7 @@ describe('App', () => {
         expect(clickSpy).toHaveBeenCalled();
         expect(revokeUrlSpy).toHaveBeenCalled();
 
-        const input = document.querySelector('input[type=\"file\"]') as HTMLInputElement;
+        const input = document.querySelector('input[type="file"]') as HTMLInputElement;
         const file = new File([JSON.stringify({ schemaVersion: 1, exportedAt: new Date().toISOString(), workouts: [], sessions: [] })], 'backup.json', {
             type: 'application/json',
         });

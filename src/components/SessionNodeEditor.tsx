@@ -10,6 +10,7 @@ import { useWorkoutStore } from '@/store/useWorkoutStore';
 import type { SavedWorkoutConfig } from '@/types/savedWorkouts';
 import { normalizeSetsInput } from '@/utils/savedWorkouts';
 import { cn } from '@/lib/utils';
+import { useDialogFocus } from '@/hooks/useDialogFocus';
 
 const workoutFields: Array<{ key: keyof SavedWorkoutConfig; label: string; icon: typeof Zap }> = [
     { key: 'sets', label: 'Sets', icon: Activity },
@@ -120,6 +121,9 @@ const SessionNodeEditor = () => {
         mediaQuery.addListener(handleViewportChange);
         return () => mediaQuery.removeListener(handleViewportChange);
     }, []);
+    const handleClose = () => setEditingSessionNodeId(null);
+    const dialogRef = useDialogFocus(Boolean(node), handleClose);
+
 
     if (!node) {
         return null;
@@ -140,6 +144,8 @@ const SessionNodeEditor = () => {
         }
 
         const Icon = field.icon;
+        const inputId = `session-node-${field.key}`;
+
         const isDisabled = isSingleCycle && field.key !== 'sets' && field.key !== 'reps' && field.key !== 'seconds';
         const shouldGrayOut = isSingleCycle && field.key !== 'sets' && field.key !== 'reps' && field.key !== 'seconds';
 
@@ -147,11 +153,12 @@ const SessionNodeEditor = () => {
             <div key={field.key} className={cn('space-y-2', shouldGrayOut && 'opacity-45')}>
                 <div className="flex items-center gap-2">
                     <Icon size={12} className="text-primary" />
-                    <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                    <Label htmlFor={inputId} className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
                         {field.label}
                     </Label>
                 </div>
                 <Input
+                    id={inputId}
                     type="number"
                     value={workoutNode.config[field.key]}
                     disabled={isDisabled}
@@ -169,7 +176,6 @@ const SessionNodeEditor = () => {
         );
     };
 
-    const handleClose = () => setEditingSessionNodeId(null);
 
     const handleImportWorkout = () => {
         if (!workoutNode || !selectedWorkoutId || selectedWorkoutId === '__new__') {
@@ -205,6 +211,8 @@ const SessionNodeEditor = () => {
 
     return (
         <div
+            ref={dialogRef}
+            tabIndex={-1}
             role="dialog"
             aria-modal="true"
             aria-label={`${node.type} node editor`}
@@ -216,7 +224,7 @@ const SessionNodeEditor = () => {
             )}
             onPointerDown={(event) => {
                 if (event.target === event.currentTarget) {
-                    handleClose();
+                    setEditingSessionNodeId(null);
                 }
             }}
         >
@@ -316,10 +324,11 @@ const SessionNodeEditor = () => {
                                 </>
                             ) : (
                                 <div className="space-y-2">
-                                    <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                                    <Label htmlFor="session-node-rest-seconds" className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
                                         Rest Seconds
                                     </Label>
                                     <Input
+                                        id="session-node-rest-seconds"
                                         type="number"
                                         min={1}
                                         value={restNode?.seconds ?? ''}

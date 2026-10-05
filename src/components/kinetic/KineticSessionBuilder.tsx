@@ -52,13 +52,21 @@ const surfaceStyle = {
 const inputClassName = 'console-input';
 const quietButtonClassName = 'console-button';
 const iconButtonClassName = 'console-icon';
-const COMPACT_VIEWPORT_QUERY = '(max-width: 1023px)';
+const COMPACT_VIEWPORT_QUERY = '(max-width: 1279px)';
 
 type ActionResult = { ok: boolean; error?: string; id?: string };
+
+type PendingNodeRemoval = {
+    sessionId: string;
+    node: SessionNode;
+    previousNodeId: string | null;
+    nextNodeId: string | null;
+};
 
 type SuccessNotification = {
     id: number;
     message: string;
+    undo?: PendingNodeRemoval;
 };
 
 type BuilderDialog =
@@ -210,14 +218,14 @@ const KineticNodeCard = ({
                             {valid && <Check size={13} aria-label="Valid node" style={{ color: KINETIC.lime }} />}
                             {!valid && <span className="text-[10px] font-semibold uppercase tracking-[0.14em]" style={{ color: KINETIC.error }}>Needs input</span>}
                         </div>
-                        <div className="mt-1 truncate text-[15px] font-semibold tracking-[-0.02em]" style={{ color: KINETIC.cream }} title={node.name}>
+                        <div className="mt-1 whitespace-normal break-words text-[15px] font-semibold tracking-[-0.02em]" style={{ color: KINETIC.cream }}>
                             {node.name || 'Untitled block'}
                         </div>
-                        <div className="mt-1 truncate text-[12px]" style={{ color: KINETIC.muted }} title={nodeSummary(node)}>
+                        <div className="mt-1 whitespace-normal break-words text-[12px]" style={{ color: KINETIC.muted }}>
                             {nodeSummary(node)}
                         </div>
                         {node.type === 'workout' && node.notes?.trim() && (
-                            <div className="mt-2 truncate text-xs" style={{ color: KINETIC.muted }} title={node.notes}>
+                            <div className="mt-2 whitespace-normal break-words text-xs" style={{ color: KINETIC.muted }}>
                                 {node.notes}
                             </div>
                         )}
@@ -326,7 +334,7 @@ const NodeInspector = ({
 
     if (!node) {
         return (
-            <aside className="flex min-h-[240px] flex-col justify-center border-l border-[var(--kinetic-border)] px-5 py-6 lg:min-h-0" style={{ backgroundColor: KINETIC.surface }}>
+            <aside className="flex min-h-[240px] flex-col justify-center border-l border-[var(--kinetic-border)] px-5 py-6 xl:min-h-0" style={{ backgroundColor: KINETIC.surface }}>
                 <div className="mx-auto max-w-[220px] text-center">
                     <ListPlus size={20} className="mx-auto" style={{ color: KINETIC.muted }} />
                     <div className="mt-3 text-sm font-semibold" style={{ color: KINETIC.cream }}>Select a block</div>
@@ -519,7 +527,7 @@ const BuilderDialog = ({ dialog, value, onChangeValue, onClose, onConfirm, isCom
                 {isPrompt && (
                     <label className="mt-5 block space-y-1.5">
                         <span className={"console-label"}>Session name</span>
-                        <Input autoFocus value={value} onChange={(event) => onChangeValue(event.target.value)} className={inputClassName} />
+                        <Input value={value} onChange={(event) => onChangeValue(event.target.value)} className={inputClassName} />
                     </label>
                 )}
                 <div className="mt-6 flex justify-end gap-2">
@@ -583,6 +591,7 @@ const KineticSessionBuilder = ({ className }: KineticSessionBuilderProps) => {
     const moveSessionNode = useWorkoutStore((state) => state.moveSessionNode);
     const moveSessionNodeToIndex = useWorkoutStore((state) => state.moveSessionNodeToIndex);
     const replaceWorkoutNodeWithSavedWorkout = useWorkoutStore((state) => state.replaceWorkoutNodeWithSavedWorkout);
+    const insertSessionNodeAfter = useWorkoutStore((state) => state.insertSessionNodeAfter);
     const setEditingSessionNodeId = useWorkoutStore((state) => state.setEditingSessionNodeId);
     const { feedback: saveFeedback, dismiss: dismissSaveFeedback, trackSessionSave } = useBuilderSaveFeedback(editingSessionDraft?.id ?? null);
     const [isCompactViewport, setIsCompactViewport] = useState(() => (
@@ -608,7 +617,7 @@ const KineticSessionBuilder = ({ className }: KineticSessionBuilderProps) => {
         if (editingSessionNodeId) nodeCardRefs.current.get(editingSessionNodeId)?.focus();
     }, [editingSessionNodeId]);
 
-    const nodes = editingSessionDraft?.nodes ?? [];
+    const nodes = useMemo(() => editingSessionDraft?.nodes ?? [], [editingSessionDraft?.nodes]);
     const selectedNode = useMemo(() => nodes.find((node) => node.id === editingSessionNodeId) ?? null, [editingSessionNodeId, nodes]);
     const duration = useMemo(() => editingSessionDraft ? formatEstimatedSessionDuration(estimateSessionDurationSeconds(editingSessionDraft, prepTime)) : '--:--', [editingSessionDraft, prepTime]);
     const workoutCount = useMemo(() => nodes.filter((node) => node.type === 'workout').length, [nodes]);
@@ -637,6 +646,10 @@ const KineticSessionBuilder = ({ className }: KineticSessionBuilderProps) => {
     useEffect(() => {
         setDraftName(editingSessionDraft?.name ?? '');
     }, [editingSessionDraft?.id, editingSessionDraft?.name]);
+    useEffect(() => {
+        if (!statusMessage?.undo || statusMessage.undo.sessionId === editingSessionDraft?.id) return;
+        setStatusMessage(null);
+    }, [editingSessionDraft?.id, statusMessage]);
 
     useEffect(() => {
         if (!editingSessionDraft) {
@@ -678,7 +691,7 @@ const KineticSessionBuilder = ({ className }: KineticSessionBuilderProps) => {
         }
     }, []);
 
-    const showSuccess = (message: string) => {
+    const showSuccess = (message: string, undo?: PendingNodeRemoval) => {
         if (statusTimeoutRef.current !== null) {
             clearTimeout(statusTimeoutRef.current);
             statusTimeoutRef.current = null;
@@ -686,10 +699,10 @@ const KineticSessionBuilder = ({ className }: KineticSessionBuilderProps) => {
 
         const id = statusSequenceRef.current + 1;
         statusSequenceRef.current = id;
-        setStatusMessage({ id, message });
+        setStatusMessage({ id, message, undo });
+        if (undo) return;
 
-        let timeoutId: ReturnType<typeof setTimeout>;
-        timeoutId = setTimeout(() => {
+        const timeoutId = setTimeout(() => {
             setStatusMessage((current) => current?.id === id ? null : current);
             if (statusTimeoutRef.current === timeoutId) {
                 statusTimeoutRef.current = null;
@@ -777,11 +790,50 @@ const KineticSessionBuilder = ({ className }: KineticSessionBuilderProps) => {
     };
     const handleDeleteNode = (nodeId: string) => {
         const index = nodes.findIndex((node) => node.id === nodeId);
+        const node = nodes[index];
+        if (!node || !editingSessionDraft) return;
+        const undo = {
+            sessionId: editingSessionDraft.id,
+            node,
+            previousNodeId: nodes[index - 1]?.id ?? null,
+            nextNodeId: nodes[index + 1]?.id ?? null,
+        };
         const nextNode = nodes[index + 1] ?? nodes[index - 1] ?? null;
         removeSessionNode(nodeId);
         setEditingSessionNodeId(nextNode?.id ?? null);
         if (isCompactViewport) setIsMobileInspectorOpen(Boolean(nextNode));
-        showSuccess('Block removed');
+        showSuccess('Block removed', undo);
+    };
+
+    const handleUndoRemoval = () => {
+        const removal = statusMessage?.undo;
+        if (!removal) return;
+        if (!editingSessionDraft || editingSessionDraft.id !== removal.sessionId) {
+            dismissSuccess();
+            return;
+        }
+
+        const currentNodes = editingSessionDraft.nodes;
+        if (currentNodes.some((node) => node.id === removal.node.id)) {
+            dismissSuccess();
+            return;
+        }
+        const previousIndex = removal.previousNodeId
+            ? currentNodes.findIndex((node) => node.id === removal.previousNodeId)
+            : -1;
+        const nextIndex = removal.nextNodeId
+            ? currentNodes.findIndex((node) => node.id === removal.nextNodeId)
+            : -1;
+        const afterNodeId = previousIndex >= 0
+            ? removal.previousNodeId
+            : nextIndex > 0
+                ? currentNodes[nextIndex - 1].id
+                : null;
+
+        insertSessionNodeAfter(afterNodeId, removal.node);
+        setEditingSessionNodeId(removal.node.id);
+        if (isCompactViewport) setIsMobileInspectorOpen(true);
+        showSuccess('Block restored');
     };
 
 
@@ -815,16 +867,24 @@ const KineticSessionBuilder = ({ className }: KineticSessionBuilderProps) => {
                     </div>
                 </div>
 
-                {saveFeedback ? (
+                {saveFeedback && (
                     <BuilderSaveFeedback feedback={saveFeedback} onDismiss={dismissSaveFeedback} className="mx-4 my-3 shrink-0 sm:mx-6" />
-                ) : statusMessage && (
+                )}
+                {statusMessage && (!saveFeedback || statusMessage.undo) && (
                     <div role="status" aria-live="polite" className="mx-4 my-3 flex shrink-0 items-center justify-between gap-3 rounded-lg border border-[var(--kinetic-border)] bg-[var(--kinetic-panel-raised)] px-3 text-sm sm:mx-6">
                         <span>{statusMessage.message}</span>
-                        <button type="button" className="console-icon console-button--quiet" onClick={dismissSuccess} aria-label="Dismiss notification"><X size={16} /></button>
+                        <div className="flex items-center gap-2">
+                            {statusMessage.undo && (
+                                <Button type="button" variant="ghost" className={quietButtonClassName} onClick={handleUndoRemoval} aria-label="Undo block removal">
+                                    Undo
+                                </Button>
+                            )}
+                            <button type="button" className="console-icon console-button--quiet" onClick={dismissSuccess} aria-label="Dismiss notification"><X size={16} /></button>
+                        </div>
                     </div>
                 )}
-                <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1fr)_360px]">
-                    <section aria-labelledby="kinetic-timeline-title" className="min-h-0 overflow-y-auto px-4 py-5 sm:px-6 lg:py-6">
+                <div className="grid min-h-0 flex-1 xl:grid-cols-[minmax(0,1fr)_360px]">
+                    <section aria-labelledby="kinetic-timeline-title" className="min-h-0 overflow-y-auto px-4 py-5 sm:px-6 xl:py-6">
                         <div className="mb-4 flex items-baseline gap-3">
                             <h2 id="kinetic-timeline-title" className="console-heading flex items-center gap-2 text-sm"><Activity size={15} /> Timeline</h2>
                             {nodes.length > 0 && <span className="text-xs" style={{ color: KINETIC.muted }}>{`${nodes.length} blocks · ${workoutCount} work · ${restCount} recovery`}</span>}

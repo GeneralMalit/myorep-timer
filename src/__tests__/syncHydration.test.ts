@@ -43,3 +43,43 @@ it('restores enabled sync, pending changes, and completed hydration on a fresh l
     expect(refreshed.getState().syncEnabled).toBe(true);
     expect(refreshed.getState().queuedOperations).toEqual(pendingOperations);
 });
+
+it('recovers an interrupted first sync on hydration without dropping its recovery backup', async () => {
+    const storage = new Map<string, string>();
+    vi.spyOn(window.localStorage, 'getItem').mockImplementation((name) => storage.get(name) ?? null);
+    vi.spyOn(window.localStorage, 'setItem').mockImplementation((name, value) => { storage.set(name, value); });
+    vi.resetModules();
+    const { useSyncStore: firstLoad } = await import('@/store/useSyncStore');
+    const createdAt = new Date().toISOString();
+    const backup = {
+        createdAt,
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+        workouts: [{ id: 'local-workout' }],
+        sessions: [],
+    };
+    firstLoad.getState().setCurrentUser('interrupted-account');
+    firstLoad.getState().beginEnableSync(backup, true);
+    firstLoad.getState().markFirstSyncProcessing('upload-local');
+    await Promise.resolve();
+
+    const persisted = JSON.parse(storage.get('myorep-sync-storage') ?? '{}');
+    expect(persisted.state).toMatchObject({
+        firstSyncState: 'processing',
+        recoveryBackup: backup,
+        pendingChoice: 'upload-local',
+    });
+
+    vi.resetModules();
+    // Re-import after clearing the module cache to exercise a fresh store instance.
+    const { useSyncStore: refreshed } = await import('@/store/useSyncStore');
+    expect(refreshed.persist.hasHydrated()).toBe(true);
+    expect(refreshed.getState()).toMatchObject({
+        hydrateComplete: true,
+        syncEnabled: false,
+        firstSyncState: 'pending-choice',
+        currentUserId: 'interrupted-account',
+        recoveryBackup: backup,
+        pendingChoice: 'upload-local',
+        onboardingRemoteHasData: true,
+    });
+});

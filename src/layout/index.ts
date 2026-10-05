@@ -6,8 +6,10 @@ export type ResponsiveLayout<T> = {
 type ClassPart = string | false | null | undefined;
 type ClassPartRecord = Record<string, ClassPart>;
 
-export const getResponsiveLayout = <T>(isMobileViewport: boolean, mobileLayout: T, desktopLayout: T): T =>
+export const getResponsiveLayout = <TMobile, TDesktop>(isMobileViewport: boolean, mobileLayout: TMobile, desktopLayout: TDesktop): TMobile | TDesktop =>
     isMobileViewport ? mobileLayout : desktopLayout;
+
+export type AnyResponsiveLayout<TMobile, TDesktop> = TMobile | TDesktop;
 
 export const defineResponsiveLayout = <T>(mobile: T, desktop: T): ResponsiveLayout<T> => ({
     mobile,

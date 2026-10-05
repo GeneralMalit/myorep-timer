@@ -676,6 +676,96 @@ describe('SessionBuilder', () => {
         expect(screen.queryByRole('dialog', { name: /create a new session/i })).not.toBeInTheDocument();
     });
 
+    it('dismisses the builder dialog with Escape and restores focus to its opener', () => {
+        render(<SessionBuilder />);
+
+        const opener = screen.getByRole('button', { name: /^new session$/i });
+        opener.focus();
+        fireEvent.click(opener);
+        expect(screen.getByRole('dialog', { name: /create a new session/i })).toBeInTheDocument();
+
+        fireEvent.keyDown(window, { key: 'Escape' });
+
+        expect(screen.queryByRole('dialog', { name: /create a new session/i })).not.toBeInTheDocument();
+        expect(opener).toHaveFocus();
+    });
+
+    it('labels numeric node fields and restores focus when the editor closes', () => {
+        const nowIso = '2026-09-01T00:00:00.000Z';
+        const session = createSavedSession(
+            'Accessible Session',
+            [
+                createWorkoutSessionNode('Accessible Workout', {
+                    sets: '2',
+                    reps: '10',
+                    seconds: '3',
+                    rest: '20',
+                    myoReps: '4',
+                    myoWorkSecs: '2',
+                }, nowIso),
+                createRestSessionNode('Recovery', '45', nowIso),
+            ],
+            nowIso,
+        );
+        useWorkoutStore.setState({
+            editingSessionId: session.id,
+            editingSessionDraft: session,
+            editingSessionNodeId: null,
+            setupMode: 'session',
+        });
+
+        render(<SessionBuilder />);
+
+        const workoutOpener = screen.getByRole('button', { name: 'Edit Accessible Workout' });
+        workoutOpener.focus();
+        fireEvent.click(workoutOpener);
+        const workoutEditor = screen.getByRole('dialog', { name: /workout node editor/i });
+        for (const label of ['Sets', 'Reps', 'Seconds', 'Rest', 'Myo Reps', 'Myo Pace']) {
+            expect(within(workoutEditor).getByLabelText(label)).toHaveAttribute('type', 'number');
+        }
+        expect(workoutEditor.contains(document.activeElement)).toBe(true);
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(workoutOpener).toHaveFocus();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Edit Recovery' }));
+        const restEditor = screen.getByRole('dialog', { name: /rest node editor/i });
+        expect(within(restEditor).getByLabelText('Rest Seconds')).toHaveAttribute('type', 'number');
+    });
+
+    it('restores a removed block in its original place with the undo action', () => {
+        const nowIso = '2026-09-01T00:00:00.000Z';
+        const session = createSavedSession(
+            'Undo Session',
+            [
+                createRestSessionNode('First Recovery', '30', nowIso),
+                createRestSessionNode('Removed Recovery', '45', nowIso),
+                createRestSessionNode('Last Recovery', '60', nowIso),
+            ],
+            nowIso,
+        );
+        useWorkoutStore.setState({
+            editingSessionId: session.id,
+            editingSessionDraft: session,
+            editingSessionNodeId: null,
+            setupMode: 'session',
+        });
+
+        render(<SessionBuilder />);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Delete Removed Recovery' }));
+        expect(useWorkoutStore.getState().editingSessionDraft?.nodes.map((node) => node.name)).toEqual([
+            'First Recovery',
+            'Last Recovery',
+        ]);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+        expect(useWorkoutStore.getState().editingSessionDraft?.nodes.map((node) => node.name)).toEqual([
+            'First Recovery',
+            'Removed Recovery',
+            'Last Recovery',
+        ]);
+    });
+
     it('adds a session-local workout node without creating or linking a saved workout', () => {
         useWorkoutStore.setState({
             selectedSavedWorkoutId: null,

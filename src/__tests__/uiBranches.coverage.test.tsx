@@ -425,6 +425,34 @@ describe('AccountCard branch coverage', () => {
         fireEvent.click(screen.getByRole('button', { name: /resume sync/i }));
         await waitFor(() => expect(onResumeSync).toHaveBeenCalledOnce());
     });
+
+    it('uses light-on-dark foreground colors for every Kinetic sync badge status', () => {
+        const foregroundCases: Array<[AccountSyncSnapshot['status'], string]> = [
+            ['sync-off', 'text-[var(--kinetic-muted)]'],
+            ['sync-available', 'text-sky-300'],
+            ['enable-sync', 'text-sky-300'],
+            ['first-sync-required', 'text-amber-300'],
+            ['syncing', 'text-sky-300'],
+            ['last-synced', 'text-emerald-300'],
+            ['auth-expired', 'text-amber-300'],
+            ['sync-error', 'text-red-300'],
+            ['sync-paused', 'text-[var(--kinetic-muted)]'],
+            ['offline', 'text-[var(--kinetic-muted)]'],
+        ];
+        useWorkoutStore.setState({ designVariant: 'kinetic' });
+        const { container, rerender } = render(
+            <AccountCard account={signedPlusAccount} syncSnapshot={{ status: foregroundCases[0][0], detail: null }} />,
+        );
+
+        foregroundCases.forEach(([status, foregroundClass], index) => {
+            if (index > 0) {
+                rerender(<AccountCard account={signedPlusAccount} syncSnapshot={{ status, detail: null }} />);
+            }
+
+            expect(container.querySelector('.console-tag')).toHaveClass(foregroundClass);
+        });
+        useWorkoutStore.setState({ designVariant: 'classic' });
+    });
 });
 
 describe('settings, protocol intel, and timer display branches', () => {

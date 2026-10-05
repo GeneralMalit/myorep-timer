@@ -14,6 +14,15 @@ import { audioEngine } from '@/utils/audioEngine';
 import { cn } from '@/lib/utils';
 import BuilderSaveFeedback from '@/components/BuilderSaveFeedback';
 import { useBuilderSaveFeedback } from '@/hooks/useBuilderSaveFeedback';
+import { useDialogFocus } from '@/hooks/useDialogFocus';
+import type { SessionNode } from '@/types/savedSessions';
+
+interface PendingNodeRemoval {
+    sessionId: string;
+    node: SessionNode;
+    previousNodeId: string | null;
+    nextNodeId: string | null;
+}
 
 type SessionBuilderDialogState =
     | {
@@ -34,7 +43,7 @@ interface BuilderDialogProps {
 
 const BuilderDialog = ({ state, onChangeValue, onClose, onConfirm }: BuilderDialogProps) => {
     const isMobileViewport = useMobileViewport();
-
+    const dialogRef = useDialogFocus(Boolean(state), onClose);
     if (!state) {
         return null;
     }
@@ -44,6 +53,8 @@ const BuilderDialog = ({ state, onChangeValue, onClose, onConfirm }: BuilderDial
 
     return (
         <div
+            ref={dialogRef}
+            tabIndex={-1}
             className={cn(
                 layout.backdrop,
             )}
@@ -79,7 +90,6 @@ const BuilderDialog = ({ state, onChangeValue, onClose, onConfirm }: BuilderDial
                             id="session-builder-dialog-name"
                             value={state.value ?? ''}
                             onChange={(event) => onChangeValue(event.target.value)}
-                            autoFocus
                         />
                     </div>
                 )}
@@ -141,15 +151,22 @@ const SessionBuilder = () => {
     const addDefaultWorkoutNode = useWorkoutStore((state) => state.addDefaultWorkoutNode);
     const addRestNode = useWorkoutStore((state) => state.addRestNode);
     const removeSessionNode = useWorkoutStore((state) => state.removeSessionNode);
+    const insertSessionNodeAfter = useWorkoutStore((state) => state.insertSessionNodeAfter);
     const moveSessionNode = useWorkoutStore((state) => state.moveSessionNode);
     const moveSessionNodeToIndex = useWorkoutStore((state) => state.moveSessionNodeToIndex);
     const { feedback: saveFeedback, dismiss: dismissSaveFeedback, trackSessionSave } = useBuilderSaveFeedback(editingSessionDraft?.id ?? null);
     const [dialogState, setDialogState] = useState<SessionBuilderDialogState>(null);
     const [sessionNameDraft, setSessionNameDraft] = useState('');
+    const [pendingRemoval, setPendingRemoval] = useState<PendingNodeRemoval | null>(null);
 
     useEffect(() => {
         setSessionNameDraft(editingSessionDraft?.name ?? '');
     }, [editingSessionDraft?.id, editingSessionDraft?.name]);
+    useEffect(() => {
+        setPendingRemoval((current) => (
+            current && current.sessionId !== editingSessionDraft?.id ? null : current
+        ));
+    }, [editingSessionDraft?.id]);
 
     const estimatedDuration = useMemo(() => {
         if (!editingSessionDraft) {
@@ -274,6 +291,57 @@ const SessionBuilder = () => {
         }
     };
 
+    const handleRemoveNode = (nodeId: string) => {
+        if (!editingSessionDraft) {
+            return;
+        }
+        const index = editingSessionDraft.nodes.findIndex((node) => node.id === nodeId);
+        const node = editingSessionDraft.nodes[index];
+        if (!node) {
+            return;
+        }
+
+        setPendingRemoval({
+            sessionId: editingSessionDraft.id,
+            node,
+            previousNodeId: editingSessionDraft.nodes[index - 1]?.id ?? null,
+            nextNodeId: editingSessionDraft.nodes[index + 1]?.id ?? null,
+        });
+        removeSessionNode(nodeId);
+    };
+
+    const handleUndoRemoval = () => {
+        if (!pendingRemoval) {
+            return;
+        }
+        if (!editingSessionDraft || editingSessionDraft.id !== pendingRemoval.sessionId) {
+            setPendingRemoval(null);
+            return;
+        }
+
+        const nodes = editingSessionDraft.nodes;
+        if (nodes.some((node) => node.id === pendingRemoval.node.id)) {
+            setPendingRemoval(null);
+            return;
+        }
+
+        const previousIndex = pendingRemoval.previousNodeId
+            ? nodes.findIndex((node) => node.id === pendingRemoval.previousNodeId)
+            : -1;
+        const nextIndex = pendingRemoval.nextNodeId
+            ? nodes.findIndex((node) => node.id === pendingRemoval.nextNodeId)
+            : -1;
+        const afterNodeId = previousIndex >= 0
+            ? pendingRemoval.previousNodeId
+            : nextIndex > 0
+                ? nodes[nextIndex - 1].id
+                : null;
+
+        insertSessionNodeAfter(afterNodeId, pendingRemoval.node);
+        setEditingSessionNodeId(pendingRemoval.node.id);
+        setPendingRemoval(null);
+    };
+
     const handleDialogValueChange = (value: string) => {
         setDialogState((current) => current && ('value' in current)
             ? { ...current, value }
@@ -314,7 +382,7 @@ const SessionBuilder = () => {
             trackSessionSave(result.id);
         }
     };
-    const layout = getResponsiveLayout<typeof sessionBuilderMobileLayout | typeof sessionBuilderDesktopLayout>(
+    const layout = getResponsiveLayout(
         isMobileViewport,
         sessionBuilderMobileLayout,
         sessionBuilderDesktopLayout,
@@ -366,6 +434,12 @@ const SessionBuilder = () => {
                             </span>
                         </div>
                     </div>
+                    {pendingRemoval && (
+                        <div role="status" aria-live="polite" className="mx-auto flex w-full max-w-2xl items-center justify-between gap-3 rounded-2xl border border-border/60 bg-card px-4 py-2 text-sm">
+                            <span>{pendingRemoval.node.name || 'Block'} removed.</span>
+                            <Button type="button" variant="outline" onClick={handleUndoRemoval} className="shrink-0">Undo</Button>
+                        </div>
+                    )}
 
                     <div className={layout.canvasWrap}>
                         <div className={layout.canvasInner}>
@@ -376,7 +450,7 @@ const SessionBuilder = () => {
                                 sessionName={editingSessionDraft?.name ?? null}
                                 sessionDraftStatus={sessionDraftStatus}
                                 onEditNode={setEditingSessionNodeId}
-                                onRemoveNode={removeSessionNode}
+                                onRemoveNode={handleRemoveNode}
                                 onMoveNode={moveSessionNode}
                                 onMoveNodeToIndex={(nodeId, targetIndex) => moveSessionNodeToIndex(nodeId, targetIndex)}
                                 onAddWorkout={handleAddWorkout}

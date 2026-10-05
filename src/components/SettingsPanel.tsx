@@ -216,7 +216,7 @@ const SettingsPanel: FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                 )}>
                     <CardTitle id="settings-panel-title" className={isKinetic ? 'console-heading flex items-center gap-2 text-lg' : layout.title}>
                         <Monitor size={20} />
-                        System Configuration
+                        {isKinetic ? 'Console settings' : 'System Configuration'}
                     </CardTitle>
                     <Button
                         variant="ghost"

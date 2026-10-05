@@ -15,7 +15,7 @@ const mockCompactViewport = (matches: boolean) => {
         configurable: true,
         writable: true,
         value: vi.fn().mockImplementation((media: string) => ({
-            matches: media === '(max-width: 1023px)' && matches,
+            matches: media === '(max-width: 1279px)' && matches,
             media,
             onchange: null,
             addListener: vi.fn(),
@@ -317,6 +317,29 @@ describe('KineticSessionBuilder', () => {
         expect(notice).toHaveTextContent('Saved locally and synced to the cloud.');
     });
 
+    it('traps the builder prompt and restores focus to its opener on Escape', () => {
+        const session = createSession([createRestNode()]);
+        useWorkoutStore.setState({
+            savedSessions: [session],
+            editingSessionId: session.id,
+            editingSessionDraft: session,
+            editingSessionNodeId: session.nodes[0].id,
+        });
+
+        render(<KineticSessionBuilder />);
+
+        const opener = screen.getByRole('button', { name: 'Save session as copy' });
+        opener.focus();
+        fireEvent.click(opener);
+        const dialog = screen.getByRole('dialog', { name: 'Save a copy' });
+        expect(dialog.contains(document.activeElement)).toBe(true);
+
+        fireEvent.keyDown(window, { key: 'Escape' });
+
+        expect(screen.queryByRole('dialog', { name: 'Save a copy' })).not.toBeInTheDocument();
+        expect(opener).toHaveFocus();
+    });
+
     it('adds independent default workout blocks before appended recovery blocks', () => {
         render(<KineticSessionBuilder />);
 
@@ -340,6 +363,65 @@ describe('KineticSessionBuilder', () => {
         expect(draft?.nodes).toHaveLength(2);
         expect(draft?.nodes[1]).toMatchObject({ type: 'rest', seconds: '60' });
     });
+
+    it('restores removed timeline blocks in their original position with Undo', () => {
+        const session = createSession([
+            createRestNode({ id: 'first-recovery', name: 'First Recovery' }),
+            createRestNode({ id: 'middle-recovery', name: 'Middle Recovery' }),
+            createRestNode({ id: 'last-recovery', name: 'Last Recovery' }),
+        ]);
+        useWorkoutStore.setState({
+            savedSessions: [session],
+            editingSessionId: session.id,
+            editingSessionDraft: session,
+            editingSessionNodeId: 'middle-recovery',
+        });
+
+        render(<KineticSessionBuilder />);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Remove Middle Recovery' }));
+        expect(useWorkoutStore.getState().editingSessionDraft?.nodes.map((node) => node.id)).toEqual([
+            'first-recovery',
+            'last-recovery',
+        ]);
+        act(() => vi.advanceTimersByTime(5000));
+        expect(screen.getByRole('button', { name: 'Undo block removal' })).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Undo block removal' }));
+        expect(useWorkoutStore.getState().editingSessionDraft?.nodes.map((node) => node.id)).toEqual([
+            'first-recovery',
+            'middle-recovery',
+            'last-recovery',
+        ]);
+    });
+
+    it('wraps long timeline copy and delays the two-column inspector layout', () => {
+        const longName = 'A workout block with a very long name that should remain readable on touch screens';
+        const longNotes = 'A long training note without truncation so the full context can be read without hover.';
+        const session = createSession([
+            createWorkoutNode({ id: 'long-text-node', name: longName, notes: longNotes }),
+        ]);
+        useWorkoutStore.setState({
+            savedSessions: [session],
+            editingSessionId: session.id,
+            editingSessionDraft: session,
+            editingSessionNodeId: null,
+        });
+
+        render(<KineticSessionBuilder />);
+
+        const timeline = screen.getByRole('region', { name: 'Timeline' });
+        expect(timeline.parentElement).toHaveClass('xl:grid-cols-[minmax(0,1fr)_360px]');
+        expect(timeline.parentElement).not.toHaveClass('lg:grid-cols-[minmax(0,1fr)_360px]');
+        const card = screen.getByRole('article', { name: `Workout ${longName}` });
+        const nameText = within(card).getByText(longName);
+        const noteText = within(card).getByText(longNotes);
+        expect(nameText).toHaveClass('whitespace-normal', 'break-words');
+        expect(noteText).toHaveClass('whitespace-normal', 'break-words');
+        expect(nameText).not.toHaveAttribute('title');
+        expect(noteText).not.toHaveAttribute('title');
+    });
+
 
     it('opens a compact editor sheet and preserves selection when dismissed', () => {
         mockCompactViewport(true);

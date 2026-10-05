@@ -29,11 +29,20 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Test
-        run: npm run test -- --run
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test coverage
+        run: npm run test:coverage:ci
 
       - name: Build
         run: npm run build
+
+      - name: Build mobile release
+        run: npm run build:mobile:release
 
       - name: Release
         env:

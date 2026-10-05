@@ -82,16 +82,42 @@ const isEmailLike = (value: string): boolean => {
 };
 
 const syncBadgeClasses: Record<AccountSyncSurfaceStatus, string> = {
-    'sync-off': 'border-border/50 bg-muted/60 text-muted-foreground',
-    'sync-available': 'border-sky-500/25 bg-sky-500/10 text-sky-700 dark:text-sky-300',
-    'enable-sync': 'border-primary/25 bg-primary/10 text-primary',
-    'first-sync-required': 'border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300',
-    syncing: 'border-primary/25 bg-primary/10 text-primary',
-    'last-synced': 'border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
-    'auth-expired': 'border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300',
-    'sync-error': 'border-red-500/25 bg-red-500/10 text-red-700 dark:text-red-300',
-    'sync-paused': 'border-border/50 bg-muted/60 text-muted-foreground',
-    offline: 'border-border/50 bg-muted/60 text-muted-foreground',
+    'sync-off': 'border-border/50 bg-muted/60',
+    'sync-available': 'border-sky-500/25 bg-sky-500/10',
+    'enable-sync': 'border-primary/25 bg-primary/10',
+    'first-sync-required': 'border-amber-500/25 bg-amber-500/10',
+    syncing: 'border-primary/25 bg-primary/10',
+    'last-synced': 'border-emerald-500/25 bg-emerald-500/10',
+    'auth-expired': 'border-amber-500/25 bg-amber-500/10',
+    'sync-error': 'border-red-500/25 bg-red-500/10',
+    'sync-paused': 'border-border/50 bg-muted/60',
+    offline: 'border-border/50 bg-muted/60',
+};
+
+const syncBadgeForegroundClasses: Record<AccountSyncSurfaceStatus, string> = {
+    'sync-off': 'text-muted-foreground',
+    'sync-available': 'text-sky-700 dark:text-sky-300',
+    'enable-sync': 'text-primary',
+    'first-sync-required': 'text-amber-700 dark:text-amber-300',
+    syncing: 'text-primary',
+    'last-synced': 'text-emerald-700 dark:text-emerald-300',
+    'auth-expired': 'text-amber-700 dark:text-amber-300',
+    'sync-error': 'text-red-700 dark:text-red-300',
+    'sync-paused': 'text-muted-foreground',
+    offline: 'text-muted-foreground',
+};
+
+const kineticSyncBadgeForegroundClasses: Record<AccountSyncSurfaceStatus, string> = {
+    'sync-off': 'text-[var(--kinetic-muted)]',
+    'sync-available': 'text-sky-300',
+    'enable-sync': 'text-sky-300',
+    'first-sync-required': 'text-amber-300',
+    syncing: 'text-sky-300',
+    'last-synced': 'text-emerald-300',
+    'auth-expired': 'text-amber-300',
+    'sync-error': 'text-red-300',
+    'sync-paused': 'text-[var(--kinetic-muted)]',
+    offline: 'text-[var(--kinetic-muted)]',
 };
 
 const syncBadgeLabels: Record<AccountSyncSurfaceStatus, string> = {
@@ -885,7 +911,7 @@ const AccountCard = ({
                                 {account.bootstrapStatus === 'bootstrapping' ? 'Checking Plus access' : 'Check Plus access'}
                             </Button>
                         )}
-                        {account.mode === 'signed-in-plus' && onManageSubscription && (
+                        {(account.mode === 'signed-in-plus' || account.mode === 'signed-in-free') && onManageSubscription && (
                             <Button
                                 type="button"
                                 variant="secondary"
@@ -1092,6 +1118,9 @@ const AccountCard = ({
                             <div className={cn(
                                 isKinetic ? 'console-tag shrink-0' : 'inline-flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.22em]',
                                 syncBadgeClasses[syncSurface.status],
+                                isKinetic
+                                    ? kineticSyncBadgeForegroundClasses[syncSurface.status]
+                                    : syncBadgeForegroundClasses[syncSurface.status],
                             )}>
                                 {getSyncStatusIcon(syncSurface.status)}
                                 <span>{syncBadgeLabels[syncSurface.status]}</span>

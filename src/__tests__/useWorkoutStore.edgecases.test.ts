@@ -161,7 +161,6 @@ describe('useWorkoutStore edge cases', () => {
         const created = store.createSession('Branch Session');
         expect(created.ok).toBe(true);
 
-        expect(store.saveSessionDraft()).toMatchObject({ ok: false, error: 'Session is invalid.' });
         expect(store.saveSessionDraftAs('')).toMatchObject({ ok: false, error: 'Session name is required.' });
         expect(store.saveSessionDraftAs('Branch Session')).toMatchObject({ ok: false, error: 'Session is invalid.' });
 

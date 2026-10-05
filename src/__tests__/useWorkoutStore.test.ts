@@ -218,7 +218,7 @@ describe('useWorkoutStore', () => {
     describe('Saved Sessions', () => {
         it('should create, edit, and save a session draft', () => {
             const store = useWorkoutStore.getState();
-            const linkedWorkout = seedSelectedWorkout({
+            seedSelectedWorkout({
                 sets: '2',
                 reps: '12',
                 seconds: '4',

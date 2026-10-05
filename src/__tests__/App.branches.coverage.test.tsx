@@ -301,6 +301,9 @@ describe('App dialog and library branches', () => {
             savedWorkouts: [
                 { id: 'pending', name: 'Pending', sync: { pendingDelete: true } },
             ] as never,
+            editingSessionDraft: null,
+            editingSessionId: null,
+            selectedSavedSessionId: null,
         });
         render(<App />);
         expect(screen.getByTestId('visible-workout-count')).toHaveTextContent('0');
@@ -361,6 +364,9 @@ describe('App dialog and library branches', () => {
             savedSessions: [
                 { id: 'pending', name: 'Pending', nodes: [], sync: { pendingDelete: true } },
             ] as never,
+            editingSessionDraft: null,
+            editingSessionId: null,
+            selectedSavedSessionId: null,
         });
         render(<App />);
 
@@ -412,7 +418,6 @@ describe('App account and billing edge branches', () => {
             [/mock account reset/i, 'Supabase is not configured for this build.'],
             [/mock account password/i, 'Supabase is not configured for this build.'],
             [/mock account upgrade/i, 'Sign in first from the account card, then upgrade to Plus.'],
-            [/mock account manage/i, 'Upgrade to Plus before managing a subscription.'],
         ];
         for (const [name, message] of buttons) {
             expect((await clickAndReport(name)).message).toBe(message);

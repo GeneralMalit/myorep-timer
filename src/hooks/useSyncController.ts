@@ -805,7 +805,7 @@ export const useSyncController = (params: {
             return undefined;
         }
 
-        if (!syncEnabled) {
+        if (!syncEnabled && firstSyncState !== 'pending-choice') {
             return {
                 status: 'enable-sync',
                 detail: 'Cloud sync is available on Plus, but it stays off until you enable it on this device.',

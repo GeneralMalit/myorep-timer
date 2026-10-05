@@ -125,6 +125,7 @@ interface AppDialogProps {
     value: string;
     onChangeValue: (value: string) => void;
     onClose: () => void;
+    onCancel: () => void;
     onConfirm: () => void;
     isMobileViewport: boolean;
     layout: {
@@ -133,7 +134,7 @@ interface AppDialogProps {
     };
 }
 
-const AppDialog = ({ state, value, onChangeValue, onClose, onConfirm, isMobileViewport, layout }: AppDialogProps) => {
+const AppDialog = ({ state, value, onChangeValue, onClose, onCancel, onConfirm, isMobileViewport, layout }: AppDialogProps) => {
     const isKinetic = useWorkoutStore((state) => state.designVariant === 'kinetic');
     const dialogRef = useDialogFocus(Boolean(state), onClose);
     if (!state) {
@@ -189,8 +190,7 @@ const AppDialog = ({ state, value, onChangeValue, onClose, onConfirm, isMobileVi
                     {!isMessage && (
                         <Button
                             type="button"
-                            variant="secondary"
-                            onClick={onClose}
+                            onClick={onCancel}
                             className={isKinetic ? 'console-button' : cn('rounded-2xl font-black italic tracking-tighter', isMobileViewport && 'h-11')}
                         >
                             {state.cancelLabel ?? 'Cancel'}
@@ -212,10 +212,11 @@ const AppDialog = ({ state, value, onChangeValue, onClose, onConfirm, isMobileVi
 
 interface TimerSurfaceProps {
     isMobileViewport: boolean;
+    isDocumentVisible: boolean;
     timerScreenShell: string;
 }
 
-const TimerSurface = ({ isMobileViewport, timerScreenShell }: TimerSurfaceProps) => {
+const TimerSurface = ({ isMobileViewport, isDocumentVisible, timerScreenShell }: TimerSurfaceProps) => {
     const {
         settings,
         sets,
@@ -413,7 +414,8 @@ const TimerSurface = ({ isMobileViewport, timerScreenShell }: TimerSurfaceProps)
     }, [isTimerRunning, settings.ttsEnabled, timerStatus]);
 
     useEffect(() => {
-        const canScheduleMetronome = isTimerRunning
+        const canScheduleMetronome = isDocumentVisible
+            && isTimerRunning
             && settings.metronomeEnabled
             && isWorking
             && timerStatus !== 'Preparing'
@@ -450,7 +452,7 @@ const TimerSurface = ({ isMobileViewport, timerScreenShell }: TimerSurfaceProps)
             metronomeScheduleKeyRef.current = scheduleKey;
             lastMetronomeSectionKeyRef.current = sectionKey;
         }
-    }, [activeSessionId, activeSessionNodeIndex, currentSet, isMainRep, isTimerRunning, isWorking, setElapsedTime, setTotalDuration, settings.metronomeEnabled, settings.metronomeSound, timeLeft, timerStatus]);
+    }, [activeSessionId, activeSessionNodeIndex, currentSet, isDocumentVisible, isMainRep, isTimerRunning, isWorking, setElapsedTime, setTotalDuration, settings.metronomeEnabled, settings.metronomeSound, timeLeft, timerStatus]);
 
     useEffect(() => () => {
         audioEngine.cancelScheduledTicks();
@@ -741,7 +743,7 @@ export default function App() {
         editingSessionDraft, savedWorkouts, savedSessions, selectedSavedWorkoutId, lastImportSummary,
         appPhase, timerStatus, isWorking, startWorkout,
         saveCurrentWorkout, saveCurrentWorkoutAs, loadWorkout, renameWorkout, deleteWorkout, exportSavedLibrary, importSavedLibrary, clearImportSummary,
-        createSession, loadSessionForEditing, duplicateSession, renameSession, deleteSession,
+        createSession, saveSessionDraft, loadSessionForEditing, duplicateSession, renameSession, deleteSession,
         setupMode, setSetupMode, showSettings, setShowSettings,
         isSidebarCollapsed, setIsSidebarCollapsed, isAccountCardCollapsed, setIsAccountCardCollapsed, theme, setTheme, designVariant
     } = useWorkoutStore(useShallow((state) => ({
@@ -771,6 +773,7 @@ export default function App() {
         importSavedLibrary: state.importSavedLibrary,
         clearImportSummary: state.clearImportSummary,
         createSession: state.createSession,
+        saveSessionDraft: state.saveSessionDraft,
         loadSessionForEditing: state.loadSessionForEditing,
         duplicateSession: state.duplicateSession,
         renameSession: state.renameSession,
@@ -822,12 +825,16 @@ export default function App() {
     ));
     const [dialogState, setDialogState] = useState<AppDialogState>(null);
     const [dialogValue, setDialogValue] = useState('');
+    const [isDocumentVisible, setIsDocumentVisible] = useState(() => (
+        typeof document === 'undefined' || (!document.hidden && document.visibilityState !== 'hidden')
+    ));
     const [kineticSidebarWidth, setKineticSidebarWidth] = useState(248);
     const mobileNavigationTriggerRef = useRef<HTMLButtonElement | null>(null);
     const previousMobileViewportRef = useRef(false);
     const previousDesktopSidebarCollapsedRef = useRef<boolean | null>(null);
     const isSingleCycle = parseInt(sets, 10) === 1;
     const dialogConfirmRef = useRef<((value: string) => void) | null>(null);
+    const dialogCancelRef = useRef<(() => void) | null>(null);
     const loadedWorkout = selectedSavedWorkoutId ? savedWorkouts.find((workout) => workout.id === selectedSavedWorkoutId) ?? null : null;
     const canUseSessionBuilder = isLocalPlusPreview || canAccessSessionBuilder(entitlement);
     const isAccountCheckPending = bootstrapStatus === 'bootstrapping';
@@ -840,6 +847,24 @@ export default function App() {
         }
         return `${nodeCount} node${nodeCount === 1 ? '' : 's'} in the chain.`;
     }, [editingSessionDraft, nodeCount]);
+    const hasUnsavedSessionDraft = useMemo(() => {
+        if (!editingSessionDraft) {
+            return false;
+        }
+
+        const savedSession = savedSessions.find((saved) => saved.id === editingSessionDraft.id);
+        if (!savedSession) {
+            return true;
+        }
+
+        return JSON.stringify({
+            name: editingSessionDraft.name,
+            nodes: editingSessionDraft.nodes,
+        }) !== JSON.stringify({
+            name: savedSession.name,
+            nodes: savedSession.nodes,
+        });
+    }, [editingSessionDraft, savedSessions]);
 
     const isSidebarOpen = !isSidebarCollapsed;
     const appShellLayout = getResponsiveLayout(isMobileViewport, appShellMobile, appShellDesktop);
@@ -890,6 +915,14 @@ export default function App() {
         mediaQuery.addListener(handleViewportChange);
         return () => mediaQuery.removeListener(handleViewportChange);
     }, [setIsSidebarCollapsed]);
+    useEffect(() => {
+        const handleVisibilityChange = () => {
+            setIsDocumentVisible(!document.hidden && document.visibilityState !== 'hidden');
+        };
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+    }, []);
+
 
     const closeMobileDrawer = useCallback(() => {
         if (!isMobileViewport || isSidebarCollapsed) return;
@@ -901,6 +934,7 @@ export default function App() {
         setDialogState(null);
         setDialogValue('');
         dialogConfirmRef.current = null;
+        dialogCancelRef.current = null;
     }, []);
     const openMessageDialog = useCallback((
         title: string,
@@ -909,6 +943,7 @@ export default function App() {
         onConfirmAction?: () => void,
     ) => {
         dialogConfirmRef.current = onConfirmAction ? () => onConfirmAction() : null;
+        dialogCancelRef.current = null;
         setDialogValue('');
         setDialogState({
             kind: 'message',
@@ -927,6 +962,7 @@ export default function App() {
         onConfirm: (value: string) => void;
     }) => {
         dialogConfirmRef.current = options.onConfirm;
+        dialogCancelRef.current = null;
         setDialogValue(options.value ?? '');
         setDialogState({
             kind: 'prompt',
@@ -945,8 +981,10 @@ export default function App() {
         cancelLabel?: string;
         tone?: 'default' | 'danger';
         onConfirm: () => void;
+        onCancel?: () => void;
     }) => {
         dialogConfirmRef.current = () => options.onConfirm();
+        dialogCancelRef.current = options.onCancel ?? null;
         setDialogValue('');
         setDialogState({
             kind: 'confirm',
@@ -963,6 +1001,33 @@ export default function App() {
         closeDialog();
         callback?.(value);
     }, [closeDialog, dialogValue]);
+    const handleDialogCancel = useCallback(() => {
+        const callback = dialogCancelRef.current;
+        closeDialog();
+        callback?.();
+    }, [closeDialog]);
+    const continueAfterSessionDraftDecision = useCallback((onContinue: () => void) => {
+        if (!hasUnsavedSessionDraft) {
+            onContinue();
+            return;
+        }
+
+        openConfirmDialog({
+            title: 'Unsaved session changes',
+            description: 'Save this session draft before continuing, or discard the draft and continue.',
+            confirmLabel: 'Save & Continue',
+            cancelLabel: 'Discard & Continue',
+            onConfirm: () => {
+                const result = saveSessionDraft();
+                if (!result.ok) {
+                    openMessageDialog('Could not save session', result.error ?? 'Could not save session.');
+                    return;
+                }
+                onContinue();
+            },
+            onCancel: onContinue,
+        });
+    }, [hasUnsavedSessionDraft, openConfirmDialog, openMessageDialog, saveSessionDraft]);
     const toggleSidebar = useCallback(() => setIsSidebarCollapsed(!isSidebarCollapsed), [isSidebarCollapsed, setIsSidebarCollapsed]);
     const handleSaveWorkout = useCallback(() => {
         openPromptDialog({
@@ -1056,10 +1121,10 @@ export default function App() {
         return startBillingCheckout();
     }, [account.mode, setIsSidebarCollapsed]);
     const handleManageSubscription = useCallback(async (): Promise<AccountActionResult> => {
-        if (account.mode !== 'signed-in-plus') {
+        if (account.mode === 'guest') {
             return {
                 ok: false,
-                message: 'Upgrade to Plus before managing a subscription.',
+                message: 'Sign in before managing a subscription.',
             };
         }
 
@@ -1135,7 +1200,7 @@ export default function App() {
             return;
         }
 
-        openPromptDialog({
+        continueAfterSessionDraftDecision(() => openPromptDialog({
             title: 'Create session',
             description: 'Start a new touch-first session flow with a clear session name.',
             value: 'New Session',
@@ -1148,21 +1213,23 @@ export default function App() {
                 const result = createSession(name);
                 if (!result.ok) openMessageDialog('Could not create session', result.error ?? 'Could not create session.');
             },
-        });
-    }, [canUseSessionBuilder, createSession, handleSessionBuilderLocked, openMessageDialog, openPromptDialog]);
+        }));
+    }, [canUseSessionBuilder, createSession, continueAfterSessionDraftDecision, handleSessionBuilderLocked, openMessageDialog, openPromptDialog]);
     const handleLoadSession = useCallback((id: string) => {
         if (!canUseSessionBuilder) {
             handleSessionBuilderLocked();
             return;
         }
 
-        const result = loadSessionForEditing(id);
-        if (!result.ok) {
-            openMessageDialog('Could not load session', result.error ?? 'Could not load session.');
-        } else if (designVariant === 'kinetic') {
-            closeMobileDrawer();
-        }
-    }, [canUseSessionBuilder, closeMobileDrawer, designVariant, handleSessionBuilderLocked, loadSessionForEditing, openMessageDialog]);
+        continueAfterSessionDraftDecision(() => {
+            const result = loadSessionForEditing(id);
+            if (!result.ok) {
+                openMessageDialog('Could not load session', result.error ?? 'Could not load session.');
+            } else if (designVariant === 'kinetic') {
+                closeMobileDrawer();
+            }
+        });
+    }, [canUseSessionBuilder, closeMobileDrawer, continueAfterSessionDraftDecision, designVariant, handleSessionBuilderLocked, loadSessionForEditing, openMessageDialog]);
     const handleDuplicateSession = useCallback((id: string) => {
         if (!canUseSessionBuilder) {
             handleSessionBuilderLocked();
@@ -1788,6 +1855,7 @@ export default function App() {
                     ) : (
                         <TimerSurface
                             isMobileViewport={isMobileViewport}
+                            isDocumentVisible={isDocumentVisible}
                             timerScreenShell={appShellLayout.timerScreenShell}
                         />
                     )}
@@ -1804,6 +1872,7 @@ export default function App() {
                 value={dialogValue}
                 onChangeValue={setDialogValue}
                 onClose={closeDialog}
+                onCancel={handleDialogCancel}
                 onConfirm={handleDialogConfirm}
                 isMobileViewport={isMobileViewport}
                 layout={appShellLayout}

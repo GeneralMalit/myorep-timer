@@ -4,6 +4,7 @@ const asideBaseParts = {
     position: 'fixed inset-y-0 left-0 z-50',
     layout: 'flex flex-col',
     size: 'w-[min(22rem,calc(100vw-1rem))] max-w-full',
+    spacing: 'pl-[var(--safe-left)] pr-[var(--safe-right)]',
     surface: 'rounded-r-[2rem] border-r border-border/60 bg-background',
     effects: 'shadow-2xl transition-all duration-300',
 };
@@ -85,6 +86,8 @@ export const sidebarMobileLayout = {
     asideBase: composeClassParts(asideBaseParts),
     asideOpen: 'translate-x-0',
     asideClosed: '-translate-x-[calc(100%+1rem)]',
+    asideCollapsed: 'w-[4.5rem]',
+    asideExpanded: 'w-[min(22rem,calc(100vw-1rem))] max-w-full',
     header: composeClassParts(headerParts),
     headerBrand: composeClassParts(headerBrandParts),
     headerBrandIcon: 'flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-primary/20',

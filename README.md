@@ -95,6 +95,9 @@ graph TD
 - **Responsive editing**: Workout inputs adapt to the available content width. Desktop builder timelines and inspectors scroll independently; phones use a block-settings sheet. Dialogs overlay the navigation rather than being clipped by the builder.
 - **Settings and accessibility**: Voice guidance, metronome, pacing, and display controls live in Settings. Interactive controls have touch-sized targets; tabs support keyboard navigation, and modal focus stays in the topmost dialog and returns to its opener.
 - **Timer context**: Paused sessions retain their timeline, finished sessions show completed blocks, and the finish action returns to the builder. Fullscreen foregrounds and focus indicators adapt to the selected phase color; vertical mode emphasizes the phase label.
+- **Session safety**: Creating or loading another session asks to save or discard unsaved builder changes first. Removed blocks offer undo, and imports reject sessions with invalid nodes instead of silently shortening them.
+- **Sync recovery**: Reloading during first-sync setup returns to a retryable choice without dropping the local recovery backup. Signed-in accounts with an existing billing mapping can still reach subscription management.
+- **Accessibility**: Builder dialogs trap and restore keyboard focus, session editor inputs are labeled, and the closed classic mobile drawer is hidden from keyboard and assistive technology with safe-area-aware spacing.
 
 ---
 

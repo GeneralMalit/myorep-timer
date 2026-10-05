@@ -82,6 +82,8 @@ const footerParts = {
 
 export const sidebarDesktopLayout = {
     asideBase: composeClassParts(asideBaseParts),
+    asideOpen: 'translate-x-0',
+    asideClosed: '-translate-x-[calc(100%+1rem)]',
     asideCollapsed: 'w-[4.5rem]',
     asideExpanded: 'w-[min(22rem,calc(100vw-1rem))] max-w-full',
     header: composeClassParts(headerParts),

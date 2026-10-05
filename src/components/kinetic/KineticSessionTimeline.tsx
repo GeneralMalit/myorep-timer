@@ -26,7 +26,7 @@ const KineticSessionTimeline = memo(function KineticSessionTimeline({
     return (
         <aside className="min-w-0 rounded-xl border border-current/15 p-5" aria-label="Session timeline" style={{ color: foregroundColor }}>
             <div className="text-xs font-semibold" style={{ color: mutedColor }}>Session timeline</div>
-            <ol className="mt-4 max-h-80 space-y-1 overflow-y-auto" aria-label={`Session progress: ${timerStatus}`}>
+            <ol className="mt-4 space-y-1 md:max-h-80 md:overflow-y-auto" aria-label={`Session progress: ${timerStatus}`}>
                 {session.nodes.map((node, index) => {
                     const isComplete = index < activeNodeIndex || timerStatus === 'Finished';
                     const isActive = !isComplete && index === activeNodeIndex;

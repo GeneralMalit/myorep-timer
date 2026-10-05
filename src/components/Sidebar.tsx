@@ -12,6 +12,7 @@ import {
     Upload,
     Activity,
 } from 'lucide-react';
+import { useDialogFocus } from '@/hooks/useDialogFocus';
 import { Button } from '@/components/ui/button';
 import { getResponsiveLayout } from '@/layout';
 import { cn } from '@/lib/utils';
@@ -125,9 +126,10 @@ const Sidebar: React.FC<SidebarProps> = ({
     const fileInputRef = useRef<HTMLInputElement | null>(null);
     const prepTime = useWorkoutStore((state) => state.settings.prepTime);
     const isSetupMode = appPhase === 'setup';
-    const layout = getResponsiveLayout(isMobileViewport, sidebarMobileLayout, sidebarDesktopLayout);
     const isHiddenOnMobile = isMobileViewport && isCollapsed;
     const isDrawerOpenOnMobile = isMobileViewport && !isCollapsed;
+    const layout = getResponsiveLayout(isMobileViewport, sidebarMobileLayout, sidebarDesktopLayout);
+    const drawerRef = useDialogFocus(isDrawerOpenOnMobile, toggleSidebar);
 
     const sessionDurations = useMemo(
         () => new Map(savedSessions.map((session) => [session.id, estimateSessionDurationSeconds(session, prepTime)])),
@@ -150,6 +152,12 @@ const Sidebar: React.FC<SidebarProps> = ({
 
     return (
         <aside
+            ref={drawerRef}
+            role={isDrawerOpenOnMobile ? 'dialog' : undefined}
+            aria-modal={isDrawerOpenOnMobile ? true : undefined}
+            aria-hidden={isHiddenOnMobile ? true : undefined}
+            inert={isHiddenOnMobile}
+            tabIndex={isMobileViewport ? -1 : undefined}
             aria-label="Sidebar"
             className={cn(
                 layout.asideBase,

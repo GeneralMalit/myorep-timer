@@ -180,7 +180,7 @@ export const handlePasswordSignUpRequest = async (request: Request): Promise<Res
         // Supabase Auth owns email-enumeration-safe signup behavior. An existing
         // email therefore receives the same preflight response as a new email.
         return jsonResponse(200, { ok: true }, { 'Cache-Control': 'no-store' });
-    } catch (error: unknown) {
+    } catch {
         return jsonResponse(500, {
             error: 'Could not prepare the account sign-up.',
         }, { 'Cache-Control': 'no-store' });

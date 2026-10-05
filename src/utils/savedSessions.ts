@@ -647,10 +647,22 @@ export const mergeSavedSessionsFromImport = (
             return;
         }
 
-        const nodes = sessionRecord.nodes
-            .map((node) => toImportedSessionNode(node))
-            .filter((node): node is SessionNode => node !== null);
+        const nodes: SessionNode[] = [];
+        let invalidNodeIndex: number | null = null;
+        for (let nodeIndex = 0; nodeIndex < sessionRecord.nodes.length; nodeIndex += 1) {
+            const node = toImportedSessionNode(sessionRecord.nodes[nodeIndex]);
+            if (!node) {
+                invalidNodeIndex = nodeIndex;
+                break;
+            }
+            nodes.push(node);
+        }
 
+        if (invalidNodeIndex !== null) {
+            summary.skipped += 1;
+            summary.errors.push(`Skipped session at index ${index} because its node at index ${invalidNodeIndex} is invalid.`);
+            return;
+        }
         if (!isValidSavedSession({ name, nodes })) {
             summary.skipped += 1;
             summary.errors.push(`Skipped invalid session at index ${index}.`);

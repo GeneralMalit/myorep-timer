@@ -342,6 +342,14 @@ describe('savedSessions utilities', () => {
                             createdAt: nowIso,
                             updatedAt: nowIso,
                         },
+                        {
+                            id: 'also-valid-rest',
+                            type: 'rest',
+                            name: 'A valid node that must not be kept alone',
+                            seconds: '30',
+                            createdAt: nowIso,
+                            updatedAt: nowIso,
+                        },
                     ],
                 },
                 {
@@ -379,6 +387,7 @@ describe('savedSessions utilities', () => {
         expect(imported.summary.imported).toBe(2);
         expect(imported.summary.renamed).toBe(2);
         expect(imported.summary.skipped).toBe(2);
+        expect(imported.summary.errors).toContain('Skipped session at index 1 because its node at index 0 is invalid.');
         expect(imported.sessions).toHaveLength(3);
         expect(new Set(imported.sessions.map((session) => session.id)).size).toBe(3);
         expect(imported.sessions.some((session) => session.name.startsWith('Day One (Imported'))).toBe(true);
