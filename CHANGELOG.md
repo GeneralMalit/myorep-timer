@@ -27,6 +27,7 @@
 * confirm session and workout saves remotely only after all linked revisions are acknowledged; show pending, offline, paused, local-only, and failed-sync states
 * save linked workout settings and notes to the shared workout and every linked session instance; share progression history while keeping unlinked blocks independent
 * restore cloud-sync controls and account-scoped libraries in Kinetic Console by using the shared sync controller
+* preserve device sync settings and queued changes while restoring an account on refresh; complete sync-store hydration and show account-loading UI instead of Guest or sign-in controls
 
 # [3.11.0](https://github.com/GeneralMalit/myorep-timer/compare/v3.10.1...v3.11.0) (2026-09-23)
 

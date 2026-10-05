@@ -1598,7 +1598,7 @@ export default function App() {
             {isMobileViewport && isSidebarOpen && (
                 <button type="button" className="fixed inset-0 z-40 bg-black/60 md:hidden" onClick={closeMobileDrawer} aria-label="Close Navigation Overlay" />
             )}
-            {canUseCloudSync ? (
+            {shouldBootstrapSupabase || canUseCloudSync ? (
                 <Suspense fallback={<SidebarComponent {...activeSidebarProps} />}>
                     <LazySyncedSidebar
                         {...activeSidebarProps}

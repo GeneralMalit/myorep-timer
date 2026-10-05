@@ -736,6 +736,68 @@ describe('Sidebar', () => {
         expect(screen.getByText(/cloud sync turned off for this device/i)).toBeInTheDocument();
     });
 
+    it('restores signed-in controls only after unresolved bootstrap settles', () => {
+        const restoringCachedPlus: AccountSnapshot = {
+            ...signedInPlusAccount,
+            bootstrapStatus: 'bootstrapping',
+        };
+        const { rerender } = render(
+            <Sidebar
+                {...baseProps}
+                account={restoringCachedPlus}
+                onSignOut={vi.fn()}
+            />,
+        );
+
+        expect(screen.getByRole('status')).toHaveTextContent(/loading your session and entitlement state/i);
+        expect(screen.queryByText(/plus/i)).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /sign out/i })).not.toBeInTheDocument();
+        expect(screen.queryByLabelText(/email/i)).not.toBeInTheDocument();
+
+        rerender(
+            <Sidebar
+                {...baseProps}
+                account={signedInFreeAccount}
+                onSignOut={vi.fn()}
+            />,
+        );
+
+        expect(screen.getByText(/@athlete_one/i)).toBeInTheDocument();
+        expect(screen.getByText(/cloud sync locked/i)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /upgrade to plus/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /sign out/i })).toBeInTheDocument();
+    });
+
+    it('reveals guest sign-in controls after unresolved account restoration completes', () => {
+        const restoringGuest: AccountSnapshot = {
+            ...guestAccount,
+            bootstrapStatus: 'idle',
+        };
+        const { rerender } = render(
+            <Sidebar
+                {...baseProps}
+                account={restoringGuest}
+                onSignInWithPassword={vi.fn()}
+            />,
+        );
+
+        expect(screen.getByRole('status')).toHaveTextContent(/loading your session and entitlement state/i);
+        expect(screen.queryByLabelText(/email/i)).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /sign in with password/i })).not.toBeInTheDocument();
+
+        rerender(
+            <Sidebar
+                {...baseProps}
+                account={guestAccount}
+                onSignInWithPassword={vi.fn()}
+            />,
+        );
+
+        expect(screen.getByText(/sign in for cloud sync/i)).toBeInTheDocument();
+        expect(screen.getByLabelText(/email/i)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /sign in with password/i })).toBeInTheDocument();
+    });
+
     it('renders bootstrap and local-only sync states from the account snapshot', () => {
         const { rerender } = render(
             <Sidebar
@@ -744,9 +806,11 @@ describe('Sidebar', () => {
             />,
         );
 
-        expect(screen.getByText(/checking account/i)).toBeInTheDocument();
+        expect(screen.getByText(/restoring account/i)).toBeInTheDocument();
         expect(screen.getByText(/loading your session and entitlement state/i)).toBeInTheDocument();
         expect(screen.getByText(/syncing account state/i)).toBeInTheDocument();
+        expect(screen.queryByLabelText(/email/i)).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /sign in with password/i })).not.toBeInTheDocument();
 
         rerender(
             <Sidebar

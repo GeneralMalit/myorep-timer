@@ -247,6 +247,7 @@ export const useSyncController = (params: {
 
     const userId = account.session?.user.id ?? null;
     const canUseCloudSync = canAccessCloudSync(account.entitlement);
+    const isAccountReady = account.bootstrapStatus === 'ready';
 
     const isCurrentAuthContext = useCallback((expectedUserId: string, expectedAuthGeneration: string): boolean => {
         const state = useSyncStore.getState();
@@ -254,13 +255,17 @@ export const useSyncController = (params: {
     }, []);
 
     useEffect(() => {
+        if (!isAccountReady) {
+            return;
+        }
+
         if (userId) {
             setCurrentUser(userId);
             return;
         }
 
         resetForNewSession();
-    }, [resetForNewSession, setCurrentUser, userId]);
+    }, [isAccountReady, resetForNewSession, setCurrentUser, userId]);
 
     useEffect(() => {
         clearExpiredRecoveryBackup();
@@ -544,7 +549,7 @@ export const useSyncController = (params: {
     }, [disableSync, syncEnabled]);
 
     useEffect(() => {
-        if (!client || !userId || !syncEnabled || !canUseCloudSync || processingRef.current) {
+        if (!isAccountReady || !client || !userId || !syncEnabled || !canUseCloudSync || processingRef.current) {
             return;
         }
 
@@ -777,6 +782,7 @@ export const useSyncController = (params: {
         client,
         currentUserId,
         incrementAttempt,
+        isAccountReady,
         isCurrentAuthContext,
         isOnline,
         isOperationCurrent,
@@ -795,7 +801,7 @@ export const useSyncController = (params: {
     ]);
 
     const syncSnapshot = useMemo<AccountSyncSnapshot | undefined>(() => {
-        if (!canUseCloudSync) {
+        if (!isAccountReady || !canUseCloudSync) {
             return undefined;
         }
 
@@ -885,10 +891,10 @@ export const useSyncController = (params: {
             lastSyncedAt,
             isOnline,
         };
-    }, [authExpired, canUseCloudSync, firstSyncState, isOnline, lastSyncedAt, queueStatus, queuedOperations, recoveryBackup, syncEnabled, syncError]);
+    }, [authExpired, canUseCloudSync, firstSyncState, isAccountReady, isOnline, lastSyncedAt, queueStatus, queuedOperations, recoveryBackup, syncEnabled, syncError]);
 
     const syncActions = useMemo<AccountSyncActions | undefined>(() => {
-        if (!canUseCloudSync) {
+        if (!isAccountReady || !canUseCloudSync) {
             return undefined;
         }
 
@@ -899,7 +905,7 @@ export const useSyncController = (params: {
             onResumeSync: resumeSync,
             onDisableSync: turnSyncOff,
         };
-    }, [canUseCloudSync, retrySync, resumeSync, runFirstSync, syncNow, turnSyncOff]);
+    }, [canUseCloudSync, isAccountReady, retrySync, resumeSync, runFirstSync, syncNow, turnSyncOff]);
 
     return {
         visibleWorkouts,

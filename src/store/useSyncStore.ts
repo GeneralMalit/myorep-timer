@@ -597,8 +597,8 @@ export const useSyncStore = create<SyncState>()(
                 queuedOperations: state.queuedOperations,
                 lastSyncedAt: state.lastSyncedAt,
             }),
-            onRehydrateStorage: () => () => {
-                useSyncStore.getState().markHydrated();
+            onRehydrateStorage: () => (state) => {
+                state?.markHydrated();
             },
         },
     ),

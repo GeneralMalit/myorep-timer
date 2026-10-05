@@ -2620,6 +2620,7 @@ describe('App', () => {
     });
 
     it('signs in with email and password through the app account handler', async () => {
+        useAccountStore.setState({ bootstrapStatus: 'ready' });
         render(<App />);
 
         fireEvent.change(screen.getByLabelText(/email/i), {
@@ -2641,6 +2642,7 @@ describe('App', () => {
     });
 
     it('creates an email and password account and requires the confirmation magic link before sign-in', async () => {
+        useAccountStore.setState({ bootstrapStatus: 'ready' });
         render(<App />);
 
         fireEvent.click(screen.getByRole('button', { name: /^create$/i }));
@@ -2671,6 +2673,7 @@ describe('App', () => {
     });
 
     it('resends the signup confirmation email from the account card', async () => {
+        useAccountStore.setState({ bootstrapStatus: 'ready' });
         render(<App />);
 
         fireEvent.change(screen.getByLabelText(/email/i), {
@@ -2689,6 +2692,7 @@ describe('App', () => {
     });
 
     it('sends password reset emails from the account card', async () => {
+        useAccountStore.setState({ bootstrapStatus: 'ready' });
         render(<App />);
 
         fireEvent.click(screen.getByRole('button', { name: /forgot password/i }));

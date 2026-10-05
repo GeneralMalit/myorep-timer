@@ -164,6 +164,70 @@ describe('useSyncController orchestration', () => {
         vi.useRealTimers();
     });
 
+    it('keeps enabled sync and its queue while the account is being restored', async () => {
+        const workout = createSavedWorkout('Pending workout', workoutConfig, '2026-10-05T00:00:00.000Z');
+        seedQueuedWorkout('account-a', workout);
+        const savedState = useSyncStore.getState();
+        const restoredAccount = buildAccount('account-a');
+        const pendingAccount: AccountSnapshot = {
+            ...restoredAccount,
+            bootstrapStatus: 'idle',
+            mode: 'guest',
+            session: null,
+            entitlement: null,
+        };
+        getSupabaseClientMock.mockReturnValue(null);
+        const { result, rerender } = renderHook(
+            ({ account }) => useSyncController({ account, savedWorkouts: [workout], savedSessions: [] }),
+            { initialProps: { account: pendingAccount } },
+        );
+
+        for (const bootstrapStatus of ['idle', 'bootstrapping', 'error'] as const) {
+            rerender({ account: { ...pendingAccount, bootstrapStatus } });
+            expect(useSyncStore.getState()).toMatchObject({
+                syncEnabled: true,
+                currentUserId: 'account-a',
+                authGeneration: savedState.authGeneration,
+                queuedOperations: savedState.queuedOperations,
+            });
+            expect(result.current.syncSnapshot).toBeUndefined();
+        }
+
+        rerender({ account: restoredAccount });
+        expect(useSyncStore.getState()).toMatchObject({
+            syncEnabled: true,
+            firstSyncState: 'idle',
+            currentUserId: 'account-a',
+            authGeneration: savedState.authGeneration,
+            queuedOperations: savedState.queuedOperations,
+        });
+        expect(result.current.syncSnapshot?.status).not.toBe('enable-sync');
+        expect(inspectRemoteSyncPresenceMock).not.toHaveBeenCalled();
+    });
+
+    it.each(['signed-out', 'different-account'] as const)('clears prior sync ownership only after confirmed %s resolution', (resolution) => {
+        const workout = createSavedWorkout('Private workout', workoutConfig, '2026-10-05T00:00:00.000Z');
+        seedQueuedWorkout('account-a', workout);
+        const account = buildAccount('account-a');
+        const { rerender } = renderHook(
+            ({ account }) => useSyncController({ account, savedWorkouts: [workout], savedSessions: [] }),
+            { initialProps: { account: { ...account, bootstrapStatus: 'bootstrapping' as AccountSnapshot['bootstrapStatus'] } } },
+        );
+        expect(useSyncStore.getState().syncEnabled).toBe(true);
+
+        rerender({
+            account: resolution === 'different-account'
+                ? buildAccount('account-b')
+                : { ...account, bootstrapStatus: 'ready', mode: 'guest', session: null, entitlement: null },
+        });
+        expect(useSyncStore.getState()).toMatchObject({
+            syncEnabled: false,
+            currentUserId: resolution === 'different-account' ? 'account-b' : null,
+            queuedOperations: [],
+        });
+        expect(useWorkoutStore.getState().savedWorkouts).toEqual([workout]);
+    });
+
     it('never executes account A queue entries under account B', async () => {
         const workoutA = createSavedWorkout('Account A Workout', workoutConfig, '2026-04-01T00:00:00.000Z');
         seedQueuedWorkout('account-a', workoutA);

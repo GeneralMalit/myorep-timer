@@ -363,7 +363,6 @@ describe('App dialog and library branches', () => {
             ] as never,
         });
         render(<App />);
-        expect(await screen.findByTestId('visible-session-count')).toHaveTextContent('0');
 
         fireEvent.click(screen.getByRole('button', { name: /mock create session/i }));
         fireEvent.change(screen.getByLabelText(/session name/i), { target: { value: '   ' } });

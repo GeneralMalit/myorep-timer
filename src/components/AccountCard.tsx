@@ -278,7 +278,10 @@ const AccountCard = ({
     const [notice, setNotice] = useState<{ tone: 'success' | 'error' | 'info'; text: string } | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [dialogState, setDialogState] = useState<SyncDialogState>(null);
-    const isCollapsible = (account.mode === 'signed-in-free' || account.mode === 'signed-in-plus') && !account.requiresPasswordReset;
+    const isAccountResolving = account.bootstrapStatus === 'idle' || account.bootstrapStatus === 'bootstrapping';
+    const isCollapsible = (account.mode === 'signed-in-free' || account.mode === 'signed-in-plus')
+        && !account.requiresPasswordReset
+        && !isAccountResolving;
     const shouldCollapse = isCollapsible && isCollapsed;
 
     useEffect(() => {
@@ -316,8 +319,8 @@ const AccountCard = ({
     }, [account.mode]);
 
     const title = useMemo(() => {
+        if (account.bootstrapStatus === 'bootstrapping' || account.bootstrapStatus === 'idle') return 'Restoring account…';
         if (account.requiresPasswordReset) return 'Set a new password';
-        if (account.bootstrapStatus === 'bootstrapping' || account.bootstrapStatus === 'idle') return 'Checking account';
         if (account.bootstrapStatus === 'disabled') return 'Local only';
         if (account.bootstrapStatus === 'error') return 'Account error';
         if (account.mode === 'signed-in-plus') return 'Signed in';
@@ -326,8 +329,8 @@ const AccountCard = ({
     }, [account.bootstrapStatus, account.mode, account.requiresPasswordReset]);
 
     const supportingCopy = useMemo(() => {
-        if (account.requiresPasswordReset) return 'Your reset link is active. Set a new password to finish recovering this account.';
         if (account.bootstrapStatus === 'bootstrapping' || account.bootstrapStatus === 'idle') return 'Loading your session and entitlement state.';
+        if (account.requiresPasswordReset) return 'Your reset link is active. Set a new password to finish recovering this account.';
         if (account.bootstrapStatus === 'disabled') return 'Supabase is off, so the app stays local-only.';
         if (account.bootstrapStatus === 'error') return account.error ?? 'We could not load the account state.';
         if (account.mode === 'signed-in-plus') return 'Plus features are active on this account.';
@@ -761,7 +764,20 @@ const AccountCard = ({
                     </div>
                 </div>
 
-                {shouldCollapse ? null : (
+                {shouldCollapse ? null : isAccountResolving ? (
+                    <div role="status" className="space-y-2 rounded-xl border border-border/60 bg-background/60 p-3">
+                        <div className="flex items-start gap-2 text-[12px] leading-relaxed text-muted-foreground sm:text-[11px]">
+                            <Loader2 className="mt-0.5 shrink-0 animate-spin" size={14} aria-hidden="true" />
+                            <p>{supportingCopy}</p>
+                        </div>
+                        {legacySyncLine && (
+                            <div className={cn('flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.22em]', legacySyncLine.tone)}>
+                                {legacySyncLine.icon}
+                                <span>{legacySyncLine.label}</span>
+                            </div>
+                        )}
+                    </div>
+                ) : (
                     <>
 
                 {(account.mode === 'signed-in-plus' || account.mode === 'signed-in-free') && !account.requiresPasswordReset ? (

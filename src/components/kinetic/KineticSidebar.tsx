@@ -258,6 +258,7 @@ const KineticSidebar = ({
     const isSetupMode = appPhase === 'setup';
     const isDrawerOpenOnMobile = isMobileViewport && !isCollapsed;
     const shouldShowExpandedRail = !isCollapsed || isMobileViewport;
+    const isAccountResolving = account?.bootstrapStatus === 'idle' || account?.bootstrapStatus === 'bootstrapping';
     const activeSetupMode = setupMode ?? 'workout';
     const railWidth = clampRailWidth(width);
     const appliedRailWidth = isCollapsed && !isMobileViewport
@@ -278,6 +279,10 @@ const KineticSidebar = ({
     }, [closeMobileDrawer, isDrawerOpenOnMobile]);
 
     useEffect(() => {
+        if (isAccountResolving) {
+            return;
+        }
+
         if (account?.mode !== 'guest') {
             autoCollapsedGuestAccountRef.current = false;
             return;
@@ -287,7 +292,7 @@ const KineticSidebar = ({
             autoCollapsedGuestAccountRef.current = true;
             onToggleAccountCardCollapsed?.();
         }
-    }, [account?.mode, isAccountCardCollapsed, onToggleAccountCardCollapsed]);
+    }, [account?.mode, isAccountCardCollapsed, isAccountResolving, onToggleAccountCardCollapsed]);
 
     const sessionDurations = useMemo(
         () => new Map(savedSessions.map((session) => [session.id, estimateSessionDurationSeconds(session, prepTime)])),
@@ -345,21 +350,31 @@ const KineticSidebar = ({
         document.addEventListener('pointerup', handlePointerUp, { once: true });
     };
 
-    const accountName = account?.profile?.username
-        ? `@${account.profile.username}`
-        : account?.mode === 'signed-in-plus'
-            ? 'Plus account'
-            : account?.mode === 'signed-in-free'
-                ? 'Free account'
-                : 'Local account';
+    const accountName = isAccountResolving
+        ? 'Restoring account…'
+        : account?.bootstrapStatus === 'error'
+            ? 'Account error'
+            : account?.bootstrapStatus === 'disabled'
+                ? 'Local account'
+                : account?.profile?.username
+                    ? `@${account.profile.username}`
+                    : account?.mode === 'signed-in-plus'
+                        ? 'Plus account'
+                        : account?.mode === 'signed-in-free'
+                            ? 'Free account'
+                            : 'Local account';
 
-    const accountPlan = account?.mode === 'signed-in-plus'
-        ? 'Plus'
-        : account?.mode === 'signed-in-free'
-            ? 'Free'
+    const accountPlan = isAccountResolving
+        ? 'Loading'
+        : account?.bootstrapStatus === 'error'
+            ? 'Error'
             : account?.bootstrapStatus === 'disabled'
                 ? 'Local'
-                : 'Guest';
+                : account?.mode === 'signed-in-plus'
+                    ? 'Plus'
+                    : account?.mode === 'signed-in-free'
+                        ? 'Free'
+                        : 'Guest';
 
     return (
         <aside

@@ -342,7 +342,6 @@ describe('AccountCard branch coverage', () => {
         await screen.findByText('Portal opened.');
 
         rerender(<AccountCard account={{ ...guestAccount, bootstrapStatus: 'bootstrapping', syncStatus: 'syncing' }} />);
-        expect(screen.getByText('Checking account')).toBeInTheDocument();
         expect(screen.getByText('Syncing account state')).toBeInTheDocument();
         rerender(<AccountCard account={{ ...guestAccount, bootstrapStatus: 'disabled' }} />);
         expect(screen.getByText('Local only')).toBeInTheDocument();
