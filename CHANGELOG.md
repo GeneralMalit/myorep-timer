@@ -1,3 +1,10 @@
+## [3.11.3](https://github.com/GeneralMalit/myorep-timer/compare/v3.11.2...v3.11.3) (2026-10-05)
+
+
+### Bug Fixes
+
+* restore cloud sync controls in Kinetic Console ([71a830a](https://github.com/GeneralMalit/myorep-timer/commit/71a830a560082ea6f0f7b8f50c2a88d08a400045))
+
 ## [3.11.2](https://github.com/GeneralMalit/myorep-timer/compare/v3.11.1...v3.11.2) (2026-10-02)
 
 
