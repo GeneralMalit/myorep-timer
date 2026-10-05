@@ -1,3 +1,10 @@
+## [3.11.4](https://github.com/GeneralMalit/myorep-timer/compare/v3.11.3...v3.11.4) (2026-10-05)
+
+
+### Bug Fixes
+
+* preserve cloud sync across account restoration ([4f6c3d4](https://github.com/GeneralMalit/myorep-timer/commit/4f6c3d4bfdfd30177469dd0967b69368b8b7424a))
+
 ## [3.11.3](https://github.com/GeneralMalit/myorep-timer/compare/v3.11.2...v3.11.3) (2026-10-05)
 
 
