@@ -6,6 +6,13 @@ import { useWorkoutStore } from '@/store/useWorkoutStore';
 import { useSyncStore } from '@/store/useSyncStore';
 import { audioEngine } from '@/utils/audioEngine';
 
+interface TimerDisplayProps {
+    outerValue: number;
+    outerMax: number;
+    textMain: string;
+    textSub: string;
+}
+
 const getSupabaseClientMock = vi.hoisted(() => vi.fn());
 const getSupabaseEnvironmentMock = vi.hoisted(() => vi.fn());
 const signInSupabaseWithPasswordMock = vi.hoisted(() => vi.fn());
@@ -19,10 +26,10 @@ const startBillingCheckoutMock = vi.hoisted(() => vi.fn());
 const openBillingPortalMock = vi.hoisted(() => vi.fn());
 const refreshBillingEntitlementStateMock = vi.hoisted(() => vi.fn());
 const initializePaddleCheckoutFromQueryMock = vi.hoisted(() => vi.fn());
-const concentricTimerMock = vi.fn(({ textMain, textSub }: { textMain: string; textSub: string }) => (
+const concentricTimerMock = vi.fn((props: TimerDisplayProps) => (
     <div>
-        <div>{textMain}</div>
-        <div>{textSub}</div>
+        <div>{props.textMain}</div>
+        <div>{props.textSub}</div>
     </div>
 ));
 
@@ -57,7 +64,7 @@ vi.mock('@/components/SettingsPanel', () => ({
 }));
 
 vi.mock('@/components/ConcentricTimer', () => ({
-    default: (props: { textMain: string; textSub: string }) => concentricTimerMock(props),
+    default: (props: TimerDisplayProps) => concentricTimerMock(props),
 }));
 
 vi.mock('@/components/SupabaseBootstrap', () => ({
@@ -107,6 +114,11 @@ const resetStore = () => {
             activeColor: '#bb86fc',
             restColor: '#03dac6',
             concentricColor: '#cf6679',
+            kineticThemeColor: '#FF5B36',
+            kineticActiveColor: '#FF6A47',
+            kineticRestColor: '#74C7FF',
+            kineticConcentricColor: '#A8FF5A',
+            kineticFinishedColor: '#A8FF5A',
             concentricSecond: 1,
                 smoothAnimation: true,
                 prepTime: 5,
@@ -175,6 +187,7 @@ const grantPlusAccess = () => {
         } as never,
         profile: {
             userId: 'user-1',
+            username: 'athlete_one',
             email: 'athlete@example.com',
             displayName: 'Athlete One',
             createdAt: '2026-03-01T00:00:00.000Z',
@@ -821,6 +834,44 @@ describe('App', () => {
         expect(useWorkoutStore.getState().isTimerRunning).toBe(true);
     });
 
+    it.each(['classic', 'kinetic'] as const)('validates required workout fields before starting in %s', async (designVariant) => {
+        useWorkoutStore.setState({ designVariant });
+        render(<App />);
+
+        const startButton = await screen.findByRole('button', {
+            name: designVariant === 'classic' ? /initialize protocol/i : /^start workout$/i,
+        });
+        const inputs = screen.getAllByRole('spinbutton');
+        expect(startButton).toBeDisabled();
+        fireEvent.click(startButton);
+        expect(useWorkoutStore.getState().appPhase).toBe('setup');
+
+        fireEvent.change(inputs[0], { target: { value: '1' } });
+        fireEvent.change(inputs[1], { target: { value: '2' } });
+        fireEvent.change(inputs[2], { target: { value: '3' } });
+        expect(startButton).toBeEnabled();
+        expect(inputs[3]).toBeDisabled();
+        expect(inputs[4]).toBeDisabled();
+        expect(inputs[5]).toBeDisabled();
+
+        fireEvent.change(inputs[0], { target: { value: '2' } });
+        expect(startButton).toBeDisabled();
+        fireEvent.change(inputs[3], { target: { value: '10' } });
+        fireEvent.change(inputs[4], { target: { value: '4' } });
+        fireEvent.change(inputs[5], { target: { value: '2' } });
+        expect(startButton).toBeEnabled();
+
+        fireEvent.change(inputs[1], { target: { value: '' } });
+        expect(startButton).toBeDisabled();
+        fireEvent.change(inputs[1], { target: { value: '2' } });
+        fireEvent.click(startButton);
+        expect(useWorkoutStore.getState()).toMatchObject({
+            appPhase: 'timer',
+            timerStatus: 'Preparing',
+            isTimerRunning: true,
+        });
+    });
+
     it('blocks guest access to session builder and keeps the user on workout setup', () => {
         render(<App />);
 
@@ -1073,6 +1124,7 @@ describe('App', () => {
             } as never,
             profile: {
                 userId: 'user-1',
+                username: 'athlete_one',
                 email: 'athlete@example.com',
                 displayName: 'Athlete One',
                 createdAt: '2026-03-01T00:00:00.000Z',
@@ -1184,10 +1236,7 @@ describe('App', () => {
         render(<App />);
 
         expect(concentricTimerMock).toHaveBeenCalled();
-        const props = vi.mocked(concentricTimerMock).mock.calls[0]?.[0] as {
-            outerValue: number;
-            outerMax: number;
-        };
+        const props = vi.mocked(concentricTimerMock).mock.calls[0]?.[0] as TimerDisplayProps;
         expect(props.outerValue).toBe(5);
         expect(props.outerMax).toBe(5);
     });
@@ -1209,10 +1258,7 @@ describe('App', () => {
 
         render(<App />);
 
-        const props = vi.mocked(concentricTimerMock).mock.calls[0]?.[0] as {
-            outerValue: number;
-            outerMax: number;
-        };
+        const props = vi.mocked(concentricTimerMock).mock.calls[0]?.[0] as TimerDisplayProps;
         expect(props.outerValue).toBe(8);
         expect(props.outerMax).toBe(12);
     });
@@ -1296,6 +1342,10 @@ describe('App', () => {
                     createdAt: '2026-03-01T00:00:00.000Z',
                     updatedAt: '2026-03-01T00:00:00.000Z',
                 }],
+                timesUsed: 0,
+                lastUsedAt: null,
+                createdAt: '2026-03-01T00:00:00.000Z',
+                updatedAt: '2026-03-01T00:00:00.000Z',
             },
         });
 
@@ -1363,6 +1413,10 @@ describe('App', () => {
                     createdAt: '2026-03-01T00:00:00.000Z',
                     updatedAt: '2026-03-01T00:00:00.000Z',
                 }],
+                timesUsed: 0,
+                lastUsedAt: null,
+                createdAt: '2026-03-01T00:00:00.000Z',
+                updatedAt: '2026-03-01T00:00:00.000Z',
             },
         });
 
@@ -1467,9 +1521,9 @@ describe('App', () => {
         expect(useWorkoutStore.getState().editingSessionDraft?.nodes[0]).toMatchObject({
             type: 'workout',
         });
-        expect(useWorkoutStore.getState().editingSessionDraft?.nodes[0].type === 'workout'
-            ? useWorkoutStore.getState().editingSessionDraft?.nodes[0].sourceWorkoutId
-            : null).toBe(useWorkoutStore.getState().savedWorkouts[1].id);
+        const exportedDraftNode = useWorkoutStore.getState().editingSessionDraft?.nodes[0];
+        expect(exportedDraftNode?.type === 'workout' ? exportedDraftNode.sourceWorkoutId : null)
+            .toBe(useWorkoutStore.getState().savedWorkouts[1].id);
         expect(useWorkoutStore.getState().savedWorkouts[1].notes).toBe('60kg last set');
         expect(screen.getByTestId('builder-save-feedback')).toHaveTextContent(/saved locally.*cloud sync is off/i);
     });
@@ -1566,7 +1620,7 @@ describe('App', () => {
 
         render(<App />);
 
-        const timerProps = concentricTimerMock.mock.calls[0]?.[0] as { outerMax: number };
+        const timerProps = concentricTimerMock.mock.calls[0]?.[0] as TimerDisplayProps;
         expect(timerProps.outerMax).toBe(8);
     });
 
@@ -1891,7 +1945,7 @@ describe('App', () => {
             fireEvent.click(screen.getByRole('button', { name: /pause/i }));
             fireEvent.click(screen.getByRole('button', { name: /resume/i }));
 
-            const resumedRunId = worker.startRunIds.at(-1);
+            const resumedRunId = worker.startRunIds[worker.startRunIds.length - 1];
             expect(resumedRunId).not.toBe(firstRunId);
 
             act(() => {

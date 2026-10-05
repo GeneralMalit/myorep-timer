@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import Sidebar from '@/components/Sidebar';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
 import type { SidebarProps } from '@/components/Sidebar';
-import type { AccountSnapshot } from '@/types/account';
+import type { AccountSnapshot, FirstSyncChoice } from '@/types/account';
 import type { SavedLibraryImportSummary } from '@/types/savedLibrary';
 import { SavedWorkout } from '@/types/savedWorkouts';
 import { SavedSession } from '@/types/savedSessions';

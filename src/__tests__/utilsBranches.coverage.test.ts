@@ -2,7 +2,6 @@ import type { Session, SupabaseClient } from '@supabase/supabase-js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SavedSession } from '@/types/savedSessions';
 import type { SavedWorkout } from '@/types/savedWorkouts';
-import type { SyncQueueEntry } from '@/types/syncDomain';
 import type { SupabaseSavedSessionRow, SupabaseSavedWorkoutRow } from '@/types/sync';
 import {
     getSupabaseAuthCodeFromUrl,

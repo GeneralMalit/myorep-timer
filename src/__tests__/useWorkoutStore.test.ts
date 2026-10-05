@@ -25,6 +25,11 @@ describe('useWorkoutStore', () => {
                     activeColor: '#bb86fc',
                     restColor: '#03dac6',
                     concentricColor: '#cf6679',
+                    kineticThemeColor: '#FF5B36',
+                    kineticActiveColor: '#FF6A47',
+                    kineticRestColor: '#74C7FF',
+                    kineticConcentricColor: '#A8FF5A',
+                    kineticFinishedColor: '#A8FF5A',
                     concentricSecond: 1,
                     smoothAnimation: true,
                     prepTime: 5,
@@ -353,9 +358,10 @@ describe('useWorkoutStore', () => {
             const addResult = store.addWorkoutNodeFromCurrentSetup();
             expect(addResult).toMatchObject({ ok: true });
             expect(useWorkoutStore.getState().editingSessionDraft?.nodes).toHaveLength(1);
-            if (useWorkoutStore.getState().editingSessionDraft?.nodes[0]?.type === 'workout') {
-                expect(useWorkoutStore.getState().editingSessionDraft!.nodes[0].sourceWorkoutId).toBeNull();
-                expect(useWorkoutStore.getState().editingSessionDraft!.nodes[0].config.sets).toBe('3');
+            const unlinkedNode = useWorkoutStore.getState().editingSessionDraft?.nodes[0];
+            if (unlinkedNode?.type === 'workout') {
+                expect(unlinkedNode.sourceWorkoutId).toBeNull();
+                expect(unlinkedNode.config.sets).toBe('3');
             }
         });
 
@@ -488,9 +494,8 @@ describe('useWorkoutStore', () => {
             expect(useWorkoutStore.getState().timeLeft).toBe(2);
             expect(useWorkoutStore.getState().setTotalDuration).toBe(2);
             expect(useWorkoutStore.getState().editingSessionDraft?.nodes[0].name).toBe('Workout 1');
-            expect(useWorkoutStore.getState().editingSessionDraft?.nodes[0].type === 'workout'
-                ? useWorkoutStore.getState().editingSessionDraft?.nodes[0].sourceWorkoutId
-                : null).toBeNull();
+            const activeWorkoutNode = useWorkoutStore.getState().editingSessionDraft?.nodes[0];
+            expect(activeWorkoutNode?.type === 'workout' ? activeWorkoutNode.sourceWorkoutId : null).toBeNull();
 
             act(() => {
                 store.advanceCycle();

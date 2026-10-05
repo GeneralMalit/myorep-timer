@@ -751,7 +751,7 @@ describe('account handler branch coverage', () => {
     });
 
     it('uses each client-address fallback and sanitizes forwarded address lists', async () => {
-        const headerCases = [
+        const headerCases: Array<Record<string, string>> = [
             { 'x-vercel-forwarded-for': ' 203.0.113.40, 10.0.0.1 ' },
             { 'x-real-ip': '203.0.113.41' },
             { 'x-forwarded-for': '203.0.113.42' },

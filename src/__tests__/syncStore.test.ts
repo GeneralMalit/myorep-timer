@@ -31,6 +31,11 @@ const resetWorkoutStore = () => {
             activeColor: '#bb86fc',
             restColor: '#03dac6',
             concentricColor: '#cf6679',
+            kineticThemeColor: '#FF5B36',
+            kineticActiveColor: '#FF6A47',
+            kineticRestColor: '#74C7FF',
+            kineticConcentricColor: '#A8FF5A',
+            kineticFinishedColor: '#A8FF5A',
             concentricSecond: 1,
             smoothAnimation: true,
             prepTime: 5,
@@ -146,9 +151,15 @@ describe('sync store behavior', () => {
 
     it('maps Supabase rows into local account state', () => {
         const session = {
+            access_token: 'access-token',
+            refresh_token: 'refresh-token',
+            expires_in: 3600,
+            token_type: 'bearer',
             user: {
                 id: 'user-1',
                 email: 'athlete@example.com',
+                app_metadata: {},
+                aud: 'authenticated',
                 created_at: '2026-03-01T00:00:00.000Z',
                 user_metadata: {
                     full_name: 'Athlete One',
@@ -159,6 +170,7 @@ describe('sync store behavior', () => {
         expect(buildAccountProfileFromSupabaseRow({
             id: 'user-1',
             email: 'athlete@example.com',
+            username: 'athlete_one',
             display_name: 'Athlete One',
             created_at: '2026-03-01T00:00:00.000Z',
             updated_at: '2026-03-02T00:00:00.000Z',
@@ -187,6 +199,7 @@ describe('sync store behavior', () => {
             {
                 id: 'user-1',
                 email: 'athlete@example.com',
+                username: 'athlete_one',
                 display_name: 'Athlete One',
                 created_at: '2026-03-01T00:00:00.000Z',
                 updated_at: '2026-03-02T00:00:00.000Z',
@@ -215,9 +228,15 @@ describe('sync store behavior', () => {
 
     it('keeps account store transitions local-first and sync-aware', () => {
         const session = {
+            access_token: 'access-token',
+            refresh_token: 'refresh-token',
+            expires_in: 3600,
+            token_type: 'bearer',
             user: {
                 id: 'user-2',
                 email: 'free@example.com',
+                app_metadata: {},
+                aud: 'authenticated',
                 created_at: '2026-03-01T00:00:00.000Z',
                 user_metadata: {},
             },

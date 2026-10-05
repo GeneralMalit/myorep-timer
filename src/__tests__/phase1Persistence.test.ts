@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
+import type { SavedSession } from '@/types/savedSessions';
 import {
     buildSavedSessionsExport,
     createRestSessionNode,
@@ -26,6 +27,11 @@ const resetStore = () => {
             activeColor: '#bb86fc',
             restColor: '#03dac6',
             concentricColor: '#cf6679',
+            kineticThemeColor: '#FF5B36',
+            kineticActiveColor: '#FF6A47',
+            kineticRestColor: '#74C7FF',
+            kineticConcentricColor: '#A8FF5A',
+            kineticFinishedColor: '#A8FF5A',
             concentricSecond: 1,
             smoothAnimation: true,
             prepTime: 5,
@@ -297,6 +303,9 @@ describe('phase 1 persistence redesign coverage', () => {
         const persisted = (useWorkoutStore as unknown as {
             persist: { getOptions: () => { partialize: (state: ReturnType<typeof useWorkoutStore.getState>) => Record<string, unknown> } };
         }).persist.getOptions().partialize(useWorkoutStore.getState());
+        const persistedSessions = Array.isArray(persisted.savedSessions)
+            ? persisted.savedSessions as SavedSession[]
+            : [];
 
         expect(persisted).toMatchObject({
             settings: expect.any(Object),
@@ -314,7 +323,7 @@ describe('phase 1 persistence redesign coverage', () => {
             isAccountCardCollapsed: true,
             theme: 'theme-default',
         });
-        expect(persisted.savedSessions[0].nodes[0].type === 'workout' ? persisted.savedSessions[0].nodes[0].notes : '').toBe('Prev 60kg');
+        expect(persistedSessions[0].nodes[0].type === 'workout' ? persistedSessions[0].nodes[0].notes : '').toBe('Prev 60kg');
         expect(persisted).not.toHaveProperty('lastImportSummary');
         expect(persisted).not.toHaveProperty('editingSessionId');
         expect(persisted).not.toHaveProperty('editingSessionDraft');

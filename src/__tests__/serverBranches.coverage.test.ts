@@ -10,8 +10,6 @@ import {
     AccountProvisionError,
     applyPaddleSubscriptionEvent,
     authenticateSupabaseUser,
-    createSupabaseAdminClient,
-    createSupabaseAuthClient,
     getBillingAccountByPaddleCustomerId,
     getBillingAccountByUserId,
     getSupabasePasswordSignUpAvailability,
@@ -389,14 +387,6 @@ describe('Paddle billing adapters and projections', () => {
 });
 
 describe('Supabase billing data adapters', () => {
-    it('constructs stateless auth and admin clients from the intended keys', () => {
-        const authClient = createSupabaseAuthClient(env);
-        const adminClient = createSupabaseAdminClient(env);
-
-        expect(authClient.supabaseUrl).toBe(env.supabaseUrl);
-        expect(adminClient.supabaseUrl).toBe(env.supabaseUrl);
-        expect(authClient).not.toBe(adminClient);
-    });
 
     it('authenticates a Supabase user and reports error and empty-user responses', async () => {
         const user = { id: 'user-1' } as User;

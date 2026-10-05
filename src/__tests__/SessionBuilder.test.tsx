@@ -432,6 +432,10 @@ describe('SessionBuilder', () => {
                         updatedAt: '2026-03-01T00:00:00.000Z',
                     },
                 ],
+                timesUsed: 0,
+                lastUsedAt: null,
+                createdAt: '2026-03-01T00:00:00.000Z',
+                updatedAt: '2026-03-01T00:00:00.000Z',
             },
         });
 
@@ -1267,21 +1271,23 @@ describe('SessionBuilder', () => {
         expect(workoutOne).toBeTruthy();
         expect(workoutTwo).toBeTruthy();
 
+        const storedDragData: Record<string, string> = {};
         const dataTransfer = {
-            data: {} as Record<string, string>,
             dropEffect: 'move',
             effectAllowed: 'move',
             files: [],
             items: [],
             types: [],
             setData(format: string, value: string) {
-                this.data[format] = value;
+                storedDragData[format] = value;
             },
             getData(format: string) {
-                return this.data[format] ?? '';
+                return storedDragData[format] ?? '';
             },
             clearData() {
-                this.data = {};
+                for (const key of Object.keys(storedDragData)) {
+                    delete storedDragData[key];
+                }
             },
             setDragImage() {},
         } as unknown as DataTransfer;

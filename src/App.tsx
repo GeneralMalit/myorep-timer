@@ -17,14 +17,14 @@ import SetupModeToggle from '@/components/SetupModeToggle';
 import { getResponsiveLayout } from '@/layout';
 import { appShellMobile } from '@/layout/appShell.mobile';
 import { appShellDesktop } from '@/layout/appShell.desktop';
-import { Play, Square, RotateCcw, ChevronRight, Zap, Activity, Menu, Settings2, SkipForward } from 'lucide-react';
+import { Play, Square, RotateCcw, ChevronRight, Zap, Activity, Menu, Settings2, SkipForward, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { APP_VERSION } from '@/constants/version';
 import { canAccessSessionBuilder } from '@/utils/account';
-import { normalizeSetsInput } from '@/utils/savedWorkouts';
+import { isValidWorkoutConfig, normalizeSetsInput, sanitizeSavedWorkoutConfig } from '@/utils/savedWorkouts';
 import { getReadableForeground } from '@/utils/colors';
 import { useDialogFocus } from '@/hooks/useDialogFocus';
 import type { AccountActionResult, AccountSnapshot } from '@/types/account';
@@ -674,7 +674,10 @@ const TimerSurface = ({ isMobileViewport, isDocumentVisible, timerScreenShell }:
                         <div className="rounded-full border border-border bg-muted px-4 py-1.5 text-[10px] font-black italic tracking-[0.2em] text-muted-foreground sm:text-xs sm:tracking-widest">{isMainRep ? 'ACTIVATION' : 'MYO REPS'}</div>
                         {isRunningSession && activeSessionNode && !isMobileViewport && <div className="rounded-full border border-border bg-muted px-4 py-1.5 text-[10px] font-black italic tracking-[0.2em] text-muted-foreground sm:text-xs sm:tracking-widest">NODE {activeSessionNodeIndex + 1} {activeSessionNode.type === 'rest' ? 'REST' : 'WORKOUT'}</div>}
                     </div>
-                    <h2 className="text-4xl font-black italic uppercase tracking-tighter text-foreground drop-shadow-sm sm:text-5xl">{timerStatus}</h2>
+                    <h2
+                        className="text-4xl font-black italic uppercase tracking-tighter text-foreground drop-shadow-sm sm:text-5xl"
+                        style={settings.fullScreenMode ? { color: getReadableForeground(fullScreenBackgroundColor) } : undefined}
+                    >{timerStatus}</h2>
                     {isMobileViewport && (
                         <div className="mx-auto flex w-full max-w-md items-center justify-between gap-4 rounded-[1.75rem] border border-border/60 bg-card px-4 py-3 text-left shadow-sm">
                             <div className="min-w-0">
@@ -833,6 +836,21 @@ export default function App() {
     const previousMobileViewportRef = useRef(false);
     const previousDesktopSidebarCollapsedRef = useRef<boolean | null>(null);
     const isSingleCycle = parseInt(sets, 10) === 1;
+    const sanitizedWorkoutConfig = sanitizeSavedWorkoutConfig({ sets, reps, seconds, rest, myoReps, myoWorkSecs });
+    const isWorkoutConfigValid = isValidWorkoutConfig(sanitizedWorkoutConfig);
+    const missingWorkoutFields = [
+        sanitizedWorkoutConfig.sets ? null : 'Total Cycles',
+        sanitizedWorkoutConfig.reps ? null : 'Activation Reps',
+        sanitizedWorkoutConfig.seconds ? null : 'Activation Pace (s)',
+        isSingleCycle || sanitizedWorkoutConfig.rest ? null : 'Rest Interval',
+        isSingleCycle || sanitizedWorkoutConfig.myoReps ? null : 'Myo Reps',
+        isSingleCycle || sanitizedWorkoutConfig.myoWorkSecs ? null : 'Myo Pace (s)',
+    ].filter((field): field is string => field !== null);
+    const workoutStartHint = isWorkoutConfigValid
+        ? null
+        : `Enter a whole number of 1 or more for ${missingWorkoutFields.length === 1
+            ? missingWorkoutFields[0]
+            : `${missingWorkoutFields.slice(0, -1).join(', ')} and ${missingWorkoutFields[missingWorkoutFields.length - 1]}`} to start.`;
     const dialogConfirmRef = useRef<((value: string) => void) | null>(null);
     const dialogCancelRef = useRef<(() => void) | null>(null);
     const loadedWorkout = selectedSavedWorkoutId ? savedWorkouts.find((workout) => workout.id === selectedSavedWorkoutId) ?? null : null;
@@ -1826,7 +1844,17 @@ export default function App() {
                                             </div>
                                         ))}
                                     </div>
-                                    <Button onClick={() => { audioEngine.init(); startWorkout(); }} className={cn(
+                                    {workoutStartHint && (
+                                        <div
+                                            role="alert"
+                                            data-testid="workout-start-hint"
+                                            className="flex items-start gap-2 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-left text-xs font-semibold text-amber-500 sm:text-sm"
+                                        >
+                                            <AlertTriangle size={15} className="mt-0.5 shrink-0" aria-hidden="true" />
+                                            <span>{workoutStartHint}</span>
+                                        </div>
+                                    )}
+                                    <Button disabled={!isWorkoutConfigValid} onClick={() => { audioEngine.init(); startWorkout(); }} className={cn(
                                         "w-full rounded-3xl font-black italic tracking-tighter shadow-lg transition-all hover:scale-[1.01] hover:shadow-primary/20 active:scale-[0.99]",
                                         isMobileViewport ? "h-14 text-base" : "h-16 text-lg sm:h-20 sm:text-2xl",
                                     )}>

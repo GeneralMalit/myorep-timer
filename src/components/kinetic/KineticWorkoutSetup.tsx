@@ -1,12 +1,12 @@
 import { useMemo } from 'react';
-import { Activity, ChevronRight, Clock3, RotateCcw, Square, Volume2, Zap } from 'lucide-react';
+import { Activity, AlertTriangle, ChevronRight, Clock3, RotateCcw, Square, Volume2, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
 import { useShallow } from 'zustand/react/shallow';
-import { normalizeSetsInput } from '@/utils/savedWorkouts';
+import { isValidWorkoutConfig, normalizeSetsInput, sanitizeSavedWorkoutConfig } from '@/utils/savedWorkouts';
 import { audioEngine } from '@/utils/audioEngine';
 import { estimateWorkoutDurationSeconds, formatEstimatedSessionDuration } from '@/utils/savedSessions';
 import { getReadableForeground } from '@/utils/colors';
@@ -39,6 +39,21 @@ const KineticWorkoutSetup = ({ onStart }: KineticWorkoutSetupProps) => {
     })));
 
     const isSingleCycle = normalizeSetsInput(sets) === '1';
+    const sanitizedWorkoutConfig = sanitizeSavedWorkoutConfig({ sets, reps, seconds, rest, myoReps, myoWorkSecs });
+    const isWorkoutConfigValid = isValidWorkoutConfig(sanitizedWorkoutConfig);
+    const missingWorkoutFields = [
+        sanitizedWorkoutConfig.sets ? null : 'Total cycles',
+        sanitizedWorkoutConfig.reps ? null : 'Activation reps',
+        sanitizedWorkoutConfig.seconds ? null : 'Activation pace (sec)',
+        isSingleCycle || sanitizedWorkoutConfig.rest ? null : 'Rest interval',
+        isSingleCycle || sanitizedWorkoutConfig.myoReps ? null : 'Myo reps',
+        isSingleCycle || sanitizedWorkoutConfig.myoWorkSecs ? null : 'Myo pace (sec)',
+    ].filter((field): field is string => field !== null);
+    const workoutStartHint = isWorkoutConfigValid
+        ? null
+        : `Enter a whole number of 1 or more for ${missingWorkoutFields.length === 1
+            ? missingWorkoutFields[0]
+            : `${missingWorkoutFields.slice(0, -1).join(', ')} and ${missingWorkoutFields[missingWorkoutFields.length - 1]}`} to start.`;
     const estimatedDuration = useMemo(() => {
         const workoutSeconds = estimateWorkoutDurationSeconds({ sets, reps, seconds, rest, myoReps, myoWorkSecs });
         if (workoutSeconds === null) {
@@ -140,9 +155,22 @@ const KineticWorkoutSetup = ({ onStart }: KineticWorkoutSetupProps) => {
             </div>
 
             <div className="mt-6 flex flex-col gap-4 border-t border-[var(--kinetic-border)] pt-5 sm:flex-row sm:items-center sm:justify-between">
-                <p className="max-w-xl text-sm leading-relaxed text-[var(--kinetic-muted)]">{isSingleCycle ? 'One activation set. Rest and Myo settings are not used.' : 'Activation runs once. Remaining cycles alternate rest and short Myo sets.'}</p>
+                <div className="min-w-0">
+                    <p className="max-w-xl text-sm leading-relaxed text-[var(--kinetic-muted)]">{isSingleCycle ? 'One activation set. Rest and Myo settings are not used.' : 'Activation runs once. Remaining cycles alternate rest and short Myo sets.'}</p>
+                    {workoutStartHint && (
+                        <div
+                            role="alert"
+                            data-testid="kinetic-workout-start-hint"
+                            className="mt-2 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-100"
+                        >
+                            <AlertTriangle size={14} className="mt-0.5 shrink-0 text-amber-300" aria-hidden="true" />
+                            <span>{workoutStartHint}</span>
+                        </div>
+                    )}
+                </div>
                 <Button
                     type="button"
+                    disabled={!isWorkoutConfigValid}
                     onClick={() => {
                         audioEngine.init();
                         onStart();

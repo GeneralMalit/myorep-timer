@@ -77,9 +77,11 @@ graph TD
 - **Phase 1: Activation Set**: Controlled pace to reach effective recruitment.
 - **Phase 2: Rest Period**: Auto-calculated interval for partial ATP recovery.
 - **Phase 3: Myo-Rep Mini-Sets**: High-frequency cluster sets to maintain recruitment peaked.
+- **Start validation**: Both Classic and Kinetic disable Start and identify missing positive values. One cycle needs only activation reps and pace; additional cycles also require rest duration, Myo reps, and Myo pace.
 
 ### 4.2. Advanced Utilities
 - **Concentric Circular Timer**: Visualizes time remaining vs set progress simultaneously.
+- **Custom fullscreen colors**: In Classic, countdown text, phase labels, and progress rings choose a readable foreground for the current activation, concentric, rest/preparation, or finished background.
 - **Persistent PiP Window**: Keeps the timer visible over workout logs or video players.
 - **Natural Voice TTS**: High-quality vocal coaching with customizable speed and pitch.
 
@@ -116,6 +118,10 @@ npm run dev
 ```bash
 # Run unit tests
 npm test
+
+# Validate source and test types, then run the suite once
+npm run typecheck
+npm run test -- --run
 
 # View test UI
 npm run test:ui

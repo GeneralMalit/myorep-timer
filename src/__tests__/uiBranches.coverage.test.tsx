@@ -6,6 +6,7 @@ import ProtocolIntelModal from '@/components/ProtocolIntelModal';
 import SessionCanvas from '@/components/SessionCanvas';
 import SettingsPanel from '@/components/SettingsPanel';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
+import { getReadableForeground } from '@/utils/colors';
 import type { AccountSnapshot, AccountSyncActions, AccountSyncSnapshot } from '@/types/account';
 import type { SessionNode } from '@/types/savedSessions';
 
@@ -588,10 +589,117 @@ describe('settings, protocol intel, and timer display branches', () => {
             useWorkoutStore.setState((state) => ({ settings: { ...state.settings, fullScreenMode: true, infoVisibility: 'always' } }));
             media.emit(true);
         });
-        expect(screen.getByText('ECCENTRIC')).toHaveStyle({ color: '#ffffff' });
-        expect(screen.getByText('work')).toHaveStyle({ color: '#ffffff' });
+        const activeBackground = useWorkoutStore.getState().settings.activeColor;
+        expect(screen.getByText('ECCENTRIC')).toHaveStyle({ color: getReadableForeground(activeBackground) });
+        expect(screen.getByText('work')).toHaveStyle({ color: getReadableForeground(activeBackground) });
+        expect(screen.getByText('Work')).toHaveStyle({ color: getReadableForeground(activeBackground) });
         unmount();
         expect(media.media.removeEventListener).toHaveBeenCalled();
+    });
+
+    it('renders readable fullscreen foregrounds against the actual phase background', () => {
+        installMatchMedia(false);
+        const lightPalette = { activeColor: '#000000', restColor: '#111111', concentricColor: '#ffffff', finishedColor: '#eeeeee' };
+        const darkPalette = { activeColor: '#ffffff', restColor: '#000000', concentricColor: '#eeeeee', finishedColor: '#111111' };
+
+        const view = render(
+            <ConcentricTimer outerValue={3} outerMax={5} isResting innerValue={0} innerMax={5} textMain="seed" textSub="seed-sub" isFinished={false} isPreparing={false} />,
+        );
+
+        // Palette 1: active/rest render white, concentric/finished render dark.
+        act(() => {
+            useWorkoutStore.setState((state) => ({
+                settings: {
+                    ...state.settings,
+                    ...lightPalette,
+                    fullScreenMode: true,
+                    upDownMode: false,
+                    infoVisibility: 'always',
+                    pulseEffect: 'never',
+                    smoothAnimation: false,
+                    concentricSecond: 1,
+                },
+            }));
+        });
+        const lightRest = getReadableForeground(lightPalette.restColor);
+        const lightActive = getReadableForeground(lightPalette.activeColor);
+        const lightConcentric = getReadableForeground(lightPalette.concentricColor);
+        const lightFinished = getReadableForeground(lightPalette.finishedColor);
+        expect(lightRest).toBe('#ffffff');
+        expect(lightActive).toBe('#ffffff');
+        expect(lightConcentric).toBe('#0e1013');
+        expect(lightFinished).toBe('#0e1013');
+
+        view.rerender(<ConcentricTimer outerValue={3} outerMax={5} isResting innerValue={0} innerMax={5} textMain="light-rest-main" textSub="light-rest-sub" isFinished={false} isPreparing={false} />);
+        expect(screen.getByText('light-rest-main')).toHaveStyle({ color: lightRest });
+        expect(screen.getByText('light-rest-sub')).toHaveStyle({ color: lightRest });
+        expect(view.container.querySelector('circle[stroke-dasharray]')).toHaveAttribute('stroke', lightRest);
+
+        view.rerender(<ConcentricTimer outerValue={3} outerMax={5} isResting={false} innerValue={3} innerMax={5} textMain="light-active-main" textSub="light-active-sub" isFinished={false} isPreparing={false} />);
+        expect(screen.getByText('light-active-main')).toHaveStyle({ color: lightActive });
+        expect(screen.getByText('light-active-sub')).toHaveStyle({ color: lightActive });
+        const lightActiveCircles = view.container.querySelectorAll('circle[stroke-dasharray]');
+        expect(lightActiveCircles[0]).toHaveAttribute('stroke', lightActive);
+        expect(lightActiveCircles[1]).toHaveAttribute('stroke', lightActive);
+
+        view.rerender(<ConcentricTimer outerValue={3} outerMax={5} isResting={false} innerValue={1} innerMax={5} textMain="light-concentric-main" textSub="light-concentric-sub" isFinished={false} isPreparing={false} />);
+        expect(screen.getByText('light-concentric-main')).toHaveStyle({ color: lightConcentric });
+        expect(screen.getByText('light-concentric-sub')).toHaveStyle({ color: lightConcentric });
+
+        view.rerender(<ConcentricTimer outerValue={5} outerMax={5} isResting={false} innerValue={5} innerMax={5} textMain="light-prep-main" textSub="light-prep-sub" isFinished={false} isPreparing />);
+        expect(screen.getByText('light-prep-main')).toHaveStyle({ color: lightRest });
+        expect(screen.getByText('light-prep-sub')).toHaveStyle({ color: lightRest });
+
+        view.rerender(<ConcentricTimer outerValue={0} outerMax={5} isResting={false} innerValue={0} innerMax={5} textMain="light-finished-main" textSub="light-finished-sub" isFinished isPreparing={false} />);
+        expect(screen.getByText('light-finished-main')).toHaveStyle({ color: lightFinished });
+        expect(screen.getByText('light-finished-sub')).toHaveStyle({ color: lightFinished });
+        expect(view.container.querySelector('circle[stroke-dasharray]')).toHaveAttribute('stroke', lightFinished);
+
+        // Palette 2 flips the partitions so every phase pair is independently separated.
+        act(() => {
+            useWorkoutStore.setState((state) => ({ settings: { ...state.settings, ...darkPalette } }));
+        });
+        const darkRest = getReadableForeground(darkPalette.restColor);
+        const darkActive = getReadableForeground(darkPalette.activeColor);
+        const darkConcentric = getReadableForeground(darkPalette.concentricColor);
+        const darkFinished = getReadableForeground(darkPalette.finishedColor);
+        expect(darkRest).toBe('#ffffff');
+        expect(darkActive).toBe('#0e1013');
+        expect(darkConcentric).toBe('#0e1013');
+        expect(darkFinished).toBe('#ffffff');
+
+        view.rerender(<ConcentricTimer outerValue={3} outerMax={5} isResting innerValue={0} innerMax={5} textMain="dark-rest-main" textSub="dark-rest-sub" isFinished={false} isPreparing={false} />);
+        expect(screen.getByText('dark-rest-main')).toHaveStyle({ color: darkRest });
+        expect(screen.getByText('dark-rest-sub')).toHaveStyle({ color: darkRest });
+        expect(view.container.querySelector('circle[stroke-dasharray]')).toHaveAttribute('stroke', darkRest);
+
+        view.rerender(<ConcentricTimer outerValue={3} outerMax={5} isResting={false} innerValue={3} innerMax={5} textMain="dark-active-main" textSub="dark-active-sub" isFinished={false} isPreparing={false} />);
+        expect(screen.getByText('dark-active-main')).toHaveStyle({ color: darkActive });
+        expect(screen.getByText('dark-active-sub')).toHaveStyle({ color: darkActive });
+        const darkActiveCircles = view.container.querySelectorAll('circle[stroke-dasharray]');
+        expect(darkActiveCircles[0]).toHaveAttribute('stroke', darkActive);
+        expect(darkActiveCircles[1]).toHaveAttribute('stroke', darkActive);
+
+        view.rerender(<ConcentricTimer outerValue={3} outerMax={5} isResting={false} innerValue={1} innerMax={5} textMain="dark-concentric-main" textSub="dark-concentric-sub" isFinished={false} isPreparing={false} />);
+        expect(screen.getByText('dark-concentric-main')).toHaveStyle({ color: darkConcentric });
+        expect(screen.getByText('dark-concentric-sub')).toHaveStyle({ color: darkConcentric });
+
+        view.rerender(<ConcentricTimer outerValue={5} outerMax={5} isResting={false} innerValue={5} innerMax={5} textMain="dark-prep-main" textSub="dark-prep-sub" isFinished={false} isPreparing />);
+        expect(screen.getByText('dark-prep-main')).toHaveStyle({ color: darkRest });
+        expect(screen.getByText('dark-prep-sub')).toHaveStyle({ color: darkRest });
+
+        view.rerender(<ConcentricTimer outerValue={0} outerMax={5} isResting={false} innerValue={0} innerMax={5} textMain="dark-finished-main" textSub="dark-finished-sub" isFinished isPreparing={false} />);
+        expect(screen.getByText('dark-finished-main')).toHaveStyle({ color: darkFinished });
+        expect(screen.getByText('dark-finished-sub')).toHaveStyle({ color: darkFinished });
+        expect(view.container.querySelector('circle[stroke-dasharray]')).toHaveAttribute('stroke', darkFinished);
+
+        // Non-fullscreen keeps the plain palette: raw phase color text, muted subtext.
+        act(() => {
+            useWorkoutStore.setState((state) => ({ settings: { ...state.settings, fullScreenMode: false } }));
+        });
+        view.rerender(<ConcentricTimer outerValue={3} outerMax={5} isResting={false} innerValue={3} innerMax={5} textMain="plain-main" textSub="plain-sub" isFinished={false} isPreparing={false} />);
+        expect(screen.getByText('plain-main')).toHaveStyle({ color: darkPalette.activeColor });
+        expect(screen.getByText('plain-sub')).not.toHaveStyle({ color: darkPalette.activeColor });
     });
 });
 

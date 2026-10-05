@@ -3,6 +3,7 @@ import { getResponsiveLayout } from '@/layout';
 import { concentricTimerDesktopLayout } from '@/layout/concentricTimer.desktop';
 import { concentricTimerMobileLayout } from '@/layout/concentricTimer.mobile';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
+import { getReadableForeground } from '@/utils/colors';
 import { cn } from '@/lib/utils';
 
 interface ConcentricTimerProps {
@@ -68,10 +69,16 @@ const ConcentricTimer: React.FC<ConcentricTimerProps> = ({
         : (isPreparing ? 'preparing' : (isFinished ? 'finished' : (isResting ? 'resting' : (isConcentricPhase ? 'concentric' : 'eccentric'))));
     const phaseColors = useMemo(() => {
         if (isFullScreen) {
+            const backgroundColor = isFinished
+                ? settings.finishedColor
+                : (isPreparing || isResting)
+                    ? settings.restColor
+                    : (isConcentricPhase ? settings.concentricColor : settings.activeColor);
+            const foreground = getReadableForeground(backgroundColor);
             return {
-                outer: '#ffffff',
-                inner: '#ffffff',
-                text: '#ffffff',
+                outer: foreground,
+                inner: foreground,
+                text: foreground,
             };
         }
 
@@ -85,7 +92,7 @@ const ConcentricTimer: React.FC<ConcentricTimerProps> = ({
             inner: isConcentric ? concentricColor : activeColor,
             text: isConcentric ? concentricColor : activeColor,
         };
-    }, [isFullScreen, settings.activeColor, settings.concentricColor, settings.restColor, visualPhase]);
+    }, [isFullScreen, settings.activeColor, settings.concentricColor, settings.finishedColor, settings.restColor, isConcentricPhase, isFinished, isPreparing, isResting, visualPhase]);
     // Smooth mode gets its motion from the 50ms worker cadence. CSS transitions
     // are intentionally disabled in both modes so a new interval never animates
     // from the prior ring state back to full.
@@ -124,6 +131,13 @@ const ConcentricTimer: React.FC<ConcentricTimerProps> = ({
 
     const upDownTextStyle = useMemo(() => ({ color: upDownTextColor }), [upDownTextColor]);
     const mainTextStyle = useMemo(() => ({ color: phaseColors.text }), [phaseColors.text]);
+    // Fullscreen swaps the surface background for the phase color, so the
+    // muted-foreground subtext class would be unreadable; reuse the same
+    // readable foreground as the rest of the fullscreen content.
+    const subTextStyle = useMemo(
+        () => (isFullScreen ? { color: phaseColors.text } : undefined),
+        [isFullScreen, phaseColors.text],
+    );
 
     const shouldPulse = settings.pulseEffect === 'always' || (settings.pulseEffect === 'resting' && (isResting || isPreparing || isFinished));
 
@@ -211,7 +225,7 @@ const ConcentricTimer: React.FC<ConcentricTimerProps> = ({
                         >
                             {textMain}
                         </div>
-                        <div className={layout.subText}>
+                        <div className={layout.subText} style={subTextStyle}>
                             {textSub}
                         </div>
                     </div>

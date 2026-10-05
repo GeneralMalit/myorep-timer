@@ -51,6 +51,9 @@
 
 ### Bug Fixes
 
+* keep Classic fullscreen countdowns, phase labels, and progress rings readable against custom light and dark phase colors
+* disable invalid workout starts and identify missing required values in both Classic and Kinetic setup, while allowing one-cycle workouts without rest/Myo settings
+* repair strict TypeScript test fixtures and ES2020-compatible assertions without relaxing compiler checks
 * constrain desktop app height so session content can scroll
 * confirm session and workout saves remotely only after all linked revisions are acknowledged; show pending, offline, paused, local-only, and failed-sync states
 * save linked workout settings and notes to the shared workout and every linked session instance; share progression history while keeping unlinked blocks independent

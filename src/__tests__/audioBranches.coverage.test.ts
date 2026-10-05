@@ -344,7 +344,7 @@ describe('AudioEngine browser API branches', () => {
 
         expect(speech.onvoiceschanged).toEqual(expect.any(Function));
         preferredEngine.speak('Preferred');
-        const preferredUtterance = speech.speak.mock.calls.at(-1)?.[0] as unknown as MockUtteranceShape;
+        const preferredUtterance = speech.speak.mock.calls[speech.speak.mock.calls.length - 1]?.[0] as unknown as MockUtteranceShape;
         expect(preferredUtterance.voice).toBe(preferred);
         expect(preferredUtterance.lang).toBe('EN-US');
 
@@ -355,14 +355,14 @@ describe('AudioEngine browser API branches', () => {
         ]);
         const fallbackEngine = new AudioEngine();
         fallbackEngine.speak('Fallback');
-        const fallbackUtterance = fallbackSpeech.speak.mock.calls.at(-1)?.[0] as unknown as MockUtteranceShape;
+        const fallbackUtterance = fallbackSpeech.speak.mock.calls[fallbackSpeech.speak.mock.calls.length - 1]?.[0] as unknown as MockUtteranceShape;
         expect(fallbackUtterance.voice).toBe(fallback);
 
         const firstVoice = { name: 'Voix', lang: '' } as SpeechSynthesisVoice;
         const firstSpeech = installSpeech([firstVoice]);
         const firstEngine = new AudioEngine();
         firstEngine.speak('First');
-        const firstUtterance = firstSpeech.speak.mock.calls.at(-1)?.[0] as unknown as MockUtteranceShape;
+        const firstUtterance = firstSpeech.speak.mock.calls[firstSpeech.speak.mock.calls.length - 1]?.[0] as unknown as MockUtteranceShape;
         expect(firstUtterance.voice).toBe(firstVoice);
         expect(firstUtterance.lang).toBe('en-US');
     });
@@ -379,7 +379,7 @@ describe('AudioEngine browser API branches', () => {
         vi.spyOn(window.navigator, 'userAgent', 'get').mockReturnValue('Mozilla/5.0 (iPhone)');
 
         engine.speak(3);
-        const mobileUtterance = speech.speak.mock.calls.at(-1)?.[0] as unknown as MockUtteranceShape;
+        const mobileUtterance = speech.speak.mock.calls[speech.speak.mock.calls.length - 1]?.[0] as unknown as MockUtteranceShape;
         expect(mobileUtterance.text).toBe('3');
         expect(mobileUtterance.rate).toBe(1.05);
 
@@ -389,7 +389,7 @@ describe('AudioEngine browser API branches', () => {
         vi.spyOn(console, 'error').mockImplementation(() => {});
         vi.spyOn(window.navigator, 'userAgent', 'get').mockReturnValue('Desktop');
         engine.speak('Desktop');
-        const desktopUtterance = speech.speak.mock.calls.at(-1)?.[0] as unknown as MockUtteranceShape;
+        const desktopUtterance = speech.speak.mock.calls[speech.speak.mock.calls.length - 1]?.[0] as unknown as MockUtteranceShape;
         expect(desktopUtterance.rate).toBe(1.15);
     });
 
@@ -404,7 +404,7 @@ describe('AudioEngine browser API branches', () => {
 
         engine.speak('One');
         expect(speech.cancel).toHaveBeenCalled();
-        let utterance = speech.speak.mock.calls.at(-1)?.[0] as unknown as MockUtteranceShape;
+        let utterance = speech.speak.mock.calls[speech.speak.mock.calls.length - 1]?.[0] as unknown as MockUtteranceShape;
         utterance.onerror?.({ error: 'canceled' } as SpeechSynthesisErrorEvent);
         utterance.onerror?.({ error: 'interrupted' } as SpeechSynthesisErrorEvent);
         expect(console.error).not.toHaveBeenCalledWith('[AudioEngine] Speech error:', expect.anything());
@@ -415,7 +415,7 @@ describe('AudioEngine browser API branches', () => {
         speech.speaking = false;
         speech.pending = true;
         engine.speak('Two');
-        utterance = speech.speak.mock.calls.at(-1)?.[0] as unknown as MockUtteranceShape;
+        utterance = speech.speak.mock.calls[speech.speak.mock.calls.length - 1]?.[0] as unknown as MockUtteranceShape;
         expect(utterance.text).toBe('Two');
     });
 
