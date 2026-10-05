@@ -1,3 +1,10 @@
+# [3.12.0](https://github.com/GeneralMalit/myorep-timer/compare/v3.11.4...v3.12.0) (2026-10-05)
+
+
+### Features
+
+* redesign Kinetic Console interface ([fdd3695](https://github.com/GeneralMalit/myorep-timer/commit/fdd3695929b2d13208586e59fd774a18946c7545))
+
 ## [3.11.4](https://github.com/GeneralMalit/myorep-timer/compare/v3.11.3...v3.11.4) (2026-10-05)
 
 
