@@ -1,3 +1,16 @@
+# [3.13.0](https://github.com/GeneralMalit/myorep-timer/compare/v3.12.0...v3.13.0) (2026-10-13)
+
+
+### Bug Fixes
+
+* harden sync auth expiry and per-account session validation ([da5c927](https://github.com/GeneralMalit/myorep-timer/commit/da5c927c97ad618ebaee56997068df3c2e565592))
+* validate workout starts and restore fullscreen contrast and typechecks ([6fafab5](https://github.com/GeneralMalit/myorep-timer/commit/6fafab5abf54bfd193755d31f86d9eaf1e1fffd6))
+
+
+### Features
+
+* harden session safety, sync recovery, accessibility, and release gates ([b948359](https://github.com/GeneralMalit/myorep-timer/commit/b9483594b833d34433592e40744f6a86472d9a6a))
+
 # [3.12.0](https://github.com/GeneralMalit/myorep-timer/compare/v3.11.4...v3.12.0) (2026-10-05)
 
 
