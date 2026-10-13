@@ -133,7 +133,17 @@ npm run test:ui
 npm run build
 ```
 
-### 5.4. UI Layout Editing Guide
+### 5.4. Vercel Deployment Gotchas
+
+Production on Vercel does not replicate local dev 1:1. When a bug appears only on the deployed site, check these first:
+
+- **`api/` routes must be self-contained — no imports from `src/`.** Vercel builds one function per file under `api/` and does not trace/bundle sibling trees like `src/server/`. An import such as `../../src/server/accountHandlers.ts` (especially with an explicit `.ts` extension) works under `vite dev` but crashes in production with `ERR_MODULE_NOT_FOUND` / `FUNCTION_INVOCATION_FAILED`. Fix: inline the needed logic into the route file so it imports only npm packages and `node:` builtins (precedent: `api/account/refresh-entitlement.ts`, commit `588a17e`; same fix later applied to all other routes in `f6a69a5`). Rule of thumb: if `api/foo.ts` contains `../` or `src/` in an import, it will crash on Vercel.
+- **Dev middleware only covers `/api/account/*`.** `vite.config.js` maps the three account routes to `src/server` handlers locally, but there are no local routes for `/api/paddle/*` — billing endpoints cannot be exercised with `npm run dev` and must be tested against a preview/production deployment.
+- **`export const config = { api: { bodyParser: false } }` is ignored.** That is a Next.js API-route option; these functions deploy as framework-agnostic Node functions, so the raw-body request never happens. The Paddle webhook adapter reads the already-parsed `request.body` and re-serializes it, which can break byte-exact HMAC verification — suspect this first if Plus purchases stop provisioning entitlements.
+- **Deploy migrations before the client that needs them.** PostgREST errors like `42703 undefined_column` or `42501` permission failures usually mean the Supabase migrations (`supabase/migrations/`, numeric order) were not applied, or an old client is writing tables directly instead of through the `mutate_*` / `overwrite_sync_library` RPCs (direct writes were revoked in `0006`).
+- **Probe deployed routes directly.** `GET` on a POST-only route should return `405` with JSON; `FUNCTION_INVOCATION_FAILED` (HTTP 500, HTML body) means the function crashed at load — almost always the `src/` import problem above, not application logic.
+
+### 5.5. UI Layout Editing Guide
 
 The main UI layout now uses dedicated mobile and desktop layout files under [`src/layout/`](./src/layout) so spacing, padding, margins, widths, and alignment can be edited manually without digging through mixed inline Tailwind branches.
 
