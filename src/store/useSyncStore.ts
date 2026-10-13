@@ -236,7 +236,6 @@ interface SyncState extends PersistedSyncState {
         failedAt?: string;
     }) => void;
     retryFailedOperations: () => void;
-    resetForNewSession: () => void;
 }
 
 const createInitialPersistedState = (authGeneration = createAuthGeneration()): PersistedSyncState => ({
@@ -335,6 +334,7 @@ export const migratePersistedSyncState = (persistedState: unknown): PersistedSyn
 
     return {
         ...createInitialPersistedState(authGeneration),
+        syncEnabled: currentUserId !== null && record.syncEnabled === true,
         firstSyncState: normalizeFirstSyncState(record.firstSyncState),
         currentUserId,
         onboardingRemoteHasData: record.onboardingRemoteHasData === true,
@@ -363,10 +363,19 @@ export const useSyncStore = create<SyncState>()(
             })),
             setCurrentUser: (userId) => set((state) => {
                 if (!userId) {
+                    if (!state.currentUserId) {
+                        return state;
+                    }
+
+                    // Keep the device's opt-in and work, but invalidate requests from the old session.
+                    const authGeneration = createAuthGeneration();
                     return {
-                        ...createInitialPersistedState(),
-                        ...initialRuntimeState,
-                        hydrateComplete: state.hydrateComplete,
+                        authGeneration,
+                        queuedOperations: state.queuedOperations.map((item) => ({ ...item, authGeneration })),
+                        firstSyncState: normalizeFirstSyncState(state.firstSyncState),
+                        queueStatus: 'paused-auth',
+                        syncError: 'Sign in to the sync account to resume cloud sync.',
+                        authExpired: true,
                     };
                 }
 
@@ -379,7 +388,15 @@ export const useSyncStore = create<SyncState>()(
                     };
                 }
 
-                return { currentUserId: userId };
+                return state.authExpired
+                    ? {
+                        authExpired: false,
+                        syncError: hasDeadLetters(state.queuedOperations)
+                            ? state.queuedOperations.find((item) => item.deadLetteredAt !== null)?.lastError ?? null
+                            : null,
+                        queueStatus: resolveSettledQueueStatus(state.queuedOperations, state.syncEnabled),
+                    }
+                    : state;
             }),
             beginEnableSync: (backup, remoteHasData) => set((state) => ({
                 firstSyncState: 'pending-choice',
@@ -481,9 +498,10 @@ export const useSyncStore = create<SyncState>()(
 
                 return {
                     queuedOperations,
-                    queueStatus: state.queueStatus === 'syncing' ? 'syncing' : 'pending',
-                    syncError: null,
-                    authExpired: false,
+                    queueStatus: state.authExpired
+                        ? 'paused-auth'
+                        : state.queueStatus === 'syncing' ? 'syncing' : 'pending',
+                    syncError: state.authExpired ? state.syncError : null,
                     pendingCounts: buildPendingCounts(queuedOperations),
                 };
             }),
@@ -579,11 +597,6 @@ export const useSyncStore = create<SyncState>()(
                     pendingCounts: buildPendingCounts(queuedOperations),
                 };
             }),
-            resetForNewSession: () => set((state) => ({
-                ...createInitialPersistedState(),
-                ...initialRuntimeState,
-                hydrateComplete: state.hydrateComplete,
-            })),
         }),
         {
             name: 'myorep-sync-storage',

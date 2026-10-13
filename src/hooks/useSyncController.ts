@@ -167,6 +167,8 @@ export const useSyncController = (params: {
     ));
     const [retryClock, setRetryClock] = useState(0);
     const processingRef = useRef<ActiveSyncProcess | null>(null);
+    const accountRef = useRef(account);
+    accountRef.current = account;
 
     const {
         syncEnabled,
@@ -197,7 +199,6 @@ export const useSyncController = (params: {
         acknowledgeDelete,
         incrementAttempt,
         retryFailedOperations,
-        resetForNewSession,
     } = useSyncStore(useShallow((state) => ({
         syncEnabled: state.syncEnabled,
         firstSyncState: state.firstSyncState,
@@ -227,7 +228,6 @@ export const useSyncController = (params: {
         acknowledgeDelete: state.acknowledgeDelete,
         incrementAttempt: state.incrementAttempt,
         retryFailedOperations: state.retryFailedOperations,
-        resetForNewSession: state.resetForNewSession,
     })));
 
     const replaceLibrariesFromSync = useWorkoutStore((state) => state.replaceLibrariesFromSync);
@@ -251,7 +251,12 @@ export const useSyncController = (params: {
 
     const isCurrentAuthContext = useCallback((expectedUserId: string, expectedAuthGeneration: string): boolean => {
         const state = useSyncStore.getState();
-        return state.currentUserId === expectedUserId && state.authGeneration === expectedAuthGeneration;
+        const activeAccount = accountRef.current;
+        return activeAccount.bootstrapStatus === 'ready'
+            && activeAccount.session?.user.id === expectedUserId
+            && canAccessCloudSync(activeAccount.entitlement)
+            && state.currentUserId === expectedUserId
+            && state.authGeneration === expectedAuthGeneration;
     }, []);
 
     useEffect(() => {
@@ -259,13 +264,8 @@ export const useSyncController = (params: {
             return;
         }
 
-        if (userId) {
-            setCurrentUser(userId);
-            return;
-        }
-
-        resetForNewSession();
-    }, [isAccountReady, resetForNewSession, setCurrentUser, userId]);
+        setCurrentUser(userId);
+    }, [account.session, isAccountReady, setCurrentUser, userId]);
 
     useEffect(() => {
         clearExpiredRecoveryBackup();
@@ -279,6 +279,7 @@ export const useSyncController = (params: {
             || activeProcess.authGeneration !== authGeneration
         )) {
             activeProcess.cancelled = true;
+            processingRef.current = null;
         }
     }, [authGeneration, currentUserId, userId]);
 
@@ -300,7 +301,7 @@ export const useSyncController = (params: {
 
         const handleOnline = () => {
             setIsOnline(true);
-            if (syncEnabled) {
+            if (syncEnabled && userId && !authExpired) {
                 markQueuePending();
             }
         };
@@ -317,7 +318,7 @@ export const useSyncController = (params: {
             window.removeEventListener('online', handleOnline);
             window.removeEventListener('offline', handleOffline);
         };
-    }, [markQueuePausedOffline, markQueuePending, syncEnabled]);
+    }, [authExpired, markQueuePausedOffline, markQueuePending, syncEnabled, userId]);
 
     useEffect(() => {
         let nextRetry: number | null = null;
@@ -764,7 +765,8 @@ export const useSyncController = (params: {
 
                 const latestSyncState = useSyncStore.getState();
                 if (
-                    isCurrentAuthContext(userId, authGeneration)
+                    !activeProcess.cancelled
+                    && isCurrentAuthContext(userId, authGeneration)
                     && latestSyncState.queueStatus === 'syncing'
                 ) {
                     latestSyncState.markQueuePending();

@@ -642,4 +642,225 @@ describe('sync store behavior', () => {
         });
         expect(migrated.queuedOperations[0].operationId).toBeTruthy();
     });
+
+    it('keeps new local edits paused until the owning account signs back in', () => {
+        act(() => {
+            useSyncStore.getState().setCurrentUser('owner-resume');
+            useSyncStore.getState().completeEnableSync('owner-resume', '2026-04-12T08:00:00.000Z');
+            useSyncStore.getState().enqueueEntityChange({
+                entityType: 'workout',
+                entityId: 'owner-workout',
+                localId: 'owner-workout',
+                operation: 'upsert',
+                revision: 5,
+                expectedRemoteRevision: 4,
+            });
+        });
+        const liveGeneration = useSyncStore.getState().authGeneration;
+        const liveOperations = useSyncStore.getState().queuedOperations;
+
+        act(() => {
+            useSyncStore.getState().setCurrentUser(null);
+        });
+
+        const paused = useSyncStore.getState();
+        expect(paused).toMatchObject({
+            syncEnabled: true,
+            firstSyncState: 'idle',
+            currentUserId: 'owner-resume',
+            authExpired: true,
+            queueStatus: 'paused-auth',
+            lastSyncedAt: '2026-04-12T08:00:00.000Z',
+            recoveryBackup: null,
+        });
+        expect(paused.authGeneration).not.toBe(liveGeneration);
+        expect(paused.queuedOperations).toHaveLength(1);
+        expect(paused.queuedOperations[0]).toMatchObject({
+            entityId: 'owner-workout',
+            ownerUserId: 'owner-resume',
+            authGeneration: paused.authGeneration,
+            revision: 5,
+        });
+        expect(paused.queuedOperations[0].operationId).toBe(liveOperations[0].operationId);
+        expect(useSyncStore.getState().pendingCounts).toMatchObject({ total: 1, workouts: 1 });
+        act(() => {
+            useSyncStore.getState().enqueueEntityChange({
+                entityType: 'workout',
+                entityId: 'owner-workout',
+                localId: 'owner-workout',
+                operation: 'upsert',
+                revision: 6,
+                expectedRemoteRevision: 4,
+            });
+        });
+        const editedOperations = useSyncStore.getState().queuedOperations;
+        expect(useSyncStore.getState()).toMatchObject({ authExpired: true, queueStatus: 'paused-auth' });
+        expect(editedOperations[0]).toMatchObject({
+            ownerUserId: 'owner-resume',
+            authGeneration: paused.authGeneration,
+            revision: 6,
+        });
+
+        act(() => {
+            useSyncStore.getState().setCurrentUser('owner-resume');
+        });
+
+        expect(useSyncStore.getState()).toMatchObject({
+            syncEnabled: true,
+            currentUserId: 'owner-resume',
+            authExpired: false,
+            queueStatus: 'pending',
+            pendingCounts: { total: 1, workouts: 1 },
+        });
+        expect(useSyncStore.getState().queuedOperations).toEqual(editedOperations);
+    });
+
+    it('keeps the opt-in off and rejects inherited work when another account signs in after a pause', () => {
+        act(() => {
+            useSyncStore.getState().setCurrentUser('paused-owner');
+            useSyncStore.getState().completeEnableSync('paused-owner', '2026-04-12T08:30:00.000Z');
+            useSyncStore.getState().enqueueEntityChange({
+                entityType: 'session',
+                entityId: 'paused-session',
+                localId: 'paused-session',
+                operation: 'upsert',
+                revision: 1,
+                expectedRemoteRevision: 0,
+            });
+            useSyncStore.getState().setCurrentUser(null);
+        });
+        expect(useSyncStore.getState()).toMatchObject({
+            currentUserId: 'paused-owner',
+            syncEnabled: true,
+            queueStatus: 'paused-auth',
+        });
+
+        act(() => {
+            useSyncStore.getState().setCurrentUser('other-owner');
+        });
+
+        expect(useSyncStore.getState()).toMatchObject({
+            currentUserId: 'other-owner',
+            syncEnabled: false,
+            firstSyncState: 'idle',
+            queuedOperations: [],
+            queueStatus: 'idle',
+            authExpired: false,
+            lastSyncedAt: null,
+            pendingCounts: { total: 0, workouts: 0, sessions: 0, deletes: 0 },
+        });
+        expect(useSyncStore.getState().queuedOperations).toEqual([]);
+
+        // The other account cannot enqueue inherited work because the opt-in was not inherited.
+        act(() => {
+            useSyncStore.getState().enqueueEntityChange({
+                entityType: 'session',
+                entityId: 'inherited-session',
+                localId: 'inherited-session',
+                operation: 'upsert',
+                revision: 1,
+            });
+        });
+        expect(useSyncStore.getState().queuedOperations).toEqual([]);
+    });
+
+    it('rejects stale acknowledgements after a sign-out rotates the auth generation', () => {
+        act(() => {
+            useSyncStore.getState().setCurrentUser('stale-owner');
+            useSyncStore.getState().completeEnableSync('stale-owner', '2026-04-12T09:00:00.000Z');
+            useSyncStore.getState().enqueueEntityChange({
+                entityType: 'workout',
+                entityId: 'stale-workout',
+                localId: 'stale-workout',
+                operation: 'upsert',
+                revision: 2,
+                expectedRemoteRevision: 1,
+            });
+        });
+        const staleToken = useSyncStore.getState().queuedOperations[0];
+
+        act(() => {
+            useSyncStore.getState().setCurrentUser(null);
+        });
+        const reboundToken = useSyncStore.getState().queuedOperations[0];
+        expect(reboundToken.authGeneration).not.toBe(staleToken.authGeneration);
+
+        let staleAcknowledged = true;
+        act(() => {
+            staleAcknowledged = useSyncStore.getState().acknowledgeUpsert({
+                ...staleToken,
+                syncedAt: '2026-04-12T09:10:00.000Z',
+            });
+        });
+
+        expect(staleAcknowledged).toBe(false);
+        expect(useSyncStore.getState().queuedOperations).toEqual([reboundToken]);
+        expect(useSyncStore.getState().isOperationCurrent(staleToken)).toBe(false);
+        expect(useSyncStore.getState().isOperationCurrent(reboundToken)).toBe(true);
+        expect(useSyncStore.getState().lastSyncedAt).toBe('2026-04-12T09:00:00.000Z');
+
+        let resumedAcknowledged = false;
+        act(() => {
+            useSyncStore.getState().setCurrentUser('stale-owner');
+            resumedAcknowledged = useSyncStore.getState().acknowledgeUpsert({
+                ...reboundToken,
+                syncedAt: '2026-04-12T09:20:00.000Z',
+            });
+        });
+
+        expect(resumedAcknowledged).toBe(true);
+        expect(useSyncStore.getState()).toMatchObject({
+            queuedOperations: [],
+            queueStatus: 'idle',
+            lastSyncedAt: '2026-04-12T09:20:00.000Z',
+            authExpired: false,
+        });
+    });
+
+    it('migrates enabled state only when a valid owner remembers the opt-in', () => {
+        const owned = migratePersistedSyncState({
+            syncEnabled: true,
+            currentUserId: 'remembered-owner',
+            firstSyncState: 'idle',
+        });
+        expect(owned).toMatchObject({
+            syncEnabled: true,
+            currentUserId: 'remembered-owner',
+        });
+
+        const ownerless = migratePersistedSyncState({
+            syncEnabled: true,
+            currentUserId: null,
+            queuedOperations: [{
+                entityType: 'workout',
+                entityId: 'orphan-workout',
+                localId: 'orphan-workout',
+                operation: 'upsert',
+                revision: 1,
+            }],
+        });
+        expect(ownerless).toMatchObject({
+            syncEnabled: false,
+            currentUserId: null,
+            queuedOperations: [],
+        });
+
+        const blankOwner = migratePersistedSyncState({
+            syncEnabled: true,
+            currentUserId: '   ',
+        });
+        expect(blankOwner).toMatchObject({
+            syncEnabled: false,
+            currentUserId: null,
+        });
+
+        const disabledOwned = migratePersistedSyncState({
+            syncEnabled: false,
+            currentUserId: 'remembered-owner',
+        });
+        expect(disabledOwned).toMatchObject({
+            syncEnabled: false,
+            currentUserId: 'remembered-owner',
+        });
+    });
 });

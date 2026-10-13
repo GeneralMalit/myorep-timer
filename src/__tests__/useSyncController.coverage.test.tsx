@@ -255,7 +255,7 @@ describe('useSyncController coverage contracts', () => {
         vi.useRealTimers();
     });
 
-    it('filters tombstones and resets sync ownership for a signed-out account', async () => {
+    it('filters tombstones and pauses sync ownership for a signed-out account', async () => {
         const liveWorkout = createWorkout('Visible Workout');
         const deletedWorkout: SavedWorkout = {
             ...createWorkout('Deleted Workout'),
@@ -275,7 +275,9 @@ describe('useSyncController coverage contracts', () => {
             },
         };
         setOwner('old-owner', true);
-        useSyncStore.setState({ queuedOperations: [queueItem({ ownerUserId: 'old-owner' })] });
+        const queuedItem = queueItem({ ownerUserId: 'old-owner' });
+        useSyncStore.setState({ queuedOperations: [queuedItem] });
+        const previousGeneration = useSyncStore.getState().authGeneration;
 
         const { result } = renderController(
             guestAccount,
@@ -283,13 +285,28 @@ describe('useSyncController coverage contracts', () => {
             [liveSession, deletedSession],
         );
 
-        await waitFor(() => expect(useSyncStore.getState().currentUserId).toBeNull());
+        await waitFor(() => expect(useSyncStore.getState().queueStatus).toBe('paused-auth'));
         expect(result.current.visibleWorkouts).toEqual([liveWorkout]);
         expect(result.current.visibleSessions).toEqual([liveSession]);
         expect(result.current.syncSnapshot).toBeUndefined();
         expect(result.current.syncActions).toBeUndefined();
-        expect(useSyncStore.getState().queuedOperations).toEqual([]);
+        const signedOut = useSyncStore.getState();
+        expect(signedOut).toMatchObject({
+            currentUserId: 'old-owner',
+            syncEnabled: true,
+            authExpired: true,
+            queueStatus: 'paused-auth',
+        });
+        expect(signedOut.authGeneration).not.toBe(previousGeneration);
+        expect(signedOut.queuedOperations).toEqual([
+            expect.objectContaining({
+                operationId: queuedItem.operationId,
+                authGeneration: signedOut.authGeneration,
+            }),
+        ]);
         expect(useAccountStore.getState().syncStatus).toBe('disabled');
+        expect(pushWorkoutMutationMock).not.toHaveBeenCalled();
+        expect(pushSessionMutationMock).not.toHaveBeenCalled();
     });
 
     it('returns guarded action results when the client is unavailable or sync is disabled', async () => {
@@ -866,6 +883,47 @@ describe('useSyncController coverage contracts', () => {
         expect(useAccountStore.getState().syncStatus).toBe('error');
     });
 
+    it('clears an auth-expired pause when a fresh session arrives for the same user', async () => {
+        const workout = createWorkout('Resume After Refresh');
+        seedQueuedWorkout('account-a', workout);
+        pushWorkoutMutationMock
+            .mockRejectedValueOnce(new Error('Refresh token expired'))
+            .mockResolvedValue({
+                status: 'applied',
+                record: asAppliedWorkout(workout, 1),
+                remoteRevision: 1,
+            });
+
+        const { result, rerender } = renderHook(
+            ({ account }) => useSyncController({ account, savedWorkouts: [workout], savedSessions: [] }),
+            { initialProps: { account: buildAccount('account-a') } },
+        );
+
+        await waitFor(() => expect(useSyncStore.getState().queueStatus).toBe('paused-auth'));
+        expect(result.current.syncSnapshot?.status).toBe('auth-expired');
+
+        const base = buildAccount('account-a');
+        rerender({
+            account: {
+                ...base,
+                session: {
+                    ...base.session!,
+                    access_token: 'access-account-a-refreshed',
+                },
+            },
+        });
+
+        await waitFor(() => expect(useSyncStore.getState().queuedOperations).toEqual([]));
+        expect(useSyncStore.getState()).toMatchObject({
+            currentUserId: 'account-a',
+            syncEnabled: true,
+            authExpired: false,
+            syncError: null,
+        });
+        expect(pushWorkoutMutationMock).toHaveBeenCalledTimes(2);
+        await waitFor(() => expect(result.current.syncSnapshot?.status).toBe('last-synced'));
+    });
+
     it('cancels an in-flight account A mutation after rerendering for account B', async () => {
         const workout = createWorkout('Account A In Flight');
         const request = deferred<unknown>();
@@ -904,7 +962,7 @@ describe('useSyncStore coverage contracts', () => {
         resetStores();
     });
 
-    it('hydrates queue counts, preserves same-owner work, and resets on sign-out', () => {
+    it('hydrates queue counts, preserves same-owner work, and pauses on sign-out', () => {
         setOwner('account-a', true);
         const item = queueItem();
         const backup: SyncRecoveryBackup = {
@@ -933,12 +991,32 @@ describe('useSyncStore coverage contracts', () => {
         expect(useSyncStore.getState().authGeneration).toBe(generation);
 
         act(() => useSyncStore.getState().setCurrentUser(null));
-        expect(useSyncStore.getState()).toMatchObject({
-            currentUserId: null,
-            syncEnabled: false,
-            queuedOperations: [],
+        const paused = useSyncStore.getState();
+        expect(paused).toMatchObject({
+            currentUserId: 'account-a',
+            syncEnabled: true,
+            queueStatus: 'paused-auth',
+            authExpired: true,
             hydrateComplete: true,
+            recoveryBackup: backup,
+            pendingCounts: { total: 1, workouts: 1, upserts: 1 },
         });
+        expect(paused.authGeneration).not.toBe(generation);
+        expect(paused.queuedOperations).toEqual([
+            expect.objectContaining({
+                operationId: item.operationId,
+                authGeneration: paused.authGeneration,
+            }),
+        ]);
+
+        act(() => useSyncStore.getState().setCurrentUser('account-a'));
+        expect(useSyncStore.getState()).toMatchObject({
+            currentUserId: 'account-a',
+            syncEnabled: true,
+            authExpired: false,
+            queueStatus: 'pending',
+        });
+        expect(useSyncStore.getState().queuedOperations).toHaveLength(1);
     });
 
     it('covers onboarding cancellation and ignores completion from the wrong owner', () => {
@@ -1071,7 +1149,7 @@ describe('useSyncStore coverage contracts', () => {
         expect(useSyncStore.getState().isOperationCurrent(operation)).toBe(false);
     });
 
-    it('leaves clean queue entries unchanged during manual retry and resets a session explicitly', () => {
+    it('leaves clean queue entries unchanged during manual retry and clears on explicit disable', () => {
         setOwner('account-a', true);
         act(() => useSyncStore.getState().enqueueEntityChange({
             entityType: 'workout',
@@ -1085,11 +1163,13 @@ describe('useSyncStore coverage contracts', () => {
         act(() => useSyncStore.getState().retryFailedOperations());
         expect(useSyncStore.getState().queuedOperations).toEqual([operation]);
 
-        act(() => useSyncStore.getState().resetForNewSession());
+        act(() => useSyncStore.getState().disableSync());
         expect(useSyncStore.getState()).toMatchObject({
-            currentUserId: null,
+            currentUserId: 'account-a',
             syncEnabled: false,
             queuedOperations: [],
+            authExpired: false,
+            queueStatus: 'idle',
             hydrateComplete: true,
         });
     });
@@ -1129,7 +1209,7 @@ describe('useSyncStore coverage contracts', () => {
         });
 
         expect(migrated).toMatchObject({
-            syncEnabled: false,
+            syncEnabled: true,
             firstSyncState: 'pending-choice',
             currentUserId: 'account-a',
             onboardingRemoteHasData: true,
