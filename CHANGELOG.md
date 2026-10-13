@@ -1,3 +1,10 @@
+## [3.13.1](https://github.com/GeneralMalit/myorep-timer/compare/v3.13.0...v3.13.1) (2026-10-13)
+
+
+### Bug Fixes
+
+* stop auto-opening first session block on library load ([9a30589](https://github.com/GeneralMalit/myorep-timer/commit/9a30589d784fcc1130c65da8bb624b9f0980fa56))
+
 # [3.13.0](https://github.com/GeneralMalit/myorep-timer/compare/v3.12.0...v3.13.0) (2026-10-13)
 
 
