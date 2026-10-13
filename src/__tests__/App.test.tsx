@@ -525,9 +525,10 @@ describe('App', () => {
 
         expect(useWorkoutStore.getState().selectedSavedSessionId).toBe('session-mobile');
         expect(useWorkoutStore.getState().editingSessionId).toBe('session-mobile');
+        expect(useWorkoutStore.getState().editingSessionNodeId).toBeNull();
         expect(sidebar).toHaveAttribute('inert');
-        expect(screen.getByRole('dialog', { name: 'Block settings' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Close block settings' })).toHaveFocus();
+        expect(screen.queryByRole('dialog', { name: 'Block settings' })).not.toBeInTheDocument();
+        expect(trigger).toHaveFocus();
     });
 
     it('keeps focus on the mobile Settings opener when navigation is already closed', () => {

@@ -610,8 +610,6 @@ const KineticSessionBuilder = ({ className }: KineticSessionBuilderProps) => {
     const statusSequenceRef = useRef(0);
     const nodeCardRefs = useRef(new Map<string, HTMLElement>());
     const pendingScrollNodeIdRef = useRef<string | null>(null);
-    const autoOpenedInspectorSessionIdRef = useRef<string | null>(null);
-
     const closeMobileInspector = useCallback(() => {
         setIsMobileInspectorOpen(false);
         if (editingSessionNodeId) nodeCardRefs.current.get(editingSessionNodeId)?.focus();
@@ -657,21 +655,8 @@ const KineticSessionBuilder = ({ className }: KineticSessionBuilderProps) => {
             return;
         }
 
-        if (editingSessionNodeId && nodes.some((node) => node.id === editingSessionNodeId)) return;
-        setEditingSessionNodeId(nodes[0]?.id ?? null);
+        if (editingSessionNodeId && !nodes.some((node) => node.id === editingSessionNodeId)) setEditingSessionNodeId(null);
     }, [editingSessionDraft, editingSessionNodeId, nodes, setEditingSessionNodeId]);
-
-    useEffect(() => {
-        if (!isCompactViewport || !editingSessionDraft || nodes.length === 0) return;
-        if (autoOpenedInspectorSessionIdRef.current === editingSessionDraft.id) return;
-
-        autoOpenedInspectorSessionIdRef.current = editingSessionDraft.id;
-        const selectedNodeId = editingSessionNodeId && nodes.some((node) => node.id === editingSessionNodeId)
-            ? editingSessionNodeId
-            : nodes[0].id;
-        if (selectedNodeId !== editingSessionNodeId) setEditingSessionNodeId(selectedNodeId);
-        setIsMobileInspectorOpen(true);
-    }, [editingSessionDraft, editingSessionNodeId, isCompactViewport, nodes, setEditingSessionNodeId]);
 
     useEffect(() => {
         const pendingNodeId = pendingScrollNodeIdRef.current;
